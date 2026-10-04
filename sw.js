@@ -2,7 +2,7 @@
  * 画面ファイルを端末に保存し、オフラインでも開けるようにする。
  * 通信（Google Apps Script への送信）は扱わない（api.js 側で送信待ちとして保存）。
  */
-var VERSION = 'kt-v6';
+var VERSION = 'kt-v7';
 var FILES = ['./', './index.html', './analytics.html', './api.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {

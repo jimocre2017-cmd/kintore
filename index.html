@@ -159,6 +159,13 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .pick .gt{flex-basis:100%;font-size:11px;color:var(--ink-3);margin-top:4px}
 .secbtn{margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink-2)}
 .tag.sub{background:transparent;border:1px dashed var(--ink-3)}
+.extags{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.extags span{font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-soft);border-radius:6px;padding:2px 6px}
+.extags.pan{align-items:center;margin-top:8px;gap:6px}
+.extags.pan span{font-size:12px;padding:3px 8px}
+.tagnote{font-size:12px;color:var(--ink-3);margin:-4px 0 10px}
+.tagadd{display:flex;gap:8px;margin-top:12px}
+.tagadd input{flex:1;min-width:0}
 .toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
 .toast.show{opacity:1}
 .toast.err{background:var(--danger);color:#fff}
@@ -235,6 +242,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
       <label class="check"><input type="checkbox" id="fBoth">両手に持つ（片手の重さを入力し、総負荷量は×2）</label>
       <label class="check"><input type="checkbox" id="fInVol">総負荷量に含める（外すと重さは記録のみ）</label>
     </div>
+    <div class="field"><label>タグ（任意・複数はカンマ区切り）</label><input id="fTags" placeholder="例：肩リハ, 自宅"></div>
     <label class="check"><input type="checkbox" id="fLR">左右それぞれ行う（片側の回数・秒を入力し、集計で×2）</label>
     <div class="adv" id="fNote"></div>
     <div class="actions">
@@ -256,6 +264,19 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 </div>
 </div>
 
+<div class="modal" id="tagModal">
+<div class="box">
+<h3 id="tagTitle">タグを編集</h3>
+<div class="adv">タグを付けると、一覧の上のタグボタンで絞り込めます（複数選ぶと全部を含む種目だけ）。順番や目安は「タグ設定」シートで設定できます。</div>
+<div class="pick" id="tagPick"></div>
+<div class="tagadd field"><input id="tagNew" placeholder="新しいタグ（例：脚の日）"><button id="tagNewAdd" class="secbtn" style="margin:0">追加</button></div>
+<div class="actions">
+<button id="tagCancel">キャンセル</button>
+<button class="primary" id="tagSave">保存</button>
+</div>
+</div>
+</div>
+
 <div class="modal" id="failModal">
   <div class="box">
     <h3>送信できなかった操作</h3>
@@ -273,24 +294,51 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 
 <script src="api.js"></script>
 <script>
-var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, prog:'' };
-try { APP.prog = localStorage.getItem('kt_prog') || ''; } catch(e){}
-/* プログラム（【リハビリ：肩】など）：「プログラム」シートの種目を順番どおりに表示 */
-function curProg(){
-  if (!APP.prog || !APP.data || !APP.data.programs) return null;
-  return APP.data.programs.filter(function(p){ return p.name===APP.prog; })[0] || null;
+var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
+try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
+/* タグ：種目ごとのタグで絞り込み（複数選択＝すべて含む種目だけ）。
+ * 「タグ設定」シートに順番・目安があるタグは、その順で STEP 表示して「次へ」で進める */
+function allTags(){
+  var out = [], d = APP.data; if (!d) return out;
+  (d.programs||[]).forEach(function(p){ if (out.indexOf(p.name)<0) out.push(p.name); });
+  (d.exercises||[]).forEach(function(e){ (e.tags||[]).forEach(function(t){ if (out.indexOf(t)<0) out.push(t); }); });
+  return out;
 }
-function progItems(p){ return p ? p.items.filter(function(it){ return exById(it.exId); }) : []; }
-function setProg(name){
-  APP.prog = name || '';
-  try { localStorage.setItem('kt_prog', APP.prog); } catch(e){}
-  var p = curProg();
-  if (p){
-    var items = progItems(p);
-    var next = items.filter(function(it){ return !(APP.data.todaySets[it.exId]||[]).length; })[0] || items[0];
-    renderList();
-    if (next) select(next.exId); else renderPanel();
-  } else { renderList(); renderPanel(); }
+function tagSetting(t){ return ((APP.data && APP.data.programs)||[]).filter(function(p){ return p.name===t; })[0] || null; }
+function saveTags(){ try { localStorage.setItem('kt_tags', JSON.stringify(APP.tags)); } catch(e){} }
+function pruneTags(){
+  var all = allTags(), n = APP.tags.length;
+  APP.tags = APP.tags.filter(function(t){ return all.indexOf(t)>=0; });
+  if (APP.tags.length!==n) saveTags();
+}
+function hasAllTags(e){ var t = e.tags||[]; return APP.tags.every(function(x){ return t.indexOf(x)>=0; }); }
+// 選択中タグの表示内容。null＝タグ未選択。setting があれば STEP 表示
+function tagView(){
+  if (!APP.data || !APP.tags.length) return null;
+  var exs = APP.data.exercises.filter(hasAllTags);
+  var S = null; APP.tags.some(function(t){ S = tagSetting(t); return !!S; });
+  var items = [], seen = {};
+  if (S) S.items.forEach(function(it){
+    var e = exById(it.exId);
+    if (e && !seen[e.id] && hasAllTags(e)){ seen[e.id] = 1; items.push({ exId:e.id, note:it.note||'' }); }
+  });
+  exs.forEach(function(e){ if (!seen[e.id]){ seen[e.id] = 1; items.push({ exId:e.id, note:'' }); } });
+  return { setting:S, items:items, title:APP.tags.join(' ＋ ') };
+}
+function toggleTag(t){
+  if (!t) APP.tags = [];
+  else { var i = APP.tags.indexOf(t); if (i>=0) APP.tags.splice(i,1); else APP.tags.push(t); }
+  saveTags();
+  var V = tagView();
+  renderList();
+  if (V && V.items.length){
+    var inList = V.items.some(function(it){ return it.exId===APP.sel; });
+    if (V.setting){
+      var next = V.items.filter(function(it){ return !(APP.data.todaySets[it.exId]||[]).length; })[0] || V.items[0];
+      select(next.exId);
+    } else if (!inList) select(V.items[0].exId);
+    else renderPanel();
+  } else renderPanel();
 }
 
  
@@ -378,22 +426,26 @@ function renderSummary(){
 function renderList(){
   var d = APP.data, groups = {}, gorder = [];
   var partGroup = {}; d.parts.forEach(function(p){ partGroup[p.part]=p.group; if (gorder.indexOf(p.group)<0) gorder.push(p.group); });
+  pruneTags();
+  var V = tagView();
   d.exercises.forEach(function(e){
-    if (e.progOnly) return; // プログラム専用の種目はプログラムを選んだ時だけ表示
+    if (V && !hasAllTags(e)) return;
     var g = partGroup[e.part] || 'その他';
     if (gorder.indexOf(g)<0) gorder.push(g);
     (groups[g]=groups[g]||[]).push(e);
   });
   var h = '';
-  var progs = d.programs || [], P = curProg();
-  if (progs.length){
-    h += '<div class="progsel"><button data-prog="" class="'+(P?'':'on')+'">すべての種目</button>'
-      + progs.map(function(p){ return '<button data-prog="'+esc(p.name)+'" class="'+(P&&P.name===p.name?'on':'')+'">'+esc(p.name)+'</button>'; }).join('') + '</div>';
+  var tags = allTags();
+  if (tags.length){
+    h += '<div class="progsel"><button data-tag="" class="'+(V?'':'on')+'">すべて</button>'
+      + tags.map(function(t){ return '<button data-tag="'+esc(t)+'" class="'+(APP.tags.indexOf(t)>=0?'on':'')+'">#'+esc(t)+'</button>'; }).join('') + '</div>';
+    if (V && APP.tags.length>1) h += '<div class="tagnote">選択したタグをすべて含む種目だけを表示しています</div>';
   }
-  if (P){
-    var items = progItems(P), done = items.filter(function(it){ return (d.todaySets[it.exId]||[]).length; }).length;
-    h += '<h2>'+esc(P.name)+'　<span class="progcount">'+done+' / '+items.length+' 実施</span></h2>';
+  if (V && V.setting){
+    var P = V.setting, items = V.items, done = items.filter(function(it){ return (d.todaySets[it.exId]||[]).length; }).length;
+    h += '<h2>'+esc(V.title)+'　<span class="progcount">'+done+' / '+items.length+' 実施</span></h2>';
     if (P.note) h += '<div class="prognote">'+esc(P.note)+'</div>';
+    if (!items.length) h += '<div class="empty">該当する種目がありません</div>';
     items.forEach(function(it, i){
       var e = exById(it.exId), n = (d.todaySets[e.id]||[]).length;
       h += '<button class="exbtn prog'+(APP.sel===e.id?' sel':'')+(n?' done':'')+'" data-ex="'+esc(e.id)+'">'
@@ -407,14 +459,16 @@ function renderList(){
     renderTodayParts();
     return;
   }
-  h += '<h2>種目</h2>';
+  h += '<h2>'+(V ? esc(V.title)+'　<span class="progcount">'+V.items.length+' 種目</span>' : '種目')+'</h2>';
+  if (V && !V.items.length) h += '<div class="empty">該当する種目がありません</div>';
   gorder.forEach(function(g){
     if (!groups[g]) return;
     h += '<div class="group"><div class="group-title">'+esc(g)+'</div>';
     groups[g].forEach(function(e){
       var n = (d.todaySets[e.id]||[]).length;
       h += '<button class="exbtn'+(APP.sel===e.id?' sel':'')+'" data-ex="'+esc(e.id)+'">'
-        + '<div><div class="nm">'+esc(e.name)+'</div><div class="sub">'+esc(e.part)+((e.secondary||[]).length ? '＋'+esc(e.secondary.join('・')) : '')+'・'+esc(e.equipment)+'</div></div>'
+        + '<div><div class="nm">'+esc(e.name)+'</div><div class="sub">'+esc(e.part)+((e.secondary||[]).length ? '＋'+esc(e.secondary.join('・')) : '')+'・'+esc(e.equipment)+'</div>'
+        + ((e.tags||[]).length ? '<div class="extags">'+e.tags.map(function(t){ return '<span>#'+esc(t)+'</span>'; }).join('')+'</div>' : '')+'</div>'
         + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
     });
     h += '</div>';
@@ -430,8 +484,8 @@ function bindListCommon(){
   Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){
     b.addEventListener('click', function(){ select(b.getAttribute('data-ex')); });
   });
-  Array.prototype.forEach.call(document.querySelectorAll('[data-prog]'), function(b){
-    b.addEventListener('click', function(){ setProg(b.getAttribute('data-prog')); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-tag]'), function(b){
+    b.addEventListener('click', function(){ toggleTag(b.getAttribute('data-tag')); });
   });
 }
 
@@ -480,13 +534,15 @@ function renderPanel(){
     + (ex.loadType==='強度固定' && !isTube(ex) ? '<span class="tag">'+esc(ex.intensity)+'</span>' : '')
     + (ex.secondary||[]).map(function(s){ return '<span class="tag sub">＋'+esc(s)+'</span>'; }).join('')
     + '<button class="secbtn" id="secBtn">付随部位を編集</button></div>'
+    + '<div class="extags pan">'+(ex.tags||[]).map(function(t){ return '<span>#'+esc(t)+'</span>'; }).join('')
+    + '<button class="secbtn" id="tagBtn">タグを編集</button></div>'
     + '<div class="hint">'+esc(exHint(ex))+'</div>'
     + (ex.link ? '<a class="reflink" href="'+esc(ex.link)+'" target="_blank" rel="noopener">▶ やり方を見る（参考ページ）</a>' : '');
-  var P = curProg(), pitems = progItems(P), pidx = -1;
+  var V = tagView(), pitems = V && V.setting ? V.items : [], pidx = -1;
   pitems.forEach(function(it, i){ if (it.exId===ex.id) pidx = i; });
   if (pidx >= 0){
     var nxt = pitems[pidx+1];
-    h += '<div class="progstep"><b>'+esc(P.name)+'　STEP '+(pidx+1)+' / '+pitems.length+'</b>'
+    h += '<div class="progstep"><b>'+esc(V.title)+'　STEP '+(pidx+1)+' / '+pitems.length+'</b>'
       + (pitems[pidx].note ? '<div>目安：'+esc(pitems[pidx].note)+'</div>' : '')
       + (nxt ? '<button id="nextEx" data-next="'+esc(nxt.exId)+'">次へ：'+esc(exById(nxt.exId).name)+' ›</button>' : '<div class="progend">これで最後の種目です</div>')
       + '</div>';
@@ -545,6 +601,7 @@ function renderPanel(){
     });
   });
   $('secBtn').addEventListener('click', openSec);
+  $('tagBtn').addEventListener('click', openTagEdit);
   if ($('nextEx')) $('nextEx').addEventListener('click', function(){ select(this.getAttribute('data-next')); });
   $('plusBtn').addEventListener('click', function(){ if (ex.measure==='秒') swToggle(ex); else plus(); });
   if ($('manualRec')) $('manualRec').addEventListener('click', function(){ if (SW.state==='idle') plus(); });
@@ -647,7 +704,7 @@ function applyResult(r){
   renderSummary();
   var badge = document.querySelector('.exbtn[data-ex="'+r.exerciseId+'"] .badge');
   if (badge){ badge.textContent = r.sets.length; badge.classList.toggle('on', r.sets.length>0); }
-  if (curProg()) renderList(); else renderTodayParts();
+  var V = tagView(); if (V && V.setting) renderList(); else renderTodayParts();
   if (APP.sel === r.exerciseId) renderPanel();
 }
 
@@ -895,11 +952,52 @@ function saveSec(){
   .then(function(){ b.disabled = false; b.textContent = '保存'; });
 }
 
- 
+function splitTags(v){
+  var out = [];
+  String(v||'').split(/[,、，\s]+/).forEach(function(t){ t = t.replace(/^[#＃]+/, '').trim(); if (t && out.indexOf(t)<0) out.push(t); });
+  return out;
+}
+function tagPickHtml(list, sel){
+  return list.map(function(t){ var on = sel.indexOf(t)>=0;
+    return '<label class="'+(on?'on':'')+'"><input type="checkbox" value="'+esc(t)+'"'+(on?' checked':'')+'>#'+esc(t)+'</label>'; }).join('');
+}
+function openTagEdit(){
+  var ex = exById(APP.sel); if (!ex) return;
+  $('tagTitle').textContent = ex.name+' のタグ';
+  var el = $('tagPick'); el.innerHTML = tagPickHtml(allTags(), ex.tags||[]); pickBind(el);
+  $('tagNew').value = '';
+  $('tagModal').classList.add('open');
+}
+function addNewTag(){
+  var el = $('tagPick'), cur = pickValues(el), all = Array.prototype.map.call(el.querySelectorAll('input'), function(i){ return i.value; });
+  splitTags($('tagNew').value).forEach(function(t){ if (all.indexOf(t)<0) all.push(t); if (cur.indexOf(t)<0) cur.push(t); });
+  el.innerHTML = tagPickHtml(all, cur); pickBind(el);
+  $('tagNew').value = '';
+}
+function saveTagEdit(){
+  var ex = exById(APP.sel); if (!ex) return;
+  if ($('tagNew').value.trim()) addNewTag();
+  var b = $('tagSave'); b.disabled = true; b.textContent = '保存中…';
+  call('updateExerciseTags', ex.id, pickValues($('tagPick'))).then(function(r){
+    APP.data.exercises = r.exercises;
+    $('tagModal').classList.remove('open');
+    renderList(); renderPanel();
+    toast('タグを保存しました');
+  }).catch(function(e){ toast('保存できませんでした：'+e.message, true); })
+  .then(function(){ b.disabled = false; b.textContent = '保存'; });
+}
+$('tagCancel').addEventListener('click', function(){ $('tagModal').classList.remove('open'); });
+$('tagModal').addEventListener('click', function(e){ if (e.target===$('tagModal')) $('tagModal').classList.remove('open'); });
+$('tagSave').addEventListener('click', saveTagEdit);
+$('tagNewAdd').addEventListener('click', addNewTag);
+$('tagNew').addEventListener('keydown', function(e){ if (e.key==='Enter'){ e.preventDefault(); addNewTag(); } });
+
+
 function opt(list, sel){ return list.map(function(x){ var v = typeof x==='string'?x:x.v, l = typeof x==='string'?x:x.l; return '<option value="'+esc(v)+'"'+(v===sel?' selected':'')+'>'+esc(l)+'</option>'; }).join(''); }
 function openAdd(){
   var d = APP.data;
   $('fName').value='';
+  $('fTags').value = APP.tags.join(', ');
   $('fPart').innerHTML = '<option value="">選択してください</option>' + d.parts.map(function(p){ return '<option value="'+esc(p.part)+'">'+esc(p.group)+'｜'+esc(p.part)+'</option>'; }).join('');
   $('fSec').innerHTML = ''; renderAddPick();
   $('fEquip').innerHTML = opt(d.equipments, 'ダンベル');
@@ -949,7 +1047,7 @@ $('fSave').addEventListener('click', function(){
     name: name, part: $('fPart').value, equipment: $('fEquip').value, measure: $('fMeasure').value, loadType: $('fLoadType').value,
     wMult: $('fBoth').checked?2:1, rMult: $('fLR').checked?2:1, inVol: $('fInVol').checked, intensity: $('fIntensity').value,
     min: $('fMin').value, max: $('fMax').value, step: $('fStep').value, def: $('fDef').value,
-    secondary: pickValues($('fSec'))
+    secondary: pickValues($('fSec')), tags: splitTags($('fTags').value)
   }).then(function(r){
     APP.data.exercises = r.exercises;
     $('addModal').classList.remove('open');

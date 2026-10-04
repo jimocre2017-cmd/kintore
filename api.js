@@ -347,6 +347,14 @@ var KT = (function () {
       }, onlineOnly);
     },
 
+    updateExerciseTags: function (id, tags) {
+      return api('updateExerciseTags', [id, tags]).then(function (r) {
+        var view = cur(); view.exercises = r.exercises;
+        schedule(500);
+        return r;
+      }, onlineOnly);
+    },
+
     getAnalytics: function (type, anchor) {
       return api('getAnalytics', [type, anchor], 60000).then(function (d) {
         saveAnalytics(type, anchor, d);
