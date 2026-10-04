@@ -41,6 +41,14 @@ header .date{color:var(--ink-2);font-size:14px;white-space:nowrap}
 
 main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding:16px;padding-bottom:120px;max-width:1280px;margin:0 auto}
 @media (max-width:760px){ main{grid-template-columns:1fr} .kpis{margin-left:0;width:100%;justify-content:space-between} }
+/* 横長画面：左（種目）と右（セット記録）を別々にスクロール。ページ全体はスクロールしない */
+@media (min-width:761px){
+  html,body{height:100%;overflow:hidden}
+  main{height:calc(100dvh - var(--hh,64px) - var(--th,80px));padding-bottom:16px;align-items:stretch;box-sizing:border-box}
+  main>section{min-height:0;overflow-y:auto;overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+  main>.panel{padding-right:4px}
+  main>.panel>*,main>.list>*{flex-shrink:0}
+}
 
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
 .list h2,.panel h2,.card h3{margin:0 0 10px;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.04em}
@@ -346,6 +354,18 @@ var call = KT.call; // 端末に保存→オンライン時に自動送信（api
 
  
 function $(id){ return document.getElementById(id); }
+// ヘッダーと下のタイマーの高さを測り、左右パネルの高さ計算（--hh / --th）に使う
+function fitPanes(){
+  var hd = document.querySelector('header'), tm = document.querySelector('.timer'), r = document.documentElement.style;
+  if (hd) r.setProperty('--hh', hd.offsetHeight+'px');
+  if (tm) r.setProperty('--th', tm.offsetHeight+'px');
+}
+window.addEventListener('resize', fitPanes);
+if (window.ResizeObserver) document.addEventListener('DOMContentLoaded', function(){
+  var ro = new ResizeObserver(fitPanes);
+  ['header','.timer'].forEach(function(s){ var el = document.querySelector(s); if (el) ro.observe(el); });
+});
+setTimeout(fitPanes, 0);
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function fmt(n){ n = Number(n)||0; return (Math.round(n*10)/10).toLocaleString('ja-JP'); }
 function fmtKg(n){ n=Number(n)||0; return (Math.round(n*100)/100).toString(); }
@@ -516,11 +536,13 @@ function initialVals(ex){
 function select(id){
   var ex = exById(id); if (!ex) return;
   if (SW.state!=='idle' && id!==SW.exId){ toast('計測中です。先にストップするか「計測をやめる」を押してください', true); return; }
+  var changed = APP.sel !== id;
   APP.sel = id;
   if (!APP.vals[id]) APP.vals[id] = initialVals(ex);
   Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){ b.classList.toggle('sel', b.getAttribute('data-ex')===id); });
   renderPanel();
   if (window.innerWidth <= 760) $('panel').scrollIntoView({behavior:'smooth'});
+  else if (changed) $('panel').scrollTop = 0;
 }
 
 function renderPanel(){
