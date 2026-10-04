@@ -379,6 +379,7 @@ function renderList(){
   var d = APP.data, groups = {}, gorder = [];
   var partGroup = {}; d.parts.forEach(function(p){ partGroup[p.part]=p.group; if (gorder.indexOf(p.group)<0) gorder.push(p.group); });
   d.exercises.forEach(function(e){
+    if (e.progOnly) return; // プログラム専用の種目はプログラムを選んだ時だけ表示
     var g = partGroup[e.part] || 'その他';
     if (gorder.indexOf(g)<0) gorder.push(g);
     (groups[g]=groups[g]||[]).push(e);
