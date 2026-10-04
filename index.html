@@ -151,6 +151,11 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .toast.show{opacity:1}
 .toast.err{background:var(--danger);color:#fff}
 .loading{padding:40px;text-align:center;color:var(--ink-3)}
+.tubeseg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
+.tubeseg button{border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px;text-align:left;min-height:64px}
+.tubeseg button b{display:block;font-size:20px}
+.tubeseg button span{font-size:12px;color:var(--ink-2)}
+.tubeseg button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
 /* アプリ版：同期状態 */
 .syncchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
 .syncchip i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
@@ -277,12 +282,17 @@ function uuid(){
 function exById(id){ return (APP.data.exercises||[]).filter(function(e){return e.id===id;})[0]; }
 function hasLoad(ex){ return ex.loadType==='kg' || ex.loadType==='加重'; }
 
+/* チューブ：本数で強度を選ぶ（シングル＝低負荷／ダブル＝高負荷） */
+var TUBE_OPTS = ['シングル（低負荷）', 'ダブル（高負荷）'];
+function isTube(ex){ return ex && ex.loadType==='強度固定' && ex.equipment==='チューブ'; }
+function tubeShort(v){ v = String(v||''); return v.indexOf('ダブル')===0 ? 'ダブル' : v.indexOf('シングル')===0 ? 'シングル' : v; }
 function setLabel(ex, s){
   var core;
   if (ex.measure==='秒') core = s.secs+'秒';
   else if (ex.loadType==='kg') core = fmtKg(s.load)+'kg × '+s.reps+'回';
   else if (ex.loadType==='加重') core = (s.load>0 ? '+'+fmtKg(s.load)+'kg × ' : '')+s.reps+'回';
   else core = s.reps+'回';
+  if (isTube(ex) && s.intensity) core += '・'+tubeShort(s.intensity);
   return core;
 }
 function exHint(ex){
@@ -290,9 +300,11 @@ function exHint(ex){
   if (ex.loadType==='kg' && ex.inVol===false) h.push('重さ（kg）は記録のみ（総負荷量には含めません）');
   else if (ex.loadType==='kg') h.push(ex.wMult>1 ? '片手の重さを入力（総負荷量は両手で×'+ex.wMult+'）' : '重さ（kg）を入力');
   if (ex.loadType==='加重') h.push('加重した時だけkgを入力（0なら総負荷量に含めません）');
-  if (ex.loadType==='強度固定') h.push('強度：'+(ex.intensity||'固定')+'／総負荷量には含めません');
+  if (isTube(ex)) h.push('チューブの本数を選択（シングル＝低負荷／ダブル＝高負荷）／総負荷量には含めません');
+  else if (ex.loadType==='強度固定') h.push('強度：'+(ex.intensity||'固定')+'／総負荷量には含めません');
   if (ex.loadType==='なし' && ex.measure==='秒') h.push('秒で記録（総負荷量には含めません）');
   if (ex.rMult>1) h.push('片側の'+(ex.measure==='秒'?'秒数':'回数')+'を入力（集計は左右×'+ex.rMult+'）');
+  if (ex.rMult>1 && ex.measure==='秒') h.push('スタートで片側ずつカウントダウン（持ち替え'+swSwitchSecs()+'秒）');
   return h.join('／');
 }
 
@@ -382,7 +394,8 @@ function initialVals(ex){
   return {
     load: src && hasLoad(ex) ? src.load : ex.def,
     reps: src && src.reps ? src.reps : 10,
-    secs: src && src.secs ? src.secs : 30
+    secs: src && src.secs ? src.secs : 30,
+    intensity: isTube(ex) ? (src && TUBE_OPTS.indexOf(src.intensity)>=0 ? src.intensity : TUBE_OPTS[0]) : ''
   };
 }
 
@@ -404,7 +417,7 @@ function renderPanel(){
   var prev = APP.data.prev[ex.id];
   var h = '<div class="card">'
     + '<div class="ex-head"><h2>'+esc(ex.name)+'</h2><span class="tag">'+esc(ex.part)+'</span><span class="tag">'+esc(ex.equipment)+'</span>'
-    + (ex.loadType==='強度固定' ? '<span class="tag">'+esc(ex.intensity)+'</span>' : '')
+    + (ex.loadType==='強度固定' && !isTube(ex) ? '<span class="tag">'+esc(ex.intensity)+'</span>' : '')
     + (ex.secondary||[]).map(function(s){ return '<span class="tag sub">＋'+esc(s)+'</span>'; }).join('')
     + '<button class="secbtn" id="secBtn">付随部位を編集</button></div>'
     + '<div class="hint">'+esc(exHint(ex))+'</div></div>';
@@ -418,7 +431,12 @@ function renderPanel(){
   } else h += '<span>記録なし</span>';
   h += '</div>';
 
-  h += '<div class="card"><div class="steppers">';
+  h += '<div class="card">';
+  if (isTube(ex)){
+    if (!v.intensity) v.intensity = TUBE_OPTS[0];
+    h += '<div class="tubeseg">' + TUBE_OPTS.map(function(o){ return '<button data-tube="'+esc(o)+'" class="'+(v.intensity===o?'on':'')+'"><b>'+esc(tubeShort(o))+'</b><span>'+(o.indexOf('ダブル')===0?'チューブ2本・高負荷':'チューブ1本・低負荷')+'</span></button>'; }).join('') + '</div>';
+  }
+  h += '<div class="steppers">';
   if (hasLoad(ex)){
     var step = ex.step || 2.5;
     h += stepperHtml('load', ex.loadType==='加重' ? '加重（kg）' : (ex.wMult>1?'片手の重さ（kg）':'重さ（kg）'), fmtKg(v.load), 'kg', step, ex.min||0, ex.max||0, 'decimal');
@@ -449,6 +467,12 @@ function renderPanel(){
   p.innerHTML = h;
 
   bindStepper('load', ex); bindStepper('reps', ex); bindStepper('secs', ex);
+  Array.prototype.forEach.call(p.querySelectorAll('[data-tube]'), function(b){
+    b.addEventListener('click', function(){
+      APP.vals[ex.id].intensity = b.getAttribute('data-tube');
+      Array.prototype.forEach.call(p.querySelectorAll('[data-tube]'), function(x){ x.classList.toggle('on', x===b); });
+    });
+  });
   $('secBtn').addEventListener('click', openSec);
   $('plusBtn').addEventListener('click', function(){ if (ex.measure==='秒') swToggle(ex); else plus(); });
   if ($('manualRec')) $('manualRec').addEventListener('click', function(){ if (SW.state==='idle') plus(); });
@@ -530,7 +554,7 @@ function plus(){
   APP.busy = true;
   var btn = $('plusBtn'); btn.disabled = true; btn.innerHTML = '記録中…';
   Timer.start();
-  var payload = { clientId: uuid(), exerciseId: ex.id, load: hasLoad(ex)? v.load : 0, reps: v.reps, secs: v.secs, memo: APP.memo[ex.id] || '' };
+  var payload = { clientId: uuid(), exerciseId: ex.id, load: hasLoad(ex)? v.load : 0, reps: v.reps, secs: v.secs, intensity: isTube(ex) ? (v.intensity || TUBE_OPTS[0]) : '', memo: APP.memo[ex.id] || '' };
   var sentMemo = payload.memo;
   call('recordSet', payload).then(function(r){
     if ((APP.memo[ex.id]||'') === sentMemo) APP.memo[ex.id] = '';
@@ -592,48 +616,95 @@ function editMemo(btn){
 
  
 function plusLabel(ex){
+  if (ex && ex.measure==='秒' && ex.rMult>1) return '<span style="font-size:30px">▶</span><span>スタート（片側ずつカウントダウン）</span>';
   return ex && ex.measure==='秒'
     ? '<span style="font-size:30px">▶</span><span>スタート（計測して記録）</span>'
     : '<span style="font-size:34px">＋</span><span>セット記録</span>';
 }
-var SW = { state:'idle', exId:null, t0:0, left:0, iv:null, prepIv:null, wake:null };
-function swClock(s){ s = Math.floor(s); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
+/* 秒種目のタイマー
+ *  - 左右で行う種目（集計×2）：入力した「片側の秒数」を1本目→持ち替え（既定4秒）→2本目の順にカウントダウンし、終わったら自動で記録
+ *  - 片側だけの種目：これまで通りストップウォッチ（止めた時点の秒数で記録）
+ * state: idle / prep（準備） / run（計測中） / switch（持ち替え） */
+var SW = { state:'idle', mode:'watch', exId:null, t0:0, left:0, target:0, side:1, iv:null, prepIv:null, swIv:null, wake:null };
+function swClock(s){ s = Math.max(0, Math.ceil(s)); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
 function swElapsed(){ return SW.state==='run' ? (Date.now()-SW.t0)/1000 : 0; }
+function swSwitchSecs(){ var v = Number(APP.data && APP.data.settings['秒種目_持ち替え秒']); return isNaN(v) || v < 0 ? 4 : Math.min(30, Math.round(v)); }
 function swWake(on){
   try {
     if (on && navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ SW.wake = l; }).catch(function(){});
     else if (!on && SW.wake){ SW.wake.release(); SW.wake = null; }
   } catch(e){}
 }
+function swClear(){ clearInterval(SW.iv); clearInterval(SW.prepIv); clearInterval(SW.swIv); SW.iv = SW.prepIv = SW.swIv = null; }
 function swToggle(ex){
   if (APP.busy) return;
   if (SW.state==='idle') swStart(ex);
-  else if (SW.state==='run') swStop(true);
+  else if (SW.state==='run' || SW.state==='switch') swStop(true);
   else swStop(false);
 }
 function swStart(ex){
   Timer.unlockAudio(); Timer.stop();
   var prep = Number(APP.data.settings['秒種目_準備秒']); if (isNaN(prep) || prep < 0) prep = 3;
   prep = Math.min(10, Math.round(prep));
-  SW.exId = ex.id; swWake(true);
-  function go(){ SW.state='run'; SW.t0=Date.now(); Timer.blip(1100, 0.3); clearInterval(SW.iv); SW.iv=setInterval(renderSw, 200); renderSw(); }
-  if (prep <= 0) { go(); return; }
+  SW.exId = ex.id; SW.side = 1;
+  SW.mode = ex.rMult > 1 ? 'count' : 'watch';
+  if (SW.mode==='count'){
+    SW.target = Math.round(Number(APP.vals[ex.id].secs) || 0);
+    if (SW.target < 1){ toast('片側の秒数を1以上にしてください', true); return; }
+  }
+  swWake(true);
+  if (prep <= 0) { swRunSide(); return; }
   SW.state='prep'; SW.left=prep; Timer.blip(660); renderSw();
   SW.prepIv = setInterval(function(){
     SW.left--;
-    if (SW.left <= 0){ clearInterval(SW.prepIv); SW.prepIv=null; go(); }
+    if (SW.left <= 0){ clearInterval(SW.prepIv); SW.prepIv=null; swRunSide(); }
     else { Timer.blip(660); renderSw(); }
   }, 1000);
 }
-function swStop(record){
-  var secs = Math.round(swElapsed()), was = SW.state, exId = SW.exId;
-  clearInterval(SW.iv); clearInterval(SW.prepIv); SW.iv = SW.prepIv = null;
-  SW.state='idle'; swWake(false);
-  if (!record || was!=='run'){ if (APP.sel===exId) renderPanel(); return; }
-  if (secs < 1){ toast('1秒未満のため記録しませんでした', true); if (APP.sel===exId) renderPanel(); return; }
-  APP.vals[exId].secs = secs;
+function swRunSide(){
+  SW.state='run'; SW.t0=Date.now(); Timer.blip(1100, 0.3);
+  clearInterval(SW.iv); SW.iv=setInterval(swTick, 200); swTick();
+}
+function swTick(){
+  if (SW.mode==='count' && SW.state==='run' && swElapsed() >= SW.target){
+    clearInterval(SW.iv); SW.iv = null;
+    Timer.beep();
+    if (SW.side === 1) { swSwitch(); return; }
+    swFinish(SW.target * 2); // 左右とも完了
+    return;
+  }
+  renderSw();
+}
+// 片側が終わったら持ち替え（アイドル）時間をはさんで反対側をスタート
+function swSwitch(){
+  var n = swSwitchSecs();
+  SW.side = 2;
+  if (n <= 0){ swRunSide(); return; }
+  SW.state='switch'; SW.left=n; renderSw();
+  SW.swIv = setInterval(function(){
+    SW.left--;
+    if (SW.left <= 0){ clearInterval(SW.swIv); SW.swIv=null; swRunSide(); }
+    else { Timer.blip(660); renderSw(); }
+  }, 1000);
+}
+// totalSecs：左右合計の実施秒数。記録は「片側の秒数」なので回数倍率で割る
+function swFinish(totalSecs){
+  var exId = SW.exId, ex = exById(exId), mode = SW.mode, target = SW.target;
+  swClear(); SW.state='idle'; swWake(false);
+  var per = mode==='count' && ex ? Math.round(totalSecs / ex.rMult) : Math.round(totalSecs);
+  if (per < 1){ toast('1秒未満のため記録しませんでした', true); if (APP.sel===exId) renderPanel(); return; }
+  APP.vals[exId].secs = per;
   if (APP.sel===exId) renderPanel();
   plus();
+  if (mode==='count') APP.vals[exId].secs = target; // 次のセットも同じ目標秒数で始める
+}
+function swStop(record){
+  var was = SW.state, exId = SW.exId;
+  if (!record || (was!=='run' && was!=='switch')){ swClear(); SW.state='idle'; swWake(false); if (APP.sel===exId) renderPanel(); return; }
+  var total;
+  if (SW.mode==='count') total = SW.side===1 && was==='run' ? swElapsed() : SW.target + (was==='run' ? swElapsed() : 0);
+  else total = swElapsed();
+  swFinish(total);
 }
 function renderSw(){
   var b = $('plusBtn'), c = $('swCancel'), m = $('manualRec');
@@ -641,17 +712,26 @@ function renderSw(){
   b.classList.toggle('running', SW.state!=='idle');
   if (c) c.style.display = SW.state==='idle' ? 'none' : '';
   if (m) m.style.display = SW.state==='idle' ? '' : 'none';
+  var ex = exById(SW.exId), pv = $('preview'), inp = $('in_secs');
   if (SW.state==='prep') b.innerHTML = '<span>準備 '+SW.left+'…</span><span style="font-size:16px;font-weight:600">（タップで中止）</span>';
+  else if (SW.state==='switch'){
+    b.innerHTML = '<span>持ち替え '+SW.left+'…</span><span style="font-size:16px;font-weight:600">（タップで1本目だけ記録）</span>';
+    if (pv) pv.textContent = '1本目 完了（'+SW.target+'秒）。反対側の準備をしてください';
+  }
   else if (SW.state==='run'){
     var s = swElapsed();
-    b.innerHTML = '<span style="font-size:30px">■</span><span>ストップして記録　'+swClock(s)+'</span>';
-    var inp = $('in_secs'); if (inp) inp.value = Math.floor(s);
-    var ex = exById(SW.exId), pv = $('preview');
-    if (ex && pv) pv.textContent = '計測中：片側 '+Math.floor(s)+'秒（集計 '+Math.floor(s)*ex.rMult+'秒）';
+    if (SW.mode==='count'){
+      b.innerHTML = '<span style="font-size:30px">■</span><span>'+(SW.side===1?'1本目':'2本目')+'　残り '+swClock(SW.target - s)+'</span>';
+      if (pv) pv.textContent = '片側 '+SW.target+'秒 × 左右（'+SW.side+'/2）・タップでそこまでを記録';
+    } else {
+      b.innerHTML = '<span style="font-size:30px">■</span><span>ストップして記録　'+swClock(s)+'</span>';
+      if (inp) inp.value = Math.floor(s);
+      if (ex && pv) pv.textContent = '計測中：片側 '+Math.floor(s)+'秒（集計 '+Math.floor(s)*ex.rMult+'秒）';
+    }
   }
 }
 
- 
+
 var Timer = {
   base: 90, end: 0, total: 0, iv: null, ctx: null, saveT: null,
   fmt: function(s){ s=Math.max(0,Math.ceil(s)); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); },
