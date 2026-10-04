@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>筋トレ記録</title>
+<meta name="theme-color" content="#121211">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f4f2; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc;
+  --ink:#141413; --ink-2:#55544f; --ink-3:#8a8983;
+  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb;
+  --good:#1a7f4b; --danger:#c73a39; --danger-soft:#fbe7e7; --warn:#b26b00;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121211; --surface:#1c1c1a; --surface-2:#262624; --line:#34332f;
+    --ink:#f5f4ef; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+    --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44;
+    --good:#3fb57a; --danger:#e66767; --danger-soft:#3a1f1f; --warn:#e0a030;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;font-size:16px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+input,select{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;white-space:nowrap}
+header .date{color:var(--ink-2);font-size:14px;white-space:nowrap}
+.kpis{display:flex;gap:18px;margin-left:auto;flex-wrap:wrap}
+.kpi{display:flex;flex-direction:column;align-items:flex-end}
+.kpi b{font-size:20px;line-height:1.1}
+.kpi span{font-size:11px;color:var(--ink-3)}
+.navlink{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600;white-space:nowrap}
+
+main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding:16px;padding-bottom:120px;max-width:1280px;margin:0 auto}
+@media (max-width:760px){ main{grid-template-columns:1fr} .kpis{margin-left:0;width:100%;justify-content:space-between} }
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.list h2,.panel h2,.card h3{margin:0 0 10px;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.04em}
+.group{margin-bottom:12px}
+.group-title{font-size:12px;color:var(--ink-3);margin:6px 2px}
+.exbtn{width:100%;display:flex;align-items:center;gap:10px;text-align:left;padding:12px;border-radius:12px;border:1px solid var(--line);background:var(--surface);margin-bottom:8px;min-height:58px}
+.exbtn .nm{font-weight:600;font-size:16px}
+.exbtn .sub{font-size:12px;color:var(--ink-3)}
+.exbtn .badge{margin-left:auto;min-width:32px;height:28px;border-radius:14px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;padding:0 8px;color:var(--ink-2)}
+.exbtn .badge.on{background:var(--accent);color:var(--accent-ink)}
+.exbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.addbtn{width:100%;padding:12px;border-radius:12px;border:1px dashed var(--ink-3);background:transparent;color:var(--ink-2);font-weight:600}
+
+.panel{display:flex;flex-direction:column;gap:14px}
+.ex-head{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.ex-head h2{font-size:24px;margin:0;color:var(--ink);letter-spacing:0}
+.tag{font-size:12px;padding:3px 8px;border-radius:8px;background:var(--surface-2);color:var(--ink-2)}
+.hint{font-size:13px;color:var(--ink-2);margin-top:6px}
+.prev{font-size:14px;color:var(--ink-2);display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.prev .chip{background:var(--surface-2);border-radius:8px;padding:4px 8px;color:var(--ink)}
+.prev .lbl{font-weight:600;color:var(--ink-3);margin-right:4px}
+
+.steppers{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+.stepper{border:1px solid var(--line);border-radius:14px;padding:10px;background:var(--surface-2)}
+.stepper .ttl{font-size:12px;color:var(--ink-3);margin-bottom:6px;display:flex;justify-content:space-between}
+.stepper .row{display:flex;align-items:center;gap:8px}
+.stepper button{width:64px;height:64px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-size:26px;font-weight:700;flex:none}
+.stepper button:active{transform:scale(.96)}
+.stepper input{flex:1;min-width:0;height:64px;text-align:center;font-size:34px;font-weight:700;border:none;background:transparent;border-radius:10px;font-variant-numeric:tabular-nums}
+.stepper input:focus{outline:2px solid var(--accent);background:var(--surface)}
+.stepper .unit{font-size:14px;color:var(--ink-2);flex:none;width:28px}
+.quick{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.quick button{width:auto;height:36px;font-size:14px;font-weight:600;padding:0 12px}
+
+.plus{width:100%;height:84px;border:none;border-radius:16px;background:var(--accent);color:var(--accent-ink);font-size:26px;font-weight:800;letter-spacing:.04em;display:flex;align-items:center;justify-content:center;gap:10px}
+.plus:active{transform:scale(.99)}
+.plus[disabled]{opacity:.6}
+.plus.running{background:var(--danger)}
+.swrow{display:flex;gap:8px;justify-content:center;margin-top:-4px}
+.linkbtn{background:transparent;border:1px solid var(--line);border-radius:10px;padding:10px 14px;font-weight:600;color:var(--ink-2)}
+.preview{font-size:13px;color:var(--ink-2);text-align:center;margin-top:-6px}
+
+.sets{display:flex;flex-direction:column;gap:6px}
+.setrow{display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:12px;background:var(--surface-2)}
+.setrow .no{font-weight:700;width:84px;flex:none;white-space:nowrap;color:var(--ink-2)}
+.setrow .val{font-weight:700;font-size:17px}
+.setrow .vol{font-size:12px;color:var(--ink-3)}
+.setrow .time{font-size:12px;color:var(--ink-3);margin-left:auto}
+.setrow .cancel{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink-2);min-width:64px}
+.setrow .cancel.arm{background:var(--danger);border-color:var(--danger);color:#fff}
+.empty{color:var(--ink-3);font-size:14px;padding:8px 2px}
+.memoin{width:100%;height:48px;margin-top:12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 12px;font-size:16px}
+.setrow{flex-wrap:wrap}
+.setrow .memo{flex-basis:100%;font-size:13px;color:var(--ink-2);padding-left:94px;white-space:pre-wrap;word-break:break-word}
+.setrow .memobtn{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 10px;font-size:13px;color:var(--ink-2)}
+.setrow .memoedit{flex-basis:100%;display:flex;gap:8px;padding-left:94px}
+.setrow .memoedit input{flex:1;min-width:0;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 10px;font-size:16px}
+.setrow .memoedit button{height:44px;padding:0 12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);font-weight:700}
+.setrow .memoedit .save{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.prevmemo{flex-basis:100%;font-size:13px;color:var(--ink-2)}
+@media (max-width:760px){ .setrow .memo,.setrow .memoedit{padding-left:0} }
+
+.today-parts{display:flex;flex-wrap:wrap;gap:8px}
+.pchip{border:1px solid var(--line);border-radius:10px;padding:8px 10px;background:var(--surface)}
+.pchip b{display:block;font-size:14px}
+.pchip span{font-size:12px;color:var(--ink-2)}
+
+ 
+.timer{position:fixed;left:0;right:0;bottom:0;z-index:20;background:var(--surface);border-top:1px solid var(--line);padding:10px 16px calc(10px + env(safe-area-inset-bottom));display:flex;align-items:center;gap:12px;box-shadow:0 -6px 20px rgba(0,0,0,.08)}
+.timer .t{font-size:40px;font-weight:800;min-width:120px;font-variant-numeric:tabular-nums}
+.timer .bar{flex:1;height:10px;border-radius:5px;background:var(--surface-2);overflow:hidden;min-width:60px}
+.timer .bar i{display:block;height:100%;background:var(--accent);width:0}
+.timer button{height:52px;min-width:60px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700;padding:0 12px}
+.timer .lbl{font-size:12px;color:var(--ink-3);white-space:nowrap}
+.timer button{white-space:nowrap}
+.timer.idle .t{color:var(--ink-3)}
+.timer.done{background:var(--good);color:#fff}
+.timer.done .lbl,.timer.done .t{color:#fff}
+.timer.done button{background:rgba(255,255,255,.2);border-color:transparent;color:#fff}
+@media (max-width:760px){ .timer .t{font-size:30px;min-width:90px} .timer button{min-width:48px;padding:0 8px} }
+
+ 
+.modal{position:fixed;inset:0;z-index:30;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:16px}
+.modal.open{display:flex}
+.modal .box{background:var(--surface);border-radius:18px;max-width:560px;width:100%;max-height:90vh;overflow:auto;padding:20px}
+.modal h3{margin:0 0 14px;font-size:18px;color:var(--ink)}
+.field{margin-bottom:12px}
+.field label{display:block;font-size:12px;color:var(--ink-3);margin-bottom:4px}
+.field input,.field select{width:100%;height:48px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:0 12px;font-size:16px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;padding:10px 0}
+.check input{width:22px;height:22px}
+.actions{display:flex;gap:10px;justify-content:flex-end;margin-top:8px}
+.actions button{height:48px;padding:0 18px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.actions .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.adv{font-size:13px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:12px}
+
+.pick{display:flex;flex-wrap:wrap;gap:8px}
+.pick label{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);font-size:14px;cursor:pointer}
+.pick label.on{background:var(--accent-soft);border-color:var(--accent)}
+.pick label.dis{opacity:.4;pointer-events:none}
+.pick input{width:18px;height:18px;margin:0}
+.pick .gt{flex-basis:100%;font-size:11px;color:var(--ink-3);margin-top:4px}
+.secbtn{margin-left:auto;border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink-2)}
+.tag.sub{background:transparent;border:1px dashed var(--ink-3)}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:1}
+.toast.err{background:var(--danger);color:#fff}
+.loading{padding:40px;text-align:center;color:var(--ink-3)}
+/* アプリ版：同期状態 */
+.syncchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.syncchip i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
+.syncchip.pend i{background:var(--warn)} .syncchip.off i{background:var(--ink-3)} .syncchip.err i{background:var(--danger)}
+.syncchip.err{color:var(--danger);border-color:var(--danger)}
+.setrow.pend{outline:1px dashed var(--warn);outline-offset:-1px}
+.pendtag{font-size:11px;color:var(--warn);font-weight:700;margin-left:6px}
+.failitem{font-size:13px;background:var(--surface-2);border-radius:10px;padding:8px 10px;margin-bottom:6px}
+.failitem b{color:var(--danger)}
+.setup{max-width:560px;margin:40px auto;padding:0 16px}
+.setup .card{line-height:1.8}
+</style>
+</head>
+<body>
+<header>
+  <h1>筋トレ記録</h1>
+  <span class="date" id="dateLbl"></span>
+  <div class="kpis">
+    <div class="kpi"><b class="num" id="kSets">0</b><span>セット</span></div>
+    <div class="kpi"><b class="num" id="kReps">0</b><span>レップ</span></div>
+    <div class="kpi"><b class="num" id="kVol">0</b><span>総負荷量 kg</span></div>
+    <div class="kpi"><b class="num" id="kSecs">0</b><span>秒</span></div>
+  </div>
+  <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
+  <a class="navlink" href="analytics.html">分析 →</a>
+</header>
+
+<main id="main">
+  <section class="list card" id="exList"><div class="loading">読み込み中…</div></section>
+  <section class="panel" id="panel"></section>
+</main>
+
+<div class="timer idle" id="timer">
+  <div>
+    <div class="lbl" id="tLbl">インターバル</div>
+    <div class="t" id="tVal">1:30</div>
+  </div>
+  <div class="bar"><i id="tBar"></i></div>
+  <button id="tMinus">−15</button>
+  <button id="tPlus">＋15</button>
+  <button id="tSkip">停止</button>
+</div>
+
+<div class="modal" id="addModal">
+  <div class="box">
+    <h3>種目を追加</h3>
+    <div class="field"><label>種目名</label><input id="fName" placeholder="例：ダンベルカール"></div>
+    <div class="grid2">
+      <div class="field"><label>メイン部位</label><select id="fPart"></select></div>
+      <div class="field"><label>器具</label><select id="fEquip"></select></div>
+</div>
+<div class="field"><label>付随部位（複数選択可・部位別の集計は0.5セット換算）</label><div class="pick" id="fSec"></div></div>
+    <div class="grid2">
+      <div class="field"><label>計測</label><select id="fMeasure"></select></div>
+      <div class="field"><label>負荷の記録方法</label><select id="fLoadType"></select></div>
+    </div>
+    <div class="field" id="fIntensityWrap"><label>強度（固定の表記）</label><input id="fIntensity"></div>
+    <div id="fLoadWrap">
+      <div class="grid3">
+        <div class="field"><label>最小kg</label><input id="fMin" type="number" inputmode="decimal" step="any"></div>
+        <div class="field"><label>最大kg</label><input id="fMax" type="number" inputmode="decimal" step="any"></div>
+        <div class="field"><label>刻みkg</label><input id="fStep" type="number" inputmode="decimal" step="any"></div>
+      </div>
+      <div class="field"><label>最初に表示するkg</label><input id="fDef" type="number" inputmode="decimal" step="any"></div>
+      <label class="check"><input type="checkbox" id="fBoth">両手に持つ（片手の重さを入力し、総負荷量は×2）</label>
+      <label class="check"><input type="checkbox" id="fInVol">総負荷量に含める（外すと重さは記録のみ）</label>
+    </div>
+    <label class="check"><input type="checkbox" id="fLR">左右それぞれ行う（片側の回数・秒を入力し、集計で×2）</label>
+    <div class="adv" id="fNote"></div>
+    <div class="actions">
+      <button id="fCancel">キャンセル</button>
+      <button class="primary" id="fSave">追加する</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="secModal">
+<div class="box">
+<h3 id="secTitle">付随部位を編集</h3>
+<div class="adv">メイン部位は1セット、付随部位は0.5セットとして部位別に集計します（レップ・秒・総負荷量も0.5倍）。全体の合計は二重に数えません。保存すると過去の記録にも反映されます。</div>
+<div class="pick" id="secPick"></div>
+<div class="actions">
+<button id="secCancel">キャンセル</button>
+<button class="primary" id="secSave">保存</button>
+</div>
+</div>
+</div>
+
+<div class="modal" id="failModal">
+  <div class="box">
+    <h3>送信できなかった操作</h3>
+    <div class="adv">サーバー側で受け付けられなかった操作です（例：種目が削除された）。内容を確認して、もう一度送るか破棄してください。</div>
+    <div id="failList"></div>
+    <div class="actions">
+      <button id="failDrop">破棄する</button>
+      <button id="failRetry">もう一度送る</button>
+      <button class="primary" id="failClose">閉じる</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="api.js"></script>
+<script>
+var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null };
+
+ 
+var call = KT.call; // 端末に保存→オンライン時に自動送信（api.js）
+
+ 
+function $(id){ return document.getElementById(id); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+function fmt(n){ n = Number(n)||0; return (Math.round(n*10)/10).toLocaleString('ja-JP'); }
+function fmtKg(n){ n=Number(n)||0; return (Math.round(n*100)/100).toString(); }
+function toast(msg, err){
+  var t=$('toast'); t.textContent=msg; t.className='toast show'+(err?' err':'');
+  clearTimeout(toast._t); toast._t=setTimeout(function(){ t.className='toast'+(err?' err':''); }, err?4000:1600);
+}
+function uuid(){
+  if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){var r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);});
+}
+function exById(id){ return (APP.data.exercises||[]).filter(function(e){return e.id===id;})[0]; }
+function hasLoad(ex){ return ex.loadType==='kg' || ex.loadType==='加重'; }
+
+function setLabel(ex, s){
+  var core;
+  if (ex.measure==='秒') core = s.secs+'秒';
+  else if (ex.loadType==='kg') core = fmtKg(s.load)+'kg × '+s.reps+'回';
+  else if (ex.loadType==='加重') core = (s.load>0 ? '+'+fmtKg(s.load)+'kg × ' : '')+s.reps+'回';
+  else core = s.reps+'回';
+  return core;
+}
+function exHint(ex){
+  var h=[];
+  if (ex.loadType==='kg' && ex.inVol===false) h.push('重さ（kg）は記録のみ（総負荷量には含めません）');
+  else if (ex.loadType==='kg') h.push(ex.wMult>1 ? '片手の重さを入力（総負荷量は両手で×'+ex.wMult+'）' : '重さ（kg）を入力');
+  if (ex.loadType==='加重') h.push('加重した時だけkgを入力（0なら総負荷量に含めません）');
+  if (ex.loadType==='強度固定') h.push('強度：'+(ex.intensity||'固定')+'／総負荷量には含めません');
+  if (ex.loadType==='なし' && ex.measure==='秒') h.push('秒で記録（総負荷量には含めません）');
+  if (ex.rMult>1) h.push('片側の'+(ex.measure==='秒'?'秒数':'回数')+'を入力（集計は左右×'+ex.rMult+'）');
+  return h.join('／');
+}
+
+ 
+function setDateLabel(){
+  var dt = APP.data.today.split('/');
+  $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+'日月火水木金土'.charAt(new Date(+dt[0],+dt[1]-1,+dt[2]).getDay())+'）';
+}
+function showSetup(msg){
+  document.querySelector('main').outerHTML = '<div class="setup"><div class="card"><h3 style="margin-top:0">アプリ版の設定</h3>'
+    + (msg ? '<p style="color:var(--danger)">'+esc(msg)+'</p>' : '')
+    + '<p>パソコンやタブレットで、いつもの記録ページ（Googleログイン版）を開き、右上の「📱 アプリ版」を押してください。表示されたQRコードをこのスマホで読み取るか、リンクを開くと自動で設定されます。</p>'
+    + '<p style="font-size:13px;color:var(--ink-3)">設定後、Chromeのメニューから「アプリをインストール」（または「ホーム画面に追加」）を押すと、アプリとして使えます。</p></div></div>';
+}
+function init(){
+  if (!KT.configured()) { showSetup(); return; }
+  call('getInitData').then(function(d){
+    APP.data = d;
+    var dt = d.today.split('/');
+    $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+'日月火水木金土'.charAt(new Date(+dt[0],+dt[1]-1,+dt[2]).getDay())+'）';
+    Timer.base = Number(d.settings['インターバル秒'])||90;
+    Timer.renderIdle();
+    renderSummary();
+    renderList();
+    var first = d.exercises[0];
+    if (first) select(first.id); else renderPanel();
+  }).catch(function(e){
+    if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
+    $('exList').innerHTML = '<div class="loading">'+(e.offline ? 'オフラインです。初回だけはインターネットにつながった状態で開いてください。' : '読み込みに失敗しました：'+esc(e.message))+'</div>';
+  });
+}
+
+function renderSummary(){
+  var t = APP.data.todaySummary.total;
+  $('kSets').textContent = fmt(t.sets);
+  $('kReps').textContent = fmt(t.reps);
+  $('kVol').textContent = fmt(t.vol);
+  $('kSecs').textContent = fmt(t.secs);
+}
+
+function renderList(){
+  var d = APP.data, groups = {}, gorder = [];
+  var partGroup = {}; d.parts.forEach(function(p){ partGroup[p.part]=p.group; if (gorder.indexOf(p.group)<0) gorder.push(p.group); });
+  d.exercises.forEach(function(e){
+    var g = partGroup[e.part] || 'その他';
+    if (gorder.indexOf(g)<0) gorder.push(g);
+    (groups[g]=groups[g]||[]).push(e);
+  });
+  var h = '<h2>種目</h2>';
+  gorder.forEach(function(g){
+    if (!groups[g]) return;
+    h += '<div class="group"><div class="group-title">'+esc(g)+'</div>';
+    groups[g].forEach(function(e){
+      var n = (d.todaySets[e.id]||[]).length;
+      h += '<button class="exbtn'+(APP.sel===e.id?' sel':'')+'" data-ex="'+esc(e.id)+'">'
+        + '<div><div class="nm">'+esc(e.name)+'</div><div class="sub">'+esc(e.part)+((e.secondary||[]).length ? '＋'+esc(e.secondary.join('・')) : '')+'・'+esc(e.equipment)+'</div></div>'
+        + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
+    });
+    h += '</div>';
+  });
+  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
+  h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
+  $('exList').innerHTML = h;
+  Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){
+    b.addEventListener('click', function(){ select(b.getAttribute('data-ex')); });
+  });
+  $('openAdd').addEventListener('click', openAdd);
+  renderTodayParts();
+}
+
+function renderTodayParts(){
+  var el = $('todayParts'); if (!el) return;
+  var ps = APP.data.todaySummary.parts;
+  if (!ps.length){ el.innerHTML = '<div class="empty">まだ記録がありません</div>'; return; }
+  el.innerHTML = ps.map(function(p){
+    var sub = p.sets+'セット・'+fmt(p.reps)+'回';
+    if (p.vol) sub += '・'+fmt(p.vol)+'kg';
+    if (p.secs) sub += '・'+fmt(p.secs)+'秒';
+    return '<div class="pchip"><b>'+esc(p.part)+'</b><span class="num">'+sub+'</span></div>';
+  }).join('');
+}
+
+ 
+function initialVals(ex){
+  var today = APP.data.todaySets[ex.id]||[];
+  var src = today.length ? today[today.length-1] : (APP.data.prev[ex.id] ? APP.data.prev[ex.id].sets[APP.data.prev[ex.id].sets.length-1] : null);
+  return {
+    load: src && hasLoad(ex) ? src.load : ex.def,
+    reps: src && src.reps ? src.reps : 10,
+    secs: src && src.secs ? src.secs : 30
+  };
+}
+
+function select(id){
+  var ex = exById(id); if (!ex) return;
+  if (SW.state!=='idle' && id!==SW.exId){ toast('計測中です。先にストップするか「計測をやめる」を押してください', true); return; }
+  APP.sel = id;
+  if (!APP.vals[id]) APP.vals[id] = initialVals(ex);
+  Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){ b.classList.toggle('sel', b.getAttribute('data-ex')===id); });
+  renderPanel();
+  if (window.innerWidth <= 760) $('panel').scrollIntoView({behavior:'smooth'});
+}
+
+function renderPanel(){
+  var ex = APP.sel && exById(APP.sel);
+  var p = $('panel');
+  if (!ex){ p.innerHTML = '<div class="card empty">種目を選んでください</div>'; return; }
+  var v = APP.vals[ex.id];
+  var prev = APP.data.prev[ex.id];
+  var h = '<div class="card">'
+    + '<div class="ex-head"><h2>'+esc(ex.name)+'</h2><span class="tag">'+esc(ex.part)+'</span><span class="tag">'+esc(ex.equipment)+'</span>'
+    + (ex.loadType==='強度固定' ? '<span class="tag">'+esc(ex.intensity)+'</span>' : '')
+    + (ex.secondary||[]).map(function(s){ return '<span class="tag sub">＋'+esc(s)+'</span>'; }).join('')
+    + '<button class="secbtn" id="secBtn">付随部位を編集</button></div>'
+    + '<div class="hint">'+esc(exHint(ex))+'</div></div>';
+
+  h += '<div class="card prev"><span class="lbl">前回</span>';
+  if (prev){
+    var pd = prev.date.split('/');
+    h += '<span>'+(+pd[1])+'/'+(+pd[2])+'</span>' + prev.sets.map(function(s){ return '<span class="chip num">'+esc(setLabel(ex,s))+'</span>'; }).join('')
+      + '<span>（'+prev.sets.length+'セット）</span>';
+    prev.sets.forEach(function(s, i){ if (s.memo) h += '<div class="prevmemo">'+(i+1)+'セット目の備考：'+esc(s.memo)+'</div>'; });
+  } else h += '<span>記録なし</span>';
+  h += '</div>';
+
+  h += '<div class="card"><div class="steppers">';
+  if (hasLoad(ex)){
+    var step = ex.step || 2.5;
+    h += stepperHtml('load', ex.loadType==='加重' ? '加重（kg）' : (ex.wMult>1?'片手の重さ（kg）':'重さ（kg）'), fmtKg(v.load), 'kg', step, ex.min||0, ex.max||0, 'decimal');
+  }
+  if (ex.measure==='秒') h += stepperHtml('secs', ex.rMult>1?'片側の秒数':'秒数', v.secs, '秒', 5, 1, 0, 'numeric');
+  else h += stepperHtml('reps', ex.rMult>1?'片側の回数':'回数', v.reps, '回', 1, 1, 0, 'numeric');
+  h += '</div><input class="memoin" id="memoIn" maxlength="500" placeholder="備考（任意）例：フォームを意識／右肩に違和感" value="'+esc(APP.memo[ex.id]||'')+'"></div>';
+
+  h += '<button class="plus" id="plusBtn">'+plusLabel(ex)+'</button>';
+  if (ex.measure==='秒') h += '<div class="swrow"><button class="linkbtn" id="swCancel" style="display:none">計測をやめる</button><button class="linkbtn" id="manualRec">入力した秒数で記録</button></div>';
+  h += '<div class="preview num" id="preview"></div>';
+
+  var sets = APP.data.todaySets[ex.id]||[];
+  h += '<div class="card"><h3>今日のセット（'+sets.length+'）</h3><div class="sets">';
+  if (!sets.length) h += '<div class="empty">まだありません。「＋セット記録」で1セットずつ追加します</div>';
+  sets.forEach(function(s, i){
+    var extra = [];
+    if (s.vol) extra.push('負荷量 '+fmt(s.vol)+'kg');
+    if (ex.rMult>1) extra.push('集計 '+(ex.measure==='秒'? fmt(s.aSecs)+'秒' : fmt(s.aReps)+'回'));
+    h += '<div class="setrow'+(s.pending?' pend':'')+'"><span class="no">'+(i+1)+'セット目'+(s.pending?'<span class="pendtag">未送信</span>':'')+'</span><span><div class="val num">'+esc(setLabel(ex,s))+'</div>'
+      + (extra.length?'<div class="vol num">'+extra.join('・')+'</div>':'')+'</span>'
+      + '<span class="time num">'+esc(String(s.at).slice(11,16))+'</span>'
+      + '<button class="memobtn" data-memo="'+esc(s.id)+'">備考</button>'
+      + '<button class="cancel" data-id="'+esc(s.id)+'">取消</button>'
+      + (s.memo ? '<div class="memo">備考：'+esc(s.memo)+'</div>' : '') + '</div>';
+  });
+  h += '</div></div>';
+  p.innerHTML = h;
+
+  bindStepper('load', ex); bindStepper('reps', ex); bindStepper('secs', ex);
+  $('secBtn').addEventListener('click', openSec);
+  $('plusBtn').addEventListener('click', function(){ if (ex.measure==='秒') swToggle(ex); else plus(); });
+  if ($('manualRec')) $('manualRec').addEventListener('click', function(){ if (SW.state==='idle') plus(); });
+  if ($('swCancel')) $('swCancel').addEventListener('click', function(){ swStop(false); });
+  Array.prototype.forEach.call(p.querySelectorAll('.cancel'), function(b){
+    b.addEventListener('click', function(){ cancelSet(b); });
+  });
+  Array.prototype.forEach.call(p.querySelectorAll('.memobtn'), function(b){
+    b.addEventListener('click', function(){ editMemo(b); });
+  });
+  $('memoIn').addEventListener('input', function(){ APP.memo[ex.id] = this.value; });
+  updatePreview();
+  if (SW.state!=='idle' && SW.exId===ex.id) renderSw();
+}
+
+function stepperHtml(key, title, val, unit, step, min, max, mode){
+  var q = '';
+  if (key==='load' && max>min){
+    q = '<div class="quick">';
+    var ex = exById(APP.sel);
+    var candidates = [];
+    for (var x=min; x<=max+1e-9 && candidates.length<12; x+= (ex.step||2.5)) candidates.push(Math.round(x*100)/100);
+    q += candidates.map(function(c){ return '<button data-q="'+c+'">'+fmtKg(c)+'</button>'; }).join('') + '</div>';
+  }
+  if (key==='secs'){ q = '<div class="quick">'+[15,30,45,60,90,120].map(function(c){return '<button data-q="'+c+'">'+c+'秒</button>';}).join('')+'</div>'; }
+  return '<div class="stepper" data-key="'+key+'" data-step="'+step+'" data-min="'+min+'" data-max="'+max+'">'
+    + '<div class="ttl"><span>'+esc(title)+'</span><span>'+(key==='load'&&max>min?fmtKg(min)+'〜'+fmtKg(max)+'kg':'')+'</span></div>'
+    + '<div class="row"><button data-d="-1">−</button><input id="in_'+key+'" type="number" inputmode="'+mode+'" step="any" value="'+esc(val)+'"><span class="unit">'+unit+'</span><button data-d="1">＋</button></div>'
+    + q + '</div>';
+}
+
+function bindStepper(key, ex){
+  var box = document.querySelector('.stepper[data-key="'+key+'"]'); if (!box) return;
+  var step = Number(box.getAttribute('data-step'))||1, min = Number(box.getAttribute('data-min'))||0, max = Number(box.getAttribute('data-max'))||0;
+  var input = $('in_'+key);
+  function setv(n){
+    n = Math.round(n*100)/100;
+    if (n < min) n = min;
+    if (max > min && n > max) n = max;
+    APP.vals[ex.id][key] = n;
+    input.value = key==='load' ? fmtKg(n) : n;
+    updatePreview();
+  }
+  Array.prototype.forEach.call(box.querySelectorAll('[data-d]'), function(b){
+    b.addEventListener('click', function(){ setv((Number(input.value)||0) + step*Number(b.getAttribute('data-d'))); });
+  });
+  Array.prototype.forEach.call(box.querySelectorAll('[data-q]'), function(b){
+    b.addEventListener('click', function(){ setv(Number(b.getAttribute('data-q'))); });
+  });
+  input.addEventListener('input', function(){ var n=Number(input.value); if (!isNaN(n) && input.value!=='') { APP.vals[ex.id][key]=n; updatePreview(); } });
+  input.addEventListener('change', function(){
+    var n = Number(input.value);
+    if (isNaN(n) || input.value==='') n = APP.vals[ex.id][key] || 0;
+    
+    if (n < 0) n = 0;
+    APP.vals[ex.id][key] = n; input.value = key==='load'? fmtKg(n) : n; updatePreview();
+  });
+  input.addEventListener('focus', function(){ input.select(); });
+}
+
+function updatePreview(){
+  var ex = exById(APP.sel); var el=$('preview'); if (!ex||!el) return;
+  var v = APP.vals[ex.id], parts=[];
+  if (ex.measure==='秒') parts.push('集計 '+fmt(v.secs*ex.rMult)+'秒');
+  else {
+    parts.push('集計 '+fmt(v.reps*ex.rMult)+'回');
+    if (hasLoad(ex) && ex.inVol!==false) parts.push('総負荷量 +'+fmt(v.load*ex.wMult*v.reps*ex.rMult)+'kg');
+  }
+  el.textContent = 'このセット：'+parts.join('・');
+}
+
+ 
+function plus(){
+  var ex = exById(APP.sel); if (!ex || APP.busy) return;
+  var v = APP.vals[ex.id];
+  if (ex.measure==='回数' && !(Math.round(v.reps) > 0)) { toast('回数を1以上にしてください', true); return; }
+  if (ex.measure==='秒' && !(Math.round(v.secs) > 0)) { toast('秒数を1以上にしてください', true); return; }
+  Timer.unlockAudio();
+  APP.busy = true;
+  var btn = $('plusBtn'); btn.disabled = true; btn.innerHTML = '記録中…';
+  Timer.start();
+  var payload = { clientId: uuid(), exerciseId: ex.id, load: hasLoad(ex)? v.load : 0, reps: v.reps, secs: v.secs, memo: APP.memo[ex.id] || '' };
+  var sentMemo = payload.memo;
+  call('recordSet', payload).then(function(r){
+    if ((APP.memo[ex.id]||'') === sentMemo) APP.memo[ex.id] = '';
+    applyResult(r);
+    toast(ex.name+' '+(r.sets.length)+'セット目を記録');
+  }).catch(function(e){
+    toast('記録できませんでした：'+e.message, true);
+    Timer.stop();
+  }).then(function(){
+    APP.busy = false;
+    var b = $('plusBtn'); if (b){ b.disabled=false; b.innerHTML=plusLabel(ex); }
+  });
+}
+
+function applyResult(r){
+  APP.data.todaySets[r.exerciseId] = r.sets;
+  APP.data.todaySummary = r.todaySummary;
+  renderSummary();
+  var badge = document.querySelector('.exbtn[data-ex="'+r.exerciseId+'"] .badge');
+  if (badge){ badge.textContent = r.sets.length; badge.classList.toggle('on', r.sets.length>0); }
+  renderTodayParts();
+  if (APP.sel === r.exerciseId) renderPanel();
+}
+
+function cancelSet(btn){
+  var id = btn.getAttribute('data-id');
+  if (APP.armed !== id){
+    APP.armed = id;
+    Array.prototype.forEach.call(document.querySelectorAll('.cancel.arm'), function(b){ b.classList.remove('arm'); b.textContent='取消'; });
+    btn.classList.add('arm'); btn.textContent = '本当に取消';
+    clearTimeout(cancelSet._t);
+    cancelSet._t = setTimeout(function(){ APP.armed=null; if (btn.isConnected){ btn.classList.remove('arm'); btn.textContent='取消'; } }, 3000);
+    return;
+  }
+  APP.armed = null;
+  btn.disabled = true; btn.textContent = '取消中…';
+  call('cancelRecord', id).then(function(r){ applyResult(r); toast('取り消しました'); })
+    .catch(function(e){ toast('取り消せませんでした：'+e.message, true); btn.disabled=false; btn.textContent='取消'; btn.classList.remove('arm'); });
+}
+
+function editMemo(btn){
+  var id = btn.getAttribute('data-memo');
+  var row = btn.closest('.setrow');
+  var ex = exById(APP.sel);
+  var s = (APP.data.todaySets[ex.id]||[]).filter(function(x){ return x.id===id; })[0];
+  var old = row.querySelector('.memo'); if (old) old.remove();
+  if (row.querySelector('.memoedit')) return;
+  var box = document.createElement('div'); box.className = 'memoedit';
+  box.innerHTML = '<input maxlength="500" placeholder="備考を入力"><button class="save">保存</button><button class="back">やめる</button>';
+  row.appendChild(box);
+  var inp = box.querySelector('input'); inp.value = s ? s.memo : ''; inp.focus();
+  box.querySelector('.back').addEventListener('click', function(){ renderPanel(); });
+  box.querySelector('.save').addEventListener('click', function(){
+    var b = this; b.disabled = true; b.textContent = '保存中…';
+    call('updateMemo', id, inp.value).then(function(r){ applyResult(r); toast('備考を保存しました'); })
+      .catch(function(e){ toast('保存できませんでした：'+e.message, true); b.disabled=false; b.textContent='保存'; });
+  });
+}
+
+ 
+function plusLabel(ex){
+  return ex && ex.measure==='秒'
+    ? '<span style="font-size:30px">▶</span><span>スタート（計測して記録）</span>'
+    : '<span style="font-size:34px">＋</span><span>セット記録</span>';
+}
+var SW = { state:'idle', exId:null, t0:0, left:0, iv:null, prepIv:null, wake:null };
+function swClock(s){ s = Math.floor(s); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); }
+function swElapsed(){ return SW.state==='run' ? (Date.now()-SW.t0)/1000 : 0; }
+function swWake(on){
+  try {
+    if (on && navigator.wakeLock) navigator.wakeLock.request('screen').then(function(l){ SW.wake = l; }).catch(function(){});
+    else if (!on && SW.wake){ SW.wake.release(); SW.wake = null; }
+  } catch(e){}
+}
+function swToggle(ex){
+  if (APP.busy) return;
+  if (SW.state==='idle') swStart(ex);
+  else if (SW.state==='run') swStop(true);
+  else swStop(false);
+}
+function swStart(ex){
+  Timer.unlockAudio(); Timer.stop();
+  var prep = Number(APP.data.settings['秒種目_準備秒']); if (isNaN(prep) || prep < 0) prep = 3;
+  prep = Math.min(10, Math.round(prep));
+  SW.exId = ex.id; swWake(true);
+  function go(){ SW.state='run'; SW.t0=Date.now(); Timer.blip(1100, 0.3); clearInterval(SW.iv); SW.iv=setInterval(renderSw, 200); renderSw(); }
+  if (prep <= 0) { go(); return; }
+  SW.state='prep'; SW.left=prep; Timer.blip(660); renderSw();
+  SW.prepIv = setInterval(function(){
+    SW.left--;
+    if (SW.left <= 0){ clearInterval(SW.prepIv); SW.prepIv=null; go(); }
+    else { Timer.blip(660); renderSw(); }
+  }, 1000);
+}
+function swStop(record){
+  var secs = Math.round(swElapsed()), was = SW.state, exId = SW.exId;
+  clearInterval(SW.iv); clearInterval(SW.prepIv); SW.iv = SW.prepIv = null;
+  SW.state='idle'; swWake(false);
+  if (!record || was!=='run'){ if (APP.sel===exId) renderPanel(); return; }
+  if (secs < 1){ toast('1秒未満のため記録しませんでした', true); if (APP.sel===exId) renderPanel(); return; }
+  APP.vals[exId].secs = secs;
+  if (APP.sel===exId) renderPanel();
+  plus();
+}
+function renderSw(){
+  var b = $('plusBtn'), c = $('swCancel'), m = $('manualRec');
+  if (!b || APP.sel!==SW.exId) return;
+  b.classList.toggle('running', SW.state!=='idle');
+  if (c) c.style.display = SW.state==='idle' ? 'none' : '';
+  if (m) m.style.display = SW.state==='idle' ? '' : 'none';
+  if (SW.state==='prep') b.innerHTML = '<span>準備 '+SW.left+'…</span><span style="font-size:16px;font-weight:600">（タップで中止）</span>';
+  else if (SW.state==='run'){
+    var s = swElapsed();
+    b.innerHTML = '<span style="font-size:30px">■</span><span>ストップして記録　'+swClock(s)+'</span>';
+    var inp = $('in_secs'); if (inp) inp.value = Math.floor(s);
+    var ex = exById(SW.exId), pv = $('preview');
+    if (ex && pv) pv.textContent = '計測中：片側 '+Math.floor(s)+'秒（集計 '+Math.floor(s)*ex.rMult+'秒）';
+  }
+}
+
+ 
+var Timer = {
+  base: 90, end: 0, total: 0, iv: null, ctx: null, saveT: null,
+  fmt: function(s){ s=Math.max(0,Math.ceil(s)); return Math.floor(s/60)+':'+('0'+(s%60)).slice(-2); },
+  unlockAudio: function(){
+    try { if (!this.ctx) this.ctx = new (window.AudioContext||window.webkitAudioContext)(); if (this.ctx.state==='suspended') this.ctx.resume(); } catch(e){}
+  },
+  blip: function(freq, len){
+    try {
+      var c=this.ctx; if (!c) return; len = len || 0.15;
+      var o=c.createOscillator(), g=c.createGain(); o.frequency.value=freq||660; o.type='sine';
+      g.gain.setValueAtTime(0.0001,c.currentTime); g.gain.exponentialRampToValueAtTime(0.35,c.currentTime+0.02); g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+len);
+      o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+len+0.05);
+    } catch(e){}
+  },
+  beep: function(){
+    try {
+      var c=this.ctx; if (!c) return;
+      [0,0.35,0.7].forEach(function(t){
+        var o=c.createOscillator(), g=c.createGain(); o.frequency.value=880; o.type='sine';
+        g.gain.setValueAtTime(0.0001,c.currentTime+t); g.gain.exponentialRampToValueAtTime(0.4,c.currentTime+t+0.02); g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+t+0.25);
+        o.connect(g); g.connect(c.destination); o.start(c.currentTime+t); o.stop(c.currentTime+t+0.3);
+      });
+    } catch(e){}
+    if (navigator.vibrate) navigator.vibrate([200,100,200]);
+  },
+  start: function(){
+    this.total = this.base; this.end = Date.now()+this.base*1000;
+    $('timer').className='timer'; $('tLbl').textContent='インターバル'; $('tSkip').textContent='停止';
+    clearInterval(this.iv); var self=this; this.iv=setInterval(function(){ self.tick(); }, 200); this.tick();
+  },
+  tick: function(){
+    var left = (this.end-Date.now())/1000;
+    $('tVal').textContent = this.fmt(left);
+    $('tBar').style.width = Math.max(0,Math.min(100,(1-left/this.total)*100))+'%';
+    if (left <= 0){ clearInterval(this.iv); this.iv=null; $('timer').className='timer done'; $('tLbl').textContent='休憩終了 — 次のセットへ'; $('tVal').textContent='0:00'; $('tSkip').textContent='閉じる'; this.beep(); }
+  },
+  stop: function(){ clearInterval(this.iv); this.iv=null; this.renderIdle(); },
+  renderIdle: function(){ $('timer').className='timer idle'; $('tLbl').textContent='インターバル（設定）'; $('tVal').textContent=this.fmt(this.base); $('tBar').style.width='0%'; $('tSkip').textContent='停止'; },
+  adjust: function(d){
+    if (this.iv){ this.end += d*1000; this.total = Math.max(1,this.total+d); this.tick(); }
+    else {
+      this.base = Math.max(5, Math.min(900, this.base+d)); this.renderIdle();
+      var self=this; clearTimeout(this.saveT); this.saveT=setTimeout(function(){ call('saveInterval', self.base).then(function(v){ toast('インターバルを'+self.fmt(v)+'に設定'); }).catch(function(){}); }, 800);
+    }
+  }
+};
+$('tMinus').addEventListener('click', function(){ Timer.adjust(-15); });
+$('tPlus').addEventListener('click', function(){ Timer.adjust(15); });
+$('tSkip').addEventListener('click', function(){ Timer.stop(); });
+
+ 
+function pickHtml(main, selected){
+  var sel = {}; (selected||[]).forEach(function(p){ sel[p]=1; });
+  var h = '', g = null;
+  APP.data.parts.forEach(function(p){
+    if (p.group !== g){ g = p.group; h += '<div class="gt">'+esc(g)+'</div>'; }
+    var dis = p.part === main, on = !dis && sel[p.part];
+    h += '<label class="'+(on?'on':'')+(dis?' dis':'')+'"><input type="checkbox" value="'+esc(p.part)+'"'+(on?' checked':'')+(dis?' disabled':'')+'>'+esc(p.part)+(dis?'（メイン）':'')+'</label>';
+  });
+  return h;
+}
+function pickBind(el){
+  Array.prototype.forEach.call(el.querySelectorAll('input'), function(i){
+    i.addEventListener('change', function(){ i.parentNode.classList.toggle('on', i.checked); });
+  });
+}
+function pickValues(el){
+  return Array.prototype.filter.call(el.querySelectorAll('input'), function(i){ return i.checked && !i.disabled; }).map(function(i){ return i.value; });
+}
+function renderAddPick(){
+  var el = $('fSec'), cur = el.children.length ? pickValues(el) : [];
+  el.innerHTML = pickHtml($('fPart').value, cur); pickBind(el);
+}
+function openSec(){
+  var ex = exById(APP.sel); if (!ex) return;
+  $('secTitle').textContent = ex.name+'（メイン：'+ex.part+'）の付随部位';
+  var el = $('secPick'); el.innerHTML = pickHtml(ex.part, ex.secondary); pickBind(el);
+  $('secModal').classList.add('open');
+}
+function saveSec(){
+  var ex = exById(APP.sel); if (!ex) return;
+  var b = $('secSave'); b.disabled = true; b.textContent = '保存中…';
+  call('updateExerciseSecondary', ex.id, pickValues($('secPick'))).then(function(r){
+    APP.data.exercises = r.exercises; APP.data.todaySummary = r.todaySummary;
+    $('secModal').classList.remove('open');
+    renderSummary(); renderList(); renderPanel();
+    toast('付随部位を保存しました');
+  }).catch(function(e){ toast('保存できませんでした：'+e.message, true); })
+  .then(function(){ b.disabled = false; b.textContent = '保存'; });
+}
+
+ 
+function opt(list, sel){ return list.map(function(x){ var v = typeof x==='string'?x:x.v, l = typeof x==='string'?x:x.l; return '<option value="'+esc(v)+'"'+(v===sel?' selected':'')+'>'+esc(l)+'</option>'; }).join(''); }
+function openAdd(){
+  var d = APP.data;
+  $('fName').value='';
+  $('fPart').innerHTML = '<option value="">選択してください</option>' + d.parts.map(function(p){ return '<option value="'+esc(p.part)+'">'+esc(p.group)+'｜'+esc(p.part)+'</option>'; }).join('');
+  $('fSec').innerHTML = ''; renderAddPick();
+  $('fEquip').innerHTML = opt(d.equipments, 'ダンベル');
+  $('fMeasure').innerHTML = opt(d.measures);
+  $('fLoadType').innerHTML = opt([{v:'kg',l:'kg（重さ）'},{v:'加重',l:'加重した時だけkg'},{v:'強度固定',l:'強度固定（チューブ等）'},{v:'なし',l:'なし'}]);
+  applyEquipDefaults();
+  $('addModal').classList.add('open');
+  setTimeout(function(){ $('fName').focus(); }, 50);
+}
+function applyEquipDefaults(){
+  var d = APP.data.equipDefaults[$('fEquip').value];
+  $('fMeasure').value = d.measure; $('fLoadType').value = d.loadType;
+  $('fMin').value = d.min; $('fMax').value = d.max; $('fStep').value = d.step; $('fDef').value = d.def;
+  $('fIntensity').value = d.intensity; $('fBoth').checked = d.wMult>1; $('fLR').checked = d.rMult>1; $('fInVol').checked = d.inVol!==false;
+  syncAddForm();
+}
+function syncAddForm(){
+  var lt = $('fLoadType').value, m = $('fMeasure').value;
+  $('fIntensityWrap').style.display = lt==='強度固定' ? '' : 'none';
+  $('fLoadWrap').style.display = (lt==='kg'||lt==='加重') ? '' : 'none';
+  var note = [];
+  if (m==='秒') note.push('秒で記録します。総負荷量には含めません。');
+  else if ((lt==='kg'||lt==='加重') && !$('fInVol').checked) note.push('重さは記録しますが、総負荷量には含めません（セット数・レップ数で集計）');
+  else if (lt==='kg') note.push('総負荷量 = kg'+($('fBoth').checked?' × 2（両手）':'')+' × 回数'+($('fLR').checked?' × 2（左右）':''));
+  else if (lt==='加重') note.push('加重したkgだけを総負荷量に計上します（0なら含めません）');
+  else note.push('総負荷量には含めません（セット数・レップ数で集計）');
+  $('fNote').textContent = note.join(' ');
+}
+$('fEquip').addEventListener('change', applyEquipDefaults);
+$('fPart').addEventListener('change', renderAddPick);
+$('secCancel').addEventListener('click', function(){ $('secModal').classList.remove('open'); });
+$('secModal').addEventListener('click', function(e){ if (e.target===$('secModal')) $('secModal').classList.remove('open'); });
+$('secSave').addEventListener('click', saveSec);
+$('fMeasure').addEventListener('change', syncAddForm);
+$('fLoadType').addEventListener('change', syncAddForm);
+$('fBoth').addEventListener('change', syncAddForm);
+$('fLR').addEventListener('change', syncAddForm);
+$('fInVol').addEventListener('change', syncAddForm);
+$('fCancel').addEventListener('click', function(){ $('addModal').classList.remove('open'); });
+$('addModal').addEventListener('click', function(e){ if (e.target===$('addModal')) $('addModal').classList.remove('open'); });
+$('fSave').addEventListener('click', function(){
+  var name = $('fName').value.trim();
+  if (!name){ toast('種目名を入力してください', true); return; }
+  if (!$('fPart').value){ toast('部位を選択してください', true); return; }
+  var btn=$('fSave'); btn.disabled=true; btn.textContent='追加中…';
+  call('addExercise', {
+    name: name, part: $('fPart').value, equipment: $('fEquip').value, measure: $('fMeasure').value, loadType: $('fLoadType').value,
+    wMult: $('fBoth').checked?2:1, rMult: $('fLR').checked?2:1, inVol: $('fInVol').checked, intensity: $('fIntensity').value,
+    min: $('fMin').value, max: $('fMax').value, step: $('fStep').value, def: $('fDef').value,
+    secondary: pickValues($('fSec'))
+  }).then(function(r){
+    APP.data.exercises = r.exercises;
+    $('addModal').classList.remove('open');
+    renderList(); select(r.id);
+    toast('「'+name+'」を追加しました');
+  }).catch(function(e){ toast(e.message, true); })
+    .then(function(){ btn.disabled=false; btn.textContent='追加する'; });
+});
+
+init();
+
+/* ---------- 同期（アプリ版） ---------- */
+// サーバーから最新データが届いたら画面へ反映（入力中・計測中は邪魔しない）
+var pendingView = null;
+function panelBusy(){
+  var a = document.activeElement;
+  return APP.busy || SW.state!=='idle' || document.querySelector('.memoedit') || document.querySelector('.modal.open')
+    || (a && (a.tagName==='INPUT' || a.tagName==='SELECT'));
+}
+function applyView(view){
+  if (!APP.data) return;
+  if (panelBusy()) { pendingView = view; return; }
+  pendingView = null;
+  var dayChanged = view.today !== APP.data.today;
+  if (dayChanged) APP.vals = {};
+  APP.data = view;
+  setDateLabel();
+  Timer.base = Number(view.settings['インターバル秒'])||Timer.base;
+  if (!Timer.iv) Timer.renderIdle();
+  renderSummary(); renderList();
+  if (APP.sel && !exById(APP.sel)) APP.sel = null;
+  if (!APP.sel && view.exercises[0]) select(view.exercises[0].id); else renderPanel();
+}
+KT.onUpdate(applyView);
+setInterval(function(){ if (pendingView && !panelBusy()) applyView(pendingView); }, 2000);
+document.addEventListener('focusout', function(){ setTimeout(function(){ if (pendingView && !panelBusy()) applyView(pendingView); }, 300); });
+
+KT.onStatus(function(st){
+  var c = $('syncChip'); if (!c) return;
+  var cls = 'syncchip', txt;
+  if (st.failed) { cls += ' err'; txt = '送信失敗 '+st.failed; }
+  else if (st.syncing) { cls += ' pend'; txt = '送信中…'; }
+  else if (st.pending) { cls += st.online ? ' pend' : ' off'; txt = (st.online ? '未送信 ' : 'オフライン・未送信 ')+st.pending; }
+  else if (!st.online) { cls += ' off'; txt = 'オフライン'; }
+  else if (st.error) { cls += ' err'; txt = '同期エラー'; }
+  else { var t = st.syncedAt ? new Date(st.syncedAt) : null; txt = t ? '同期済 '+t.getHours()+':'+('0'+t.getMinutes()).slice(-2) : '同期'; }
+  c.className = cls; c.querySelector('span').textContent = txt;
+  c.title = st.error ? st.error.message : '';
+});
+$('syncChip').addEventListener('click', function(){
+  if (KT.status().failed) { openFail(); return; }
+  KT.sync().then(function(){ toast('同期しました'); }).catch(function(e){
+    if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
+    toast(e.offline ? 'オフラインです。つながったら自動で送信します' : '同期できませんでした：'+e.message, !e.offline);
+  });
+});
+function openFail(){
+  var fl = KT.failed();
+  $('failList').innerHTML = fl.map(function(op){
+    var ex = exById(op.exerciseId);
+    var what = op.type==='record' ? '記録：'+(ex?ex.name:op.exerciseId)+'（'+esc(op.date||'')+' '+esc((op.at||'').slice(11,16))+'）'
+      : op.type==='cancel' ? '取消' : op.type==='memo' ? '備考の変更' : 'インターバル設定';
+    return '<div class="failitem">'+what+'<br><b>'+esc(op.error||'')+'</b></div>';
+  }).join('') || '<div class="empty">ありません</div>';
+  $('failModal').classList.add('open');
+}
+$('failClose').addEventListener('click', function(){ $('failModal').classList.remove('open'); });
+$('failDrop').addEventListener('click', function(){ KT.clearFailed(); $('failModal').classList.remove('open'); toast('破棄しました'); });
+$('failRetry').addEventListener('click', function(){ KT.retryFailed(); $('failModal').classList.remove('open'); });
+</script>
+</body>
+</html>
