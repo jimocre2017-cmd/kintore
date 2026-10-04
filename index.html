@@ -52,6 +52,18 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .exbtn .badge{margin-left:auto;min-width:32px;height:28px;border-radius:14px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;padding:0 8px;color:var(--ink-2)}
 .exbtn .badge.on{background:var(--accent);color:var(--accent-ink)}
 .exbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.progsel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.progsel button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:700;color:var(--ink-2)}
+.progsel button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.progcount{font-size:12px;color:var(--ink-3);font-weight:600}
+.prognote{font-size:12px;line-height:1.7;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:10px}
+.exbtn .stepno{flex:none;width:28px;height:28px;border-radius:50%;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:13px;color:var(--ink-2)}
+.exbtn.done .stepno{background:var(--good);color:#fff}
+.exbtn.prog .sub{white-space:normal;line-height:1.5}
+.reflink{display:inline-block;margin-top:10px;font-size:14px;font-weight:700;color:var(--accent);text-decoration:none}
+.progstep{margin-top:12px;padding:10px 12px;border-radius:12px;background:var(--accent-soft);font-size:13px;line-height:1.7;color:var(--ink)}
+.progstep button{margin-top:8px;width:100%;height:48px;border-radius:10px;border:none;background:var(--accent);color:var(--accent-ink);font-weight:800;font-size:15px}
+.progend{margin-top:6px;font-weight:700;color:var(--good)}
 .addbtn{width:100%;padding:12px;border-radius:12px;border:1px dashed var(--ink-3);background:transparent;color:var(--ink-2);font-weight:600}
 
 .panel{display:flex;flex-direction:column;gap:14px}
@@ -261,7 +273,25 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 
 <script src="api.js"></script>
 <script>
-var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null };
+var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, prog:'' };
+try { APP.prog = localStorage.getItem('kt_prog') || ''; } catch(e){}
+/* プログラム（【リハビリ：肩】など）：「プログラム」シートの種目を順番どおりに表示 */
+function curProg(){
+  if (!APP.prog || !APP.data || !APP.data.programs) return null;
+  return APP.data.programs.filter(function(p){ return p.name===APP.prog; })[0] || null;
+}
+function progItems(p){ return p ? p.items.filter(function(it){ return exById(it.exId); }) : []; }
+function setProg(name){
+  APP.prog = name || '';
+  try { localStorage.setItem('kt_prog', APP.prog); } catch(e){}
+  var p = curProg();
+  if (p){
+    var items = progItems(p);
+    var next = items.filter(function(it){ return !(APP.data.todaySets[it.exId]||[]).length; })[0] || items[0];
+    renderList();
+    if (next) select(next.exId); else renderPanel();
+  } else { renderList(); renderPanel(); }
+}
 
  
 var call = KT.call; // 端末に保存→オンライン時に自動送信（api.js）
@@ -353,7 +383,30 @@ function renderList(){
     if (gorder.indexOf(g)<0) gorder.push(g);
     (groups[g]=groups[g]||[]).push(e);
   });
-  var h = '<h2>種目</h2>';
+  var h = '';
+  var progs = d.programs || [], P = curProg();
+  if (progs.length){
+    h += '<div class="progsel"><button data-prog="" class="'+(P?'':'on')+'">すべての種目</button>'
+      + progs.map(function(p){ return '<button data-prog="'+esc(p.name)+'" class="'+(P&&P.name===p.name?'on':'')+'">'+esc(p.name)+'</button>'; }).join('') + '</div>';
+  }
+  if (P){
+    var items = progItems(P), done = items.filter(function(it){ return (d.todaySets[it.exId]||[]).length; }).length;
+    h += '<h2>'+esc(P.name)+'　<span class="progcount">'+done+' / '+items.length+' 実施</span></h2>';
+    if (P.note) h += '<div class="prognote">'+esc(P.note)+'</div>';
+    items.forEach(function(it, i){
+      var e = exById(it.exId), n = (d.todaySets[e.id]||[]).length;
+      h += '<button class="exbtn prog'+(APP.sel===e.id?' sel':'')+(n?' done':'')+'" data-ex="'+esc(e.id)+'">'
+        + '<span class="stepno">'+(n?'✓':(i+1))+'</span>'
+        + '<div><div class="nm">'+esc(e.name)+'</div><div class="sub">'+esc(it.note || (e.part+'・'+e.equipment))+'</div></div>'
+        + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
+    });
+    h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
+    $('exList').innerHTML = h;
+    bindListCommon();
+    renderTodayParts();
+    return;
+  }
+  h += '<h2>種目</h2>';
   gorder.forEach(function(g){
     if (!groups[g]) return;
     h += '<div class="group"><div class="group-title">'+esc(g)+'</div>';
@@ -368,11 +421,17 @@ function renderList(){
   h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
   $('exList').innerHTML = h;
+  bindListCommon();
+  $('openAdd').addEventListener('click', openAdd);
+  renderTodayParts();
+}
+function bindListCommon(){
   Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){
     b.addEventListener('click', function(){ select(b.getAttribute('data-ex')); });
   });
-  $('openAdd').addEventListener('click', openAdd);
-  renderTodayParts();
+  Array.prototype.forEach.call(document.querySelectorAll('[data-prog]'), function(b){
+    b.addEventListener('click', function(){ setProg(b.getAttribute('data-prog')); });
+  });
 }
 
 function renderTodayParts(){
@@ -420,7 +479,18 @@ function renderPanel(){
     + (ex.loadType==='強度固定' && !isTube(ex) ? '<span class="tag">'+esc(ex.intensity)+'</span>' : '')
     + (ex.secondary||[]).map(function(s){ return '<span class="tag sub">＋'+esc(s)+'</span>'; }).join('')
     + '<button class="secbtn" id="secBtn">付随部位を編集</button></div>'
-    + '<div class="hint">'+esc(exHint(ex))+'</div></div>';
+    + '<div class="hint">'+esc(exHint(ex))+'</div>'
+    + (ex.link ? '<a class="reflink" href="'+esc(ex.link)+'" target="_blank" rel="noopener">▶ やり方を見る（参考ページ）</a>' : '');
+  var P = curProg(), pitems = progItems(P), pidx = -1;
+  pitems.forEach(function(it, i){ if (it.exId===ex.id) pidx = i; });
+  if (pidx >= 0){
+    var nxt = pitems[pidx+1];
+    h += '<div class="progstep"><b>'+esc(P.name)+'　STEP '+(pidx+1)+' / '+pitems.length+'</b>'
+      + (pitems[pidx].note ? '<div>目安：'+esc(pitems[pidx].note)+'</div>' : '')
+      + (nxt ? '<button id="nextEx" data-next="'+esc(nxt.exId)+'">次へ：'+esc(exById(nxt.exId).name)+' ›</button>' : '<div class="progend">これで最後の種目です</div>')
+      + '</div>';
+  }
+  h += '</div>';
 
   h += '<div class="card prev"><span class="lbl">前回</span>';
   if (prev){
@@ -474,6 +544,7 @@ function renderPanel(){
     });
   });
   $('secBtn').addEventListener('click', openSec);
+  if ($('nextEx')) $('nextEx').addEventListener('click', function(){ select(this.getAttribute('data-next')); });
   $('plusBtn').addEventListener('click', function(){ if (ex.measure==='秒') swToggle(ex); else plus(); });
   if ($('manualRec')) $('manualRec').addEventListener('click', function(){ if (SW.state==='idle') plus(); });
   if ($('swCancel')) $('swCancel').addEventListener('click', function(){ swStop(false); });
@@ -575,7 +646,7 @@ function applyResult(r){
   renderSummary();
   var badge = document.querySelector('.exbtn[data-ex="'+r.exerciseId+'"] .badge');
   if (badge){ badge.textContent = r.sets.length; badge.classList.toggle('on', r.sets.length>0); }
-  renderTodayParts();
+  if (curProg()) renderList(); else renderTodayParts();
   if (APP.sel === r.exerciseId) renderPanel();
 }
 
