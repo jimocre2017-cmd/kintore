@@ -189,6 +189,14 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .bodytile .ct{position:absolute;top:4px;right:4px;min-width:20px;height:20px;border-radius:10px;padding:0 5px;background:var(--good);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .bodytile.on{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
 .bodytile:active{transform:scale(.96)}
+.bodynav.mini{display:flex;gap:8px;padding:10px 14px}
+.bodybar{flex:1;min-width:0;display:flex;align-items:center;gap:10px;padding:6px 12px 6px 8px;border:1px solid var(--accent);border-radius:14px;background:linear-gradient(180deg,var(--surface) 0%,var(--accent-soft) 100%);box-shadow:0 0 0 1px var(--accent) inset;text-align:left;min-height:60px}
+.bodybar svg{width:28px;height:46px;flex:none}
+.bodybar .bn{display:flex;flex-direction:column;min-width:0}
+.bodybar .bn b{font-size:20px;font-weight:800;line-height:1.15;color:var(--ink)}
+.bodybar .bn small{font-size:12px;color:var(--ink-2)}
+.bodybar .chg{margin-left:auto;font-size:13px;font-weight:700;color:var(--accent);white-space:nowrap}
+.bodyclr{flex:none;border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:0 14px;font-weight:700;font-size:14px;color:var(--ink-2)}
 .bfig{--b1:#e2e1db;--b2:#cdccc5;--b3:#b6b5ad;--h1:#8cc2ff;--h2:#4a97ee;--h3:#2468c8;overflow:visible}
 @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bfig{--b1:#5d5c55;--b2:#4b4a44;--b3:#3a3934;--h1:#9ccbff;--h2:#4d9af0;--h3:#2a6fd0} }
 .bfig polygon{stroke-width:.35;stroke-linejoin:round}
@@ -325,7 +333,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 
 <script src="api.js"></script>
 <script>
-var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
+var APP = { navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
 try { APP.grp = localStorage.getItem('kt_grp') || ''; } catch(e){ APP.grp = ''; }
 /* タグ：種目ごとのタグで絞り込み（複数選択＝すべて含む種目だけ）。
@@ -505,7 +513,13 @@ function renderList(){
   }
   var shown = gorder.filter(function(g){ return groups[g]; });
   if (APP.grp && shown.indexOf(APP.grp)<0) APP.grp = '';
-  if (shown.length > 1){
+  if (shown.length > 1 && APP.grp && !APP.navOpen){
+    var gn = 0; groups[APP.grp].forEach(function(e){ gn += (d.todaySets[e.id]||[]).length; });
+    h = '<div class="bodynav mini"><button class="bodybar" id="grpOpen" aria-label="部位を変更">'
+      + bodySvg(APP.grp) + '<span class="bn"><b>'+esc(APP.grp)+'</b><small>'+groups[APP.grp].length+' 種目'+(gn?'・今日 '+gn+' セット':'')+'</small></span>'
+      + '<span class="chg">部位を変更 ▾</span></button>'
+      + '<button class="bodyclr" data-grp="" aria-label="すべて表示">すべて</button></div>' + h;
+  } else if (shown.length > 1){
     var nav = '<button class="bodytile'+(APP.grp?'':' on')+'" data-grp=""><span class="allic"><i></i><i></i><i></i><i></i></span><span class="lb">すべて</span></button>';
     shown.forEach(function(g){
       var n = 0; groups[g].forEach(function(e){ n += (d.todaySets[e.id]||[]).length; });
@@ -515,12 +529,12 @@ function renderList(){
     h = '<div class="bodynav"><div class="bodynav-grid">'+nav+'</div></div>' + h;
   }
   var cnt = 0; shown.forEach(function(g){ if (!APP.grp || APP.grp===g) cnt += groups[g].length; });
-  h += '<h2>'+(V ? esc(V.title) : (APP.grp ? esc(APP.grp)+'の種目' : '種目'))+'　<span class="progcount">'+cnt+' 種目</span></h2>';
+  if (!APP.grp || APP.navOpen || V) h += '<h2>'+(V ? esc(V.title) : (APP.grp ? esc(APP.grp)+'の種目' : '種目'))+'　<span class="progcount">'+cnt+' 種目</span></h2>';
   if (V && !V.items.length) h += '<div class="empty">該当する種目がありません</div>';
   gorder.forEach(function(g){
     if (!groups[g]) return;
     if (APP.grp && APP.grp!==g) return;
-    h += '<div class="group"><div class="group-title">'+bodySvg(g,'gic')+esc(g)+'</div>';
+    h += '<div class="group">'+(APP.grp ? '' : '<div class="group-title">'+bodySvg(g,'gic')+esc(g)+'</div>');
     groups[g].forEach(function(e){
       var n = (d.todaySets[e.id]||[]).length;
       h += '<button class="exbtn'+(APP.sel===e.id?' sel':'')+'" data-ex="'+esc(e.id)+'">'
@@ -594,7 +608,7 @@ function bodySvg(g, cls){
 }
 function saveGrp(){ try { localStorage.setItem('kt_grp', APP.grp||''); } catch(e){} }
 function setGrp(g){
-  APP.grp = (APP.grp===g) ? '' : g; saveGrp(); renderList();
+  APP.grp = (APP.grp===g && !APP.navOpen) ? '' : g; APP.navOpen = false; saveGrp(); renderList();
   var el = $('exList'); if (el && window.innerWidth > 760) el.scrollTop = 0;
 }
 
@@ -602,6 +616,7 @@ function bindListCommon(){
   Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){
     b.addEventListener('click', function(){ select(b.getAttribute('data-ex')); });
   });
+  var go = $('grpOpen'); if (go) go.addEventListener('click', function(){ APP.navOpen = true; renderList(); var el = $('exList'); if (el) el.scrollTop = 0; });
   Array.prototype.forEach.call(document.querySelectorAll('[data-grp]'), function(b){
     b.addEventListener('click', function(){ setGrp(b.getAttribute('data-grp')); });
   });
