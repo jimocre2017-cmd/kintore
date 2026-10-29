@@ -184,22 +184,23 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 @media (max-width:760px){ .bodynav{position:static} }
 .bodynav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:8px}
 .bodytile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px 7px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);min-height:96px}
-.bodytile svg{width:44px;height:62px;display:block}
+.bodytile svg{width:42px;height:70px;display:block}
 .bodytile .lb{font-size:13px;font-weight:800;color:var(--ink);line-height:1.2;text-align:center;word-break:keep-all}
 .bodytile .ct{position:absolute;top:4px;right:4px;min-width:20px;height:20px;border-radius:10px;padding:0 5px;background:var(--good);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
 .bodytile.on{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
 .bodytile:active{transform:scale(.96)}
-.bfig .b{fill:#cfcec7}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bfig .b{fill:#4a4944} }
-.bfig .h{fill:var(--accent)}
-.bfig .sp{stroke:var(--surface-2);stroke-width:1;fill:none}
-.bodytile.on .bfig .b{fill:#c9d6e6}
-@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bodytile.on .bfig .b{fill:#34475f} }
-.bodytile .allic{width:44px;height:62px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 3px}
+.bfig{--b1:#e2e1db;--b2:#cdccc5;--b3:#b6b5ad;--h1:#8cc2ff;--h2:#4a97ee;--h3:#2468c8;overflow:visible}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bfig{--b1:#5d5c55;--b2:#4b4a44;--b3:#3a3934;--h1:#9ccbff;--h2:#4d9af0;--h3:#2a6fd0} }
+.bfig polygon{stroke-width:.35;stroke-linejoin:round}
+.bfig .b1{fill:var(--b1);stroke:var(--b1)} .bfig .b2{fill:var(--b2);stroke:var(--b2)} .bfig .b3{fill:var(--b3);stroke:var(--b3)}
+.bfig .h1{fill:var(--h1);stroke:var(--h1)} .bfig .h2{fill:var(--h2);stroke:var(--h2)} .bfig .h3{fill:var(--h3);stroke:var(--h3)}
+.bfig .hl{filter:drop-shadow(0 0 1.6px rgba(42,120,214,.55))}
+.bodytile{background:linear-gradient(180deg,var(--surface) 0%,var(--surface-2) 100%)}
+.bodytile.on{background:linear-gradient(180deg,var(--surface) 0%,var(--accent-soft) 100%)}
+.bodytile .allic{width:42px;height:70px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:16px 2px}
 .bodytile .allic i{background:var(--ink-3);border-radius:4px;opacity:.55}
 .bodytile.on .allic i{background:var(--accent);opacity:1}
-.group-title .gic{width:24px;height:34px;flex:none}
-.group-title .gic .sp{stroke:var(--accent-soft)}
+.group-title .gic{width:22px;height:36px;flex:none}
 .tubeseg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .tubeseg button{border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px;text-align:left;min-height:64px}
 .tubeseg button b{display:block;font-size:20px}
@@ -536,40 +537,60 @@ function renderList(){
   $('openAdd').addEventListener('click', openAdd);
   renderTodayParts();
 }
-// ===== 部位イラスト =====
-// 部位グループ名から、人型シルエットのどこを強調するかを決める（名前の一部一致）
+// ===== 部位イラスト（ローポリ風） =====
+// 部位グループ名から、正面／背面のどちらで、どの筋肉を強調するかを決める（名前の一部一致）
 function groupRegions(g){
   g = String(g||'');
-  if (/全身/.test(g)) return {view:'front', on:['chest','sh','arm','fa','abs','hip','thigh','calf']};
+  if (/全身/.test(g)) return {view:'front', on:['trap','sh','chest','abs','obl','arm','fa','hip','thigh','calf']};
   if (/前腕|握|手首|グリップ/.test(g)) return {view:'front', on:['fa']};
-  if (/背|広背|僧帽/.test(g)) return {view:'back', on:['back']};
+  if (/三頭/.test(g)) return {view:'back', on:['arm']};
+  if (/背|広背|僧帽/.test(g)) return {view:'back', on:['back','low','trap']};
   if (/胸/.test(g)) return {view:'front', on:['chest']};
   if (/肩|三角/.test(g)) return {view:'front', on:['sh']};
-  if (/腕|二頭|三頭|上腕/.test(g)) return {view:'front', on:['arm']};
-  if (/腹|体幹|コア/.test(g)) return {view:'front', on:['abs']};
-  if (/尻|臀|お尻|ヒップ/.test(g)) return {view:'back', on:['hip']};
+  if (/腕|二頭|上腕/.test(g)) return {view:'front', on:['arm']};
+  if (/腹|体幹|コア/.test(g)) return {view:'front', on:['abs','obl']};
+  if (/尻|臀|ヒップ/.test(g)) return {view:'back', on:['hip']};
   if (/ふくらはぎ|カーフ/.test(g)) return {view:'back', on:['calf']};
-  if (/脚|足|下半身|太もも|もも|レッグ/.test(g)) return {view:'front', on:['hip','thigh','calf']};
+  if (/脚|足|下半身|もも|レッグ/.test(g)) return {view:'front', on:['hip','thigh','calf']};
   return {view:'front', on:[]};
 }
+// 左半身の面（部位:陰影1〜3:座標）。右半身は左右反転し、1段暗くして立体感を出す
+var POLY_COMMON = [
+  'head:1:30,1 24.5,3.5 23.5,10 30,8','head:2:30,8 23.5,10 25.5,16 30,18',
+  'neck:2:27,16.5 30,18 30,22 26,21',
+  'trap:1:26,21 30,22 30,24 20,24.5',
+  'sh:1:20,24.5 14,26.5 12.3,32 18,30','sh:2:18,30 12.3,32 13,38 18,35','sh:1:20,24.5 18,30 22,27.5',
+  'arm:1:13,38 18,35 17,44 12,46','arm:2:12,46 17,44 15.5,50 11,51','arm:3:18,35 20,38.5 17,44',
+  'fa:1:11,51 15.5,50 14,60 9,61','fa:2:9,61 14,60 12,67 8.5,67',
+  'hand:2:8.5,67 12,67 12.2,72 9,73',
+  'thigh:1:21,60 30,62.5 28,70 20,72','thigh:2:20,72 28,70 27,79 21,80','thigh:3:30,62.5 30,67 28,70','thigh:2:21,80 27,79 26.5,83 21.5,83.5',
+  'calf:1:21.5,83.5 26.5,83 26,91 22.5,92','calf:2:22.5,92 26,91 25.5,96 23,96',
+  'foot:3:23,96 25.5,96 27,99.3 21,99.3'
+];
+var POLY_FRONT = [
+  'chest:1:22,27.5 30,25.5 30,34 21,36','chest:2:22,27.5 18,30 18,35 21,36','chest:3:21,36 30,34 30,38 24,39',
+  'abs:1:24,39 30,38 30,45 24.2,45','abs:2:24.2,45 30,45 30,52 24.6,52','abs:1:24.6,52 30,52 30,58 26,57',
+  'obl:2:21,36 24,39 24.2,45 21,46.5','obl:3:21,46.5 24.2,45 24.6,52 22,53.5',
+  'hip:2:22,53.5 26,57 30,58 30,62.5 21,60'
+];
+var POLY_BACK = [
+  'back:1:22,27.5 30,25.5 30,36 22,34','back:2:22,27.5 18,30 18,35 22,34',
+  'back:1:18,35 22,34 24,45 21,46.5','back:2:22,34 30,36 30,46 24,45',
+  'low:1:24,45 30,46 30,55 25,54','low:3:21,46.5 24,45 25,54 22,53.5',
+  'hip:1:22,53.5 25,54 30,55 30,63 21,61','hip:2:21,61 30,63 29.5,66.5 21,65.5'
+];
 function bodySvg(g, cls){
   var R = groupRegions(g), on = {}; R.on.forEach(function(k){ on[k]=1; });
-  function c(k){ return on[k] ? 'h' : 'b'; }
-  var back = R.view==='back';
-  var torso = back
-    ? '<path class="'+c('back')+'" d="M13.5 12.5h13l-1.4 13.5h-10.2z"/><path class="'+c('abs')+'" d="M15 26.8h10v4.6h-10z"/><path class="sp" d="M20 13v18"/>'
-    : '<path class="'+c('chest')+'" d="M13.5 12.5h13l-.6 8.3h-11.8z"/><path class="sp" d="M20 13v7.6"/><rect class="'+c('abs')+'" x="15" y="21.6" width="10" height="9.8" rx="2"/>';
-  return '<svg class="bfig '+(cls||'')+'" viewBox="0 0 40 58" aria-hidden="true">'
-    + '<circle class="b" cx="20" cy="6" r="4.4"/>'
-    + '<rect class="b" x="18.2" y="9.6" width="3.6" height="3.4" rx="1"/>'
-    + torso
-    + '<circle class="'+c('sh')+'" cx="11" cy="14.8" r="3.6"/><circle class="'+c('sh')+'" cx="29" cy="14.8" r="3.6"/>'
-    + '<rect class="'+c('arm')+'" x="7.4" y="17.6" width="4.2" height="10" rx="2.1"/><rect class="'+c('arm')+'" x="28.4" y="17.6" width="4.2" height="10" rx="2.1"/>'
-    + '<rect class="'+c('fa')+'" x="6.4" y="28.4" width="3.8" height="9" rx="1.9"/><rect class="'+c('fa')+'" x="29.8" y="28.4" width="3.8" height="9" rx="1.9"/>'
-    + '<path class="'+c('hip')+'" d="M14.6 32.2h10.8l.6 4.4h-12z"/>'
-    + '<rect class="'+c('thigh')+'" x="14" y="37.3" width="5.6" height="10" rx="2.6"/><rect class="'+c('thigh')+'" x="20.4" y="37.3" width="5.6" height="10" rx="2.6"/>'
-    + '<rect class="'+c('calf')+'" x="14.6" y="48" width="4.6" height="9" rx="2.2"/><rect class="'+c('calf')+'" x="20.8" y="48" width="4.6" height="9" rx="2.2"/>'
-    + '</svg>';
+  var list = POLY_COMMON.concat(R.view==='back' ? POLY_BACK : POLY_FRONT);
+  var base = '', hi = '';
+  list.forEach(function(q){
+    var m = q.split(':'), k = m[0], sh = +m[1], pts = m[2];
+    var mir = pts.split(' ').map(function(xy){ var c = xy.split(','); return (60 - +c[0]).toFixed(1)+','+c[1]; }).join(' ');
+    var pre = on[k] ? 'h' : 'b';
+    var poly = '<polygon class="'+pre+sh+'" points="'+pts+'"/><polygon class="'+pre+Math.min(sh+1,3)+'" points="'+mir+'"/>';
+    if (on[k]) hi += poly; else base += poly;
+  });
+  return '<svg class="bfig '+(cls||'')+'" viewBox="0 0 60 100" aria-hidden="true">'+base+'<g class="hl">'+hi+'</g></svg>';
 }
 function saveGrp(){ try { localStorage.setItem('kt_grp', APP.grp||''); } catch(e){} }
 function setGrp(g){
