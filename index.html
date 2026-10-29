@@ -179,6 +179,27 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .toast.show{opacity:1}
 .toast.err{background:var(--danger);color:#fff}
 .loading{padding:40px;text-align:center;color:var(--ink-3)}
+/* 部位ナビ：イラストで部位を選ぶ */
+.bodynav{position:sticky;top:-14px;z-index:3;margin:-14px -14px 12px;padding:12px 14px 10px;background:var(--surface);border-bottom:1px solid var(--line);border-radius:var(--radius) var(--radius) 0 0}
+@media (max-width:760px){ .bodynav{position:static} }
+.bodynav-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:8px}
+.bodytile{position:relative;display:flex;flex-direction:column;align-items:center;gap:3px;padding:8px 4px 7px;border:1px solid var(--line);border-radius:14px;background:var(--surface-2);min-height:96px}
+.bodytile svg{width:44px;height:62px;display:block}
+.bodytile .lb{font-size:13px;font-weight:800;color:var(--ink);line-height:1.2;text-align:center;word-break:keep-all}
+.bodytile .ct{position:absolute;top:4px;right:4px;min-width:20px;height:20px;border-radius:10px;padding:0 5px;background:var(--good);color:#fff;font-size:11px;font-weight:800;display:flex;align-items:center;justify-content:center}
+.bodytile.on{background:var(--accent-soft);border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}
+.bodytile:active{transform:scale(.96)}
+.bfig .b{fill:#cfcec7}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bfig .b{fill:#4a4944} }
+.bfig .h{fill:var(--accent)}
+.bfig .sp{stroke:var(--surface-2);stroke-width:1;fill:none}
+.bodytile.on .bfig .b{fill:#c9d6e6}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]) .bodytile.on .bfig .b{fill:#34475f} }
+.bodytile .allic{width:44px;height:62px;display:grid;grid-template-columns:1fr 1fr;gap:4px;padding:8px 3px}
+.bodytile .allic i{background:var(--ink-3);border-radius:4px;opacity:.55}
+.bodytile.on .allic i{background:var(--accent);opacity:1}
+.group-title .gic{width:24px;height:34px;flex:none}
+.group-title .gic .sp{stroke:var(--accent-soft)}
 .tubeseg{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px}
 .tubeseg button{border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px;text-align:left;min-height:64px}
 .tubeseg button b{display:block;font-size:20px}
@@ -305,6 +326,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <script>
 var APP = { data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
+try { APP.grp = localStorage.getItem('kt_grp') || ''; } catch(e){ APP.grp = ''; }
 /* タグ：種目ごとのタグで絞り込み（複数選択＝すべて含む種目だけ）。
  * 「タグ設定」シートに順番・目安があるタグは、その順で STEP 表示して「次へ」で進める */
 function allTags(){
@@ -480,11 +502,24 @@ function renderList(){
     renderTodayParts();
     return;
   }
-  h += '<h2>'+(V ? esc(V.title)+'　<span class="progcount">'+V.items.length+' 種目</span>' : '種目')+'</h2>';
+  var shown = gorder.filter(function(g){ return groups[g]; });
+  if (APP.grp && shown.indexOf(APP.grp)<0) APP.grp = '';
+  if (shown.length > 1){
+    var nav = '<button class="bodytile'+(APP.grp?'':' on')+'" data-grp=""><span class="allic"><i></i><i></i><i></i><i></i></span><span class="lb">すべて</span></button>';
+    shown.forEach(function(g){
+      var n = 0; groups[g].forEach(function(e){ n += (d.todaySets[e.id]||[]).length; });
+      nav += '<button class="bodytile'+(APP.grp===g?' on':'')+'" data-grp="'+esc(g)+'" aria-pressed="'+(APP.grp===g)+'">'
+        + bodySvg(g) + '<span class="lb">'+esc(g)+'</span>' + (n ? '<span class="ct num">'+n+'</span>' : '') + '</button>';
+    });
+    h = '<div class="bodynav"><div class="bodynav-grid">'+nav+'</div></div>' + h;
+  }
+  var cnt = 0; shown.forEach(function(g){ if (!APP.grp || APP.grp===g) cnt += groups[g].length; });
+  h += '<h2>'+(V ? esc(V.title) : (APP.grp ? esc(APP.grp)+'の種目' : '種目'))+'　<span class="progcount">'+cnt+' 種目</span></h2>';
   if (V && !V.items.length) h += '<div class="empty">該当する種目がありません</div>';
   gorder.forEach(function(g){
     if (!groups[g]) return;
-    h += '<div class="group"><div class="group-title">'+esc(g)+'</div>';
+    if (APP.grp && APP.grp!==g) return;
+    h += '<div class="group"><div class="group-title">'+bodySvg(g,'gic')+esc(g)+'</div>';
     groups[g].forEach(function(e){
       var n = (d.todaySets[e.id]||[]).length;
       h += '<button class="exbtn'+(APP.sel===e.id?' sel':'')+'" data-ex="'+esc(e.id)+'">'
@@ -501,9 +536,53 @@ function renderList(){
   $('openAdd').addEventListener('click', openAdd);
   renderTodayParts();
 }
+// ===== 部位イラスト =====
+// 部位グループ名から、人型シルエットのどこを強調するかを決める（名前の一部一致）
+function groupRegions(g){
+  g = String(g||'');
+  if (/全身/.test(g)) return {view:'front', on:['chest','sh','arm','fa','abs','hip','thigh','calf']};
+  if (/前腕|握|手首|グリップ/.test(g)) return {view:'front', on:['fa']};
+  if (/背|広背|僧帽/.test(g)) return {view:'back', on:['back']};
+  if (/胸/.test(g)) return {view:'front', on:['chest']};
+  if (/肩|三角/.test(g)) return {view:'front', on:['sh']};
+  if (/腕|二頭|三頭|上腕/.test(g)) return {view:'front', on:['arm']};
+  if (/腹|体幹|コア/.test(g)) return {view:'front', on:['abs']};
+  if (/尻|臀|お尻|ヒップ/.test(g)) return {view:'back', on:['hip']};
+  if (/ふくらはぎ|カーフ/.test(g)) return {view:'back', on:['calf']};
+  if (/脚|足|下半身|太もも|もも|レッグ/.test(g)) return {view:'front', on:['hip','thigh','calf']};
+  return {view:'front', on:[]};
+}
+function bodySvg(g, cls){
+  var R = groupRegions(g), on = {}; R.on.forEach(function(k){ on[k]=1; });
+  function c(k){ return on[k] ? 'h' : 'b'; }
+  var back = R.view==='back';
+  var torso = back
+    ? '<path class="'+c('back')+'" d="M13.5 12.5h13l-1.4 13.5h-10.2z"/><path class="'+c('abs')+'" d="M15 26.8h10v4.6h-10z"/><path class="sp" d="M20 13v18"/>'
+    : '<path class="'+c('chest')+'" d="M13.5 12.5h13l-.6 8.3h-11.8z"/><path class="sp" d="M20 13v7.6"/><rect class="'+c('abs')+'" x="15" y="21.6" width="10" height="9.8" rx="2"/>';
+  return '<svg class="bfig '+(cls||'')+'" viewBox="0 0 40 58" aria-hidden="true">'
+    + '<circle class="b" cx="20" cy="6" r="4.4"/>'
+    + '<rect class="b" x="18.2" y="9.6" width="3.6" height="3.4" rx="1"/>'
+    + torso
+    + '<circle class="'+c('sh')+'" cx="11" cy="14.8" r="3.6"/><circle class="'+c('sh')+'" cx="29" cy="14.8" r="3.6"/>'
+    + '<rect class="'+c('arm')+'" x="7.4" y="17.6" width="4.2" height="10" rx="2.1"/><rect class="'+c('arm')+'" x="28.4" y="17.6" width="4.2" height="10" rx="2.1"/>'
+    + '<rect class="'+c('fa')+'" x="6.4" y="28.4" width="3.8" height="9" rx="1.9"/><rect class="'+c('fa')+'" x="29.8" y="28.4" width="3.8" height="9" rx="1.9"/>'
+    + '<path class="'+c('hip')+'" d="M14.6 32.2h10.8l.6 4.4h-12z"/>'
+    + '<rect class="'+c('thigh')+'" x="14" y="37.3" width="5.6" height="10" rx="2.6"/><rect class="'+c('thigh')+'" x="20.4" y="37.3" width="5.6" height="10" rx="2.6"/>'
+    + '<rect class="'+c('calf')+'" x="14.6" y="48" width="4.6" height="9" rx="2.2"/><rect class="'+c('calf')+'" x="20.8" y="48" width="4.6" height="9" rx="2.2"/>'
+    + '</svg>';
+}
+function saveGrp(){ try { localStorage.setItem('kt_grp', APP.grp||''); } catch(e){} }
+function setGrp(g){
+  APP.grp = (APP.grp===g) ? '' : g; saveGrp(); renderList();
+  var el = $('exList'); if (el && window.innerWidth > 760) el.scrollTop = 0;
+}
+
 function bindListCommon(){
   Array.prototype.forEach.call(document.querySelectorAll('.exbtn'), function(b){
     b.addEventListener('click', function(){ select(b.getAttribute('data-ex')); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-grp]'), function(b){
+    b.addEventListener('click', function(){ setGrp(b.getAttribute('data-grp')); });
   });
   Array.prototype.forEach.call(document.querySelectorAll('[data-tag]'), function(b){
     b.addEventListener('click', function(){ toggleTag(b.getAttribute('data-tag')); });
