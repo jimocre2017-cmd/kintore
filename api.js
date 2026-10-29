@@ -355,6 +355,18 @@ var KT = (function () {
       }, onlineOnly);
     },
 
+    // AIトレーナー（Gemini はGAS側から呼ぶ。APIキーはアプリに置かない）
+    aiConsult: function (req) {
+      return api('aiConsult', [req], 180000).then(function (r) { LS.set('kt_ai_last', r); return r; }, onlineOnly);
+    },
+    aiLast: function () { return Promise.resolve(LS.get('kt_ai_last', null)); },
+    aiApplyProgram: function (prog) {
+      return api('aiApplyProgram', [prog], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
+    },
+    aiDeleteProgram: function (tag) {
+      return api('aiDeleteProgram', [tag], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
+    },
+
     getAnalytics: function (type, anchor) {
       return api('getAnalytics', [type, anchor], 60000).then(function (d) {
         saveAnalytics(type, anchor, d);

@@ -214,6 +214,58 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .tubeseg button b{display:block;font-size:20px}
 .tubeseg button span{font-size:12px;color:var(--ink-2)}
 .tubeseg button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+/* AIトレーナー */
+.aibtn{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;border:none;background:linear-gradient(135deg,#6d5bd0,#2a78d6);color:#fff;font-weight:700;white-space:nowrap}
+.spark{display:inline-block;font-size:1.05em}
+.modal .box.aibox{max-width:720px;padding:0;display:flex;flex-direction:column}
+.aihead{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--line)}
+.aihead h3{margin:0}
+.aihead .spark{color:#6d5bd0}
+.aiclose{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-size:16px}
+#aiBody{padding:16px 20px 20px}
+.aisec{margin-bottom:16px}
+.aisec label,.aisec .lbl{display:block;font-size:12px;font-weight:700;color:var(--ink-3);margin-bottom:6px;letter-spacing:.04em}
+.aimodes{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.aimodes button{border:1px solid var(--line);background:var(--surface-2);border-radius:14px;padding:12px 10px;text-align:left;min-height:72px}
+.aimodes button b{display:block;font-size:15px}
+.aimodes button span{font-size:12px;color:var(--ink-2);line-height:1.5}
+.aimodes button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+@media (max-width:520px){ .aimodes{grid-template-columns:1fr} .aimodes button{min-height:0} }
+.aifocus{display:grid;grid-template-columns:repeat(auto-fill,minmax(64px,1fr));gap:8px}
+.aifocus .bodytile{min-height:84px;padding:6px 4px}
+.aifocus .bodytile svg{width:34px;height:56px}
+.aifocus .bodytile .lb{font-size:12px}
+.airow{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.aisec select,.aisec textarea{width:100%;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:10px 12px;font:inherit;font-size:16px;color:var(--ink)}
+.aisec select{height:48px}
+.aisec textarea{min-height:72px;resize:vertical}
+.aigo{width:100%;height:60px;border:none;border-radius:14px;background:linear-gradient(135deg,#6d5bd0,#2a78d6);color:#fff;font-size:18px;font-weight:800}
+.aigo[disabled]{opacity:.6}
+.aimine{margin-top:18px;border-top:1px solid var(--line);padding-top:12px}
+.aimine .it{display:flex;align-items:center;gap:8px;padding:8px 0;font-size:14px}
+.aimine .it b{flex:1}
+.aimine .it button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:6px 10px;font-size:13px;color:var(--ink-2)}
+.aiload{padding:48px 12px;text-align:center;color:var(--ink-2)}
+.aiload .orb{width:56px;height:56px;margin:0 auto 16px;border-radius:50%;background:conic-gradient(#6d5bd0,#2a78d6,#8cc2ff,#6d5bd0);animation:aispin 1.2s linear infinite;-webkit-mask:radial-gradient(circle,transparent 55%,#000 57%);mask:radial-gradient(circle,transparent 55%,#000 57%)}
+@keyframes aispin{to{transform:rotate(360deg)}}
+.aimeta{font-size:12px;color:var(--ink-3);margin-bottom:10px}
+.aisum{font-size:15px;line-height:1.8;margin:0 0 14px}
+.ailist{margin:0 0 14px;padding-left:1.2em;font-size:14px;line-height:1.75;color:var(--ink)}
+.ailist li{margin-bottom:4px}
+.aiprog{border:1px solid var(--accent);border-radius:16px;overflow:hidden;margin-bottom:14px}
+.aiprog .ph{padding:12px 14px;background:var(--accent-soft)}
+.aiprog .ph b{font-size:18px}
+.aiprog .ph .pn{font-size:13px;color:var(--ink-2);margin-top:4px;line-height:1.6}
+.aiitem{display:flex;gap:10px;padding:12px 14px;border-top:1px solid var(--line)}
+.aiitem .no{flex:none;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-weight:800;font-size:13px;display:flex;align-items:center;justify-content:center}
+.aiitem .nm{font-weight:700}
+.aiitem .rx{font-size:14px;font-weight:700;color:var(--accent);margin-top:2px}
+.aiitem .pt{font-size:13px;color:var(--ink-2);margin-top:2px;line-height:1.6}
+.ainext{font-size:13px;line-height:1.7;background:var(--surface-2);border-radius:12px;padding:10px 12px;margin-bottom:14px}
+.aiwarn{font-size:12px;color:var(--ink-3);margin-bottom:12px}
+.aiacts{display:flex;gap:10px}
+.aiacts button{flex:1;height:52px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.aiacts .primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 /* アプリ版：同期状態 */
 .syncchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
 .syncchip i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
@@ -237,6 +289,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
     <div class="kpi"><b class="num" id="kVol">0</b><span>総負荷量 kg</span></div>
     <div class="kpi"><b class="num" id="kSecs">0</b><span>秒</span></div>
   </div>
+  <button class="aibtn" id="aiOpen" aria-label="AIトレーナー"><span class="spark">✦</span>AIトレーナー</button>
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
   <a class="navlink" href="analytics.html">分析 →</a>
 </header>
@@ -326,6 +379,13 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
       <button id="failRetry">もう一度送る</button>
       <button class="primary" id="failClose">閉じる</button>
     </div>
+  </div>
+</div>
+
+<div class="modal" id="aiModal">
+  <div class="box aibox">
+    <div class="aihead"><h3><span class="spark">✦</span> AIトレーナー</h3><button class="aiclose" id="aiClose" aria-label="閉じる">✕</button></div>
+    <div id="aiBody"></div>
   </div>
 </div>
 
@@ -1220,6 +1280,142 @@ function applyView(view){
   if (!APP.sel && view.exercises[0]) select(view.exercises[0].id); else renderPanel();
 }
 KT.onUpdate(applyView);
+
+/* ===== AIトレーナー（Gemini） ===== */
+var AI = { view:'form', busy:false, res:null, mode:'review', focus:[], days:3, minutes:45, note:'' };
+try { var _ap = JSON.parse(localStorage.getItem('kt_ai_pref')||'null'); if (_ap){ AI.mode=_ap.mode||AI.mode; AI.focus=_ap.focus||[]; AI.days=_ap.days||3; AI.minutes=_ap.minutes||45; } } catch(e){}
+function aiSavePref(){ try { localStorage.setItem('kt_ai_pref', JSON.stringify({mode:AI.mode,focus:AI.focus,days:AI.days,minutes:AI.minutes})); } catch(e){} }
+var AI_MODE_UI = [
+  ['review','今月の振り返り','記録を分析して、偏りと次の一手を提案'],
+  ['focus','部位を集中強化','選んだ部位のメニューを組む'],
+  ['bulk','バルクアップ','筋肥大向けのセット・レップで組む']
+];
+function aiGroups(){
+  var out = []; ((APP.data && APP.data.parts)||[]).forEach(function(p){ if (out.indexOf(p.group)<0) out.push(p.group); });
+  return out;
+}
+function openAi(){
+  if (!APP.data) return;
+  $('aiModal').classList.add('open');
+  if (!AI.res) KT.call('aiLast').then(function(r){ if (r && !AI.res){ AI.res = r; } renderAi(); }); else renderAi();
+  renderAi();
+}
+function closeAi(){ $('aiModal').classList.remove('open'); if (pendingView) applyView(pendingView); }
+function renderAi(){
+  var b = $('aiBody'), h = '';
+  if (AI.busy){
+    b.innerHTML = '<div class="aiload"><div class="orb"></div><b>記録を読み込んで考えています…</b><div style="font-size:13px;margin-top:6px">30秒〜1分ほどかかります</div></div>';
+    return;
+  }
+  if (AI.view==='result' && AI.res){ b.innerHTML = aiResultHtml(AI.res); aiBindResult(); return; }
+  h += '<div class="aisec"><span class="lbl">相談内容</span><div class="aimodes">'
+    + AI_MODE_UI.map(function(m){ return '<button data-aimode="'+m[0]+'" class="'+(AI.mode===m[0]?'on':'')+'"><b>'+m[1]+'</b><span>'+m[2]+'</span></button>'; }).join('')
+    + '</div></div>';
+  var gs = aiGroups();
+  AI.focus = AI.focus.filter(function(g){ return gs.indexOf(g)>=0; });
+  h += '<div class="aisec"><span class="lbl">集中したい部位'+(AI.mode==='focus'?'（1つ以上選択）':'（任意・複数可）')+'</span><div class="aifocus">'
+    + gs.map(function(g){ return '<button class="bodytile'+(AI.focus.indexOf(g)>=0?' on':'')+'" data-aifocus="'+esc(g)+'">'+bodySvg(g)+'<span class="lb">'+esc(g)+'</span></button>'; }).join('')
+    + '</div></div>';
+  h += '<div class="aisec airow"><div><label for="aiDays">週の回数</label><select id="aiDays">'
+    + [1,2,3,4,5,6,7].map(function(n){ return '<option value="'+n+'"'+(AI.days==n?' selected':'')+'>週'+n+'回</option>'; }).join('')
+    + '</select></div><div><label for="aiMin">1回の時間</label><select id="aiMin">'
+    + [20,30,45,60,90].map(function(n){ return '<option value="'+n+'"'+(AI.minutes==n?' selected':'')+'>'+n+'分</option>'; }).join('')
+    + '</select></div></div>';
+  h += '<div class="aisec"><label for="aiNote">要望・体調（任意）</label><textarea id="aiNote" placeholder="例：右肩に少し違和感。腕を太くしたい。今週は疲れ気味">'+esc(AI.note)+'</textarea></div>';
+  h += '<button class="aigo" id="aiGo">✦ 相談する</button>';
+  if (AI.res) h += '<div style="text-align:center;margin-top:10px"><button class="linkbtn" id="aiShowLast">前回の提案を見る（'+esc(AI.res.createdAt||'')+'）</button></div>';
+  var mine = ((APP.data.programs)||[]).filter(function(p){ return p.name.indexOf('AI')===0; });
+  if (mine.length){
+    h += '<div class="aimine"><span class="lbl" style="font-size:12px;font-weight:700;color:var(--ink-3)">追加済みのAIプログラム</span>'
+      + mine.map(function(p){ return '<div class="it"><b>#'+esc(p.name)+'</b><span style="font-size:12px;color:var(--ink-3)">'+p.items.length+'種目</span><button data-aistart="'+esc(p.name)+'">開始</button><button data-aidel="'+esc(p.name)+'">削除</button></div>'; }).join('')
+      + '</div>';
+  }
+  b.innerHTML = h;
+  Array.prototype.forEach.call(b.querySelectorAll('[data-aimode]'), function(x){ x.addEventListener('click', function(){ aiKeep(); AI.mode = x.getAttribute('data-aimode'); aiSavePref(); renderAi(); }); });
+  Array.prototype.forEach.call(b.querySelectorAll('[data-aifocus]'), function(x){ x.addEventListener('click', function(){
+    aiKeep(); var g = x.getAttribute('data-aifocus'), i = AI.focus.indexOf(g); if (i>=0) AI.focus.splice(i,1); else AI.focus.push(g); aiSavePref(); renderAi();
+  }); });
+  Array.prototype.forEach.call(b.querySelectorAll('[data-aistart]'), function(x){ x.addEventListener('click', function(){ aiStart(x.getAttribute('data-aistart')); }); });
+  Array.prototype.forEach.call(b.querySelectorAll('[data-aidel]'), function(x){ x.addEventListener('click', function(){ aiDelete(x.getAttribute('data-aidel')); }); });
+  $('aiGo').addEventListener('click', aiConsult);
+  if ($('aiShowLast')) $('aiShowLast').addEventListener('click', function(){ aiKeep(); AI.view='result'; renderAi(); });
+}
+function aiKeep(){
+  if ($('aiDays')) AI.days = +$('aiDays').value;
+  if ($('aiMin')) AI.minutes = +$('aiMin').value;
+  if ($('aiNote')) AI.note = $('aiNote').value;
+}
+function aiConsult(){
+  aiKeep(); aiSavePref();
+  if (AI.mode==='focus' && !AI.focus.length){ toast('集中したい部位を選んでください', true); return; }
+  AI.busy = true; renderAi();
+  KT.call('aiConsult', { mode:AI.mode, focus:AI.focus, days:AI.days, minutes:AI.minutes, note:AI.note }).then(function(r){
+    AI.busy = false; AI.res = r; AI.view = 'result'; renderAi();
+    var bx = document.querySelector('#aiModal .box'); if (bx) bx.scrollTop = 0;
+  }).catch(function(e){
+    AI.busy = false; renderAi(); toast(e.message || '相談に失敗しました', true);
+  });
+}
+function aiRx(it){
+  var a = [it.sets+'セット × '+it.reps];
+  if (it.load) a.push(it.load);
+  if (it.rest) a.push('休憩'+it.rest+'秒');
+  return a.join('　／　');
+}
+function aiResultHtml(r){
+  var p = r.program || {items:[]}, h = '';
+  var modeName = (AI_MODE_UI.filter(function(m){ return m[0]===r.mode; })[0]||[])[1] || '';
+  h += '<div class="aimeta">'+esc(r.createdAt||'')+(modeName?'・'+esc(modeName):'')+((r.focus||[]).length?'・'+esc(r.focus.join('・')):'')+'</div>';
+  if (r.summary) h += '<p class="aisum">'+esc(r.summary)+'</p>';
+  if ((r.findings||[]).length) h += '<div class="aisec"><span class="lbl">気づき</span><ul class="ailist">'+r.findings.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>';
+  if ((r.advice||[]).length) h += '<div class="aisec"><span class="lbl">今後の方針</span><ul class="ailist">'+r.advice.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul></div>';
+  if (p.items.length){
+    h += '<div class="aiprog"><div class="ph"><b>#'+esc(p.name)+'</b><span style="font-size:13px;color:var(--ink-3);margin-left:8px">'+p.items.length+'種目</span>'
+      + (p.note ? '<div class="pn">'+esc(p.note)+'</div>' : '') + '</div>'
+      + p.items.map(function(it, i){
+          return '<div class="aiitem"><span class="no">'+(i+1)+'</span><div><div class="nm">'+esc(it.name)+' <span class="tag">'+esc(it.part)+'</span></div>'
+            + '<div class="rx num">'+esc(aiRx(it))+'</div>' + (it.point ? '<div class="pt">'+esc(it.point)+'</div>' : '') + '</div></div>';
+        }).join('') + '</div>';
+  }
+  if (r.nextStep) h += '<div class="ainext"><b>次回以降の上げ方</b><br>'+esc(r.nextStep)+'</div>';
+  h += '<div class="aiwarn">AIの提案は記録をもとにした目安です。痛みが出たら中止し、続く場合は専門家に相談してください。</div>';
+  var added = ((APP.data.programs)||[]).some(function(x){ return x.name===p.name; });
+  h += '<div class="aiacts"><button id="aiBack">条件を変えて相談</button>'
+    + (p.items.length ? '<button class="primary" id="aiApply">'+(added?'上書きして開始':'プログラムに追加して開始')+'</button>' : '') + '</div>';
+  return h;
+}
+function aiBindResult(){
+  $('aiBack').addEventListener('click', function(){ AI.view='form'; renderAi(); });
+  if ($('aiApply')) $('aiApply').addEventListener('click', aiApply);
+}
+function aiApply(){
+  var p = AI.res && AI.res.program; if (!p) return;
+  var btn = $('aiApply'); btn.disabled = true; btn.textContent = '追加しています…';
+  KT.call('aiApplyProgram', p).then(function(r){
+    toast('#'+r.tag+' を追加しました');
+    aiStart(r.tag);
+  }).catch(function(e){ btn.disabled = false; btn.textContent = 'プログラムに追加して開始'; toast(e.message||'追加に失敗しました', true); });
+}
+function aiStart(tag){
+  closeAi();
+  KT.call('getInitData').then(function(view){
+    pendingView = null; APP.data = view;
+    APP.grp = ''; saveGrp(); APP.tags = []; saveTags();
+    renderSummary(); toggleTag(tag);
+  });
+}
+function aiDelete(tag){
+  if (!confirm('#'+tag+' を削除しますか？（記録は消えません）')) return;
+  KT.call('aiDeleteProgram', tag).then(function(){
+    return KT.call('getInitData').then(function(view){
+      APP.data = view; APP.tags = APP.tags.filter(function(t){ return t!==tag; }); saveTags();
+      renderList(); renderAi(); toast('#'+tag+' を削除しました');
+    });
+  }).catch(function(e){ toast(e.message||'削除に失敗しました', true); });
+}
+$('aiOpen').addEventListener('click', openAi);
+$('aiClose').addEventListener('click', closeAi);
+$('aiModal').addEventListener('click', function(e){ if (e.target===$('aiModal') && !AI.busy) closeAi(); });
 setInterval(function(){ if (pendingView && !panelBusy()) applyView(pendingView); }, 2000);
 document.addEventListener('focusout', function(){ setTimeout(function(){ if (pendingView && !panelBusy()) applyView(pendingView); }, 300); });
 
