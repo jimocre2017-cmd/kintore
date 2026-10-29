@@ -398,12 +398,17 @@ function geminiKey_() {
   return k;
 }
 
-/** 使うモデル：GEMINI_MODEL が設定されていればそれ。無ければ一覧から Flash 系を自動選択して記憶 */
+// 自動選択で優先するモデル（上から順に、使えるものを選ぶ）。
+// 2026-10 時点：gemini-3.7 / 3.8-flash は Apps Script からの generateContent が応答しないことを確認したため外している
+var AI_MODEL_PREFS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
+
+/** 使うモデル：GEMINI_MODEL が設定されていればそれ。無ければ AI_MODEL_PREFS → Flash 系の順で自動選択して記憶 */
 function aiModel_(exclude) {
   var pr = PropertiesService.getScriptProperties();
   var fixed = pr.getProperty('GEMINI_MODEL');
   if (fixed) return { name: fixed.replace(/^models\//, ''), auto: false };
-  var cached = pr.getProperty('GEMINI_MODEL_AUTO');
+  if (pr.getProperty('GEMINI_MODEL_AUTO')) pr.deleteProperty('GEMINI_MODEL_AUTO'); // 旧版の記憶を破棄
+  var cached = pr.getProperty('GEMINI_MODEL_PICK');
   if (cached && cached !== exclude) return { name: cached, auto: true };
 
   var res = UrlFetchApp.fetch(GEMINI_BASE + 'models?pageSize=1000', { headers: { 'x-goog-api-key': geminiKey_() }, muteHttpExceptions: true });
@@ -411,19 +416,22 @@ function aiModel_(exclude) {
   var models = (JSON.parse(res.getContentText()).models || []).filter(function (m) {
     var n = String(m.name || '');
     return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0 && /gemini/i.test(n) &&
-      !/image|tts|audio|live|embed|robot|computer|learnlm|gemma/i.test(n) && n.replace(/^models\//, '') !== exclude;
+      !/image|tts|audio|live|embed|robot|computer|learnlm|gemma|transcribe|omni/i.test(n) && n.replace(/^models\//, '') !== exclude;
   });
-  var score = function (m) {
-    var n = String(m.name).replace(/^models\//, '');
-    var v = (n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1];
-    var flash = /flash/i.test(n) && !/lite/i.test(n) ? 2 : /flash/i.test(n) ? 1 : 0;
-    var stable = /preview|exp|latest|\d{2}-\d{2}/i.test(n) ? 0 : 1;
-    return flash * 10000 + stable * 1000 + Number(v) * 10;
-  };
-  models.sort(function (a, b) { return score(b) - score(a); });
-  if (!models.length) throw new Error('使える Gemini モデルが見つかりません（スクリプトプロパティ GEMINI_MODEL にモデル名を設定してください）');
-  var name = String(models[0].name).replace(/^models\//, '');
-  pr.setProperty('GEMINI_MODEL_AUTO', name);
+  var names = models.map(function (m) { return String(m.name).replace(/^models\//, ''); });
+  var name = AI_MODEL_PREFS.filter(function (n) { return names.indexOf(n) >= 0; })[0];
+  if (!name) {
+    var score = function (n) {
+      var v = (n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1];
+      var flash = /flash/i.test(n) && !/lite/i.test(n) ? 2 : /flash/i.test(n) ? 1 : 0;
+      var stable = /preview|exp|latest|\d{2}-\d{2}/i.test(n) ? 0 : 1;
+      return flash * 10000 + stable * 1000 + Number(v) * 10;
+    };
+    names.sort(function (a, b) { return score(b) - score(a); });
+    name = names[0];
+  }
+  if (!name) throw new Error('使える Gemini モデルが見つかりません（スクリプトプロパティ GEMINI_MODEL にモデル名を設定してください）');
+  pr.setProperty('GEMINI_MODEL_PICK', name);
   return { name: name, auto: true };
 }
 
