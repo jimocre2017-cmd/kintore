@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>体つき写真</title>
+<meta name="theme-color" content="#121211">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f4f2; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc;
+  --ink:#141413; --ink-2:#55544f; --ink-3:#8a8983;
+  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb;
+  --good:#1a7f4b; --good-soft:#dff3e8; --danger:#c73a39; --danger-soft:#fbe7e7; --warn:#b26b00;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121211; --surface:#1c1c1a; --surface-2:#262624; --line:#34332f;
+    --ink:#f5f4ef; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+    --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44;
+    --good:#3fb57a; --good-soft:#1c3a2b; --danger:#e66767; --danger-soft:#3a1f1f; --warn:#e0a030;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;font-size:16px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+input,select,textarea{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;white-space:nowrap}
+header .date{color:var(--ink-2);font-size:14px;white-space:nowrap}
+header .sp{margin-left:auto}
+@media (max-width:480px){ header .date{display:none} }
+.navlink{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600;white-space:nowrap}
+.syncchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.syncchip i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
+.syncchip.pend i{background:var(--warn)} .syncchip.off i{background:var(--ink-3)} .syncchip.err i{background:var(--danger)}
+.syncchip.err{color:var(--danger);border-color:var(--danger)}
+
+.wrap{max-width:760px;margin:0 auto;padding:16px;padding-bottom:80px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.card h3{margin:0 0 10px;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.04em}
+.banner{border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.7;background:var(--danger-soft);color:var(--danger)}
+.banner.info{background:var(--accent-soft);color:var(--ink)}
+.loading,.empty{color:var(--ink-3);text-align:center;padding:18px 8px;font-size:14px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat b{display:block;font-size:26px;line-height:1.15}
+.stat b small{font-size:14px;font-weight:600;margin-left:2px}
+.stat span{font-size:12px;color:var(--ink-3)}
+.stat.hot b{color:var(--good)} .stat.cold b{color:var(--danger)}
+
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions .wide{grid-column:1/-1}
+.btn{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700;padding:0 14px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.btn.small{min-height:40px;font-size:14px;padding:0 12px}
+.btn:disabled{opacity:.5}
+
+.rec{border:2px solid var(--good);background:var(--good-soft)}
+.rec .big{font-size:44px;font-weight:800;line-height:1.1}
+.rec .row{display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 12px}
+.rec .row div b{font-size:22px;display:block}
+.rec .row div span{font-size:12px;color:var(--ink-2)}
+.rec .acts{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+.rec .note{font-size:12px;color:var(--ink-2);margin-top:8px;line-height:1.6}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);margin-right:6px;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.2}}
+
+.calhead,.anhead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.calhead b,.anhead b{flex:1;text-align:center;font-size:16px}
+.iconbtn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .dw{font-size:11px;color:var(--ink-3);text-align:center;padding:2px 0}
+.cal .d{aspect-ratio:1;border-radius:8px;border:1px solid transparent;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;color:var(--ink-2);padding:0;line-height:1.1}
+.cal .d small{font-size:9px;color:inherit;opacity:.85}
+.cal .d.blank{background:none;pointer-events:none}
+.cal .d.done{background:var(--good);color:#fff;font-weight:700}
+.cal .d.miss{background:var(--danger-soft);color:var(--danger)}
+.cal .d.future{opacity:.35}
+.cal .d.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--ink-3);margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:48px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:14px}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.kv div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font-size:18px}
+.kv span{font-size:11px;color:var(--ink-3)}
+.bars{display:flex;align-items:flex-end;gap:2px;height:96px;margin-top:6px}
+.bars .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.bars .bar i{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:0}
+.bars .bar.zero i{background:var(--line);height:2px!important}
+.bars-l{display:flex;gap:2px;margin-top:3px}
+.bars-l span{flex:1;text-align:center;font-size:10px;color:var(--ink-3);min-width:0;overflow:hidden;white-space:nowrap}
+
+.hist .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 4px;border:0;border-bottom:1px solid var(--line);background:none}
+.hist .item:last-child{border-bottom:0}
+.hist .ic{font-size:24px;width:32px;text-align:center}
+.hist .m{flex:1;min-width:0}
+.hist .m b{font-size:15px}
+.hist .m div{font-size:12px;color:var(--ink-3);margin-top:2px}
+.hist .r{text-align:right;font-weight:700;font-size:16px;white-space:nowrap}
+.hist .r small{display:block;font-size:11px;font-weight:500;color:var(--ink-3)}
+.tag{display:inline-block;font-size:10px;border-radius:6px;padding:1px 6px;margin-left:6px;background:var(--surface-2);color:var(--ink-2);font-weight:600;vertical-align:1px}
+.tag.pend{background:none;outline:1px dashed var(--warn);color:var(--warn)}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;display:none;align-items:flex-end;justify-content:center}
+.modal.open{display:flex}
+.modal .box{background:var(--surface);width:100%;max-width:560px;max-height:92dvh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+@media (min-width:600px){ .modal{align-items:center} .modal .box{border-radius:18px} }
+.modal h2{margin:0 0 12px;font-size:17px;display:flex;align-items:center;gap:8px}
+.modal h2 .x{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)}
+.f{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.f label{font-size:12px;color:var(--ink-3);font-weight:600}
+.f input,.f select,.f textarea{height:46px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:0 12px;width:100%}
+.f textarea{height:auto;padding:10px 12px;resize:vertical}
+.f .hint{font-size:12px;color:var(--ink-3);line-height:1.6}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.preview{font-size:14px;background:var(--accent-soft);border-radius:10px;padding:8px 12px;margin-bottom:12px}
+.mbtns{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:6px}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.dgrid div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.dgrid b{display:block;font-size:18px}
+.dgrid span{font-size:11px;color:var(--ink-3)}
+.map{width:100%;aspect-ratio:16/9;display:block;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);margin-bottom:12px}
+.mapnote{font-size:11px;color:var(--ink-3);margin:-8px 0 12px}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.mgr .li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.mgr .li .t{flex:1;min-width:0}
+.mgr .li .t small{display:block;color:var(--ink-3);font-size:11px}
+.mgr h4{margin:14px 0 6px;font-size:13px;color:var(--ink-3)}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:1}
+.toast.err{background:var(--danger);color:#fff}
+.setup{max-width:560px;margin:40px auto;padding:0 16px;line-height:1.8}
+
+#fTabs button,#mTabs button{font-size:12px;padding:0 2px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:48px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:14px}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.th{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--surface-2);border:2px solid transparent}
+.th img{width:100%;height:100%;object-fit:cover;display:block}
+.th.sel{border-color:var(--accent)}
+.th .ck{position:absolute;top:4px;right:4px;width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.35);color:#fff;font-weight:700;font-size:14px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center}
+.th.sel .ck{background:var(--accent)}
+.th .ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px}
+.dh{font-size:13px;font-weight:700;margin:14px 0 6px;display:flex;gap:8px;align-items:baseline}
+.dh small{color:var(--ink-3);font-weight:500}
+.slot{border:1px dashed var(--line);border-radius:12px;background:var(--surface-2);aspect-ratio:3/4;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;overflow:hidden;position:relative;font-weight:700;color:var(--ink-2)}
+.slot img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.slot span{position:relative;font-size:13px;background:rgba(0,0,0,.45);color:#fff;border-radius:8px;padding:2px 8px}
+.slot input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.slots{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.cmp2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.cmp2 figure{margin:0}
+.cmp2 img,.view img{width:100%;border-radius:10px;display:block;background:var(--surface-2);aspect-ratio:3/4;object-fit:contain}
+.cmp2 figcaption{font-size:12px;color:var(--ink-2);text-align:center;margin-top:4px}
+.over{position:relative;aspect-ratio:3/4;border-radius:10px;overflow:hidden;background:var(--surface-2);user-select:none}
+.over img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain}
+.over .ln{position:absolute;top:0;bottom:0;width:2px;background:#fff;box-shadow:0 0 4px rgba(0,0,0,.6);pointer-events:none}
+.over .lb{position:absolute;top:6px;font-size:11px;background:rgba(0,0,0,.55);color:#fff;border-radius:6px;padding:1px 6px}
+.rng{width:100%;margin:10px 0 0}
+.tbl{width:100%;border-collapse:collapse;font-size:13px}
+.tbl th{font-weight:600;color:var(--ink-3);font-size:11px;text-align:right;padding:4px}
+.tbl td{text-align:right;padding:7px 4px;border-top:1px solid var(--line)}
+.tbl th:first-child,.tbl td:first-child{text-align:left}
+.ai{line-height:1.8;font-size:14px}
+.ai h4{margin:12px 0 4px;font-size:13px;color:var(--ink-3)}
+.ai ul{margin:0;padding-left:18px}
+.ai .tag{display:inline-block;font-size:10px;border-radius:6px;padding:1px 6px;margin-left:6px;background:var(--surface-2);color:var(--ink-2);font-weight:600}
+.f{display:flex;flex-direction:column;gap:6px;margin-bottom:12px}
+.f label{font-size:12px;color:var(--ink-3);font-weight:600}
+.f input,.f textarea,.f select{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;width:100%}
+.f .hint{font-size:12px;color:var(--ink-3);line-height:1.6}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sel-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
+</style>
+</head>
+<body>
+<header>
+  <h1>体つき写真</h1>
+  <span class="date" id="dateLbl"></span>
+  <span class="sp"></span>
+  <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
+  <a class="navlink" href="body.html">体組成</a>
+  <a class="navlink" href="index.html">← 筋トレ</a>
+</header>
+
+<div class="wrap" id="app">
+  <div id="msg"></div>
+  <section class="actions"><button class="btn primary wide" id="addBtn">＋ 体つきを撮る（前・横・後ろ）</button></section>
+  <section class="card" id="cmpCard"></section>
+  <section class="card" id="galCard"><div class="loading">読み込み中…</div></section>
+</div>
+
+<!-- 撮影・追加 -->
+<div class="modal" id="addModal"><div class="box">
+  <h2><span>体つきを記録</span><button class="x" id="aClose" aria-label="閉じる">✕</button></h2>
+  <div class="fgrid">
+    <div class="f"><label>日付</label><input type="date" id="aDate"></div>
+    <div class="f"><label>時刻</label><input type="time" id="aTime"></div>
+  </div>
+  <div class="f"><label>写真（撮る／選ぶ。1〜3枚。前・横・後ろがそろうと比べやすい）</label>
+    <div class="slots" id="slots"></div>
+    <div class="hint">同じ場所・同じ距離・同じ明るさ・同じ服装で、足先から頭まで入れて撮ると、変化が分かりやすくなります。位置情報などは保存されません。</div>
+  </div>
+  <div class="f"><label>備考</label><textarea id="aMemo" rows="2" maxlength="200" placeholder="例：起床後・空腹・朝の光"></textarea></div>
+  <div class="mbtns"><button class="btn" id="aCancel">キャンセル</button><button class="btn primary" id="aSave">保存</button></div>
+</div></div>
+
+<!-- 1枚を見る -->
+<div class="modal" id="viewModal"><div class="box">
+  <h2><span id="vTitle"></span><button class="x" id="vClose" aria-label="閉じる">✕</button></h2>
+  <div class="view" id="vBody"></div>
+  <div class="rowbtns"><button class="btn small" id="vSel">比較に選ぶ</button><button class="btn small danger" id="vDel">削除</button></div>
+</div></div>
+
+<!-- 比較 -->
+<div class="modal" id="cmpModal"><div class="box">
+  <h2><span id="cTitle">比較</span><button class="x" id="cClose" aria-label="閉じる">✕</button></h2>
+  <div class="tabs" id="cTabs"><button data-m="side" class="on">並べる</button><button data-m="slide">スライダー</button></div>
+  <div id="cBody"></div>
+  <div id="cNums"></div>
+  <div class="rowbtns"><button class="btn small primary" id="cAi">AIに所見を聞く</button></div>
+  <div class="ai" id="cAiOut"></div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="api.js"></script>
+<script src="body-lib.js"></script>
+<script src="photo-lib.js"></script>
+<script>
+var PL = PhotoLib;
+var $ = function (id) { return document.getElementById(id); };
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+var toastT;
+function toast(msg, err){ var t = $('toast'); t.textContent = msg; t.className = 'toast show'+(err?' err':''); clearTimeout(toastT); toastT = setTimeout(function(){ t.className = 'toast'; }, err ? 4500 : 2200); }
+function p2(n){ return ('0'+n).slice(-2); }
+function dowLbl(s){ return '日月火水木金土'.charAt((PL.toDays(s)+4)%7); }
+function mdw(s){ var p = s.split('/'); return (+p[1])+'/'+(+p[2])+'（'+dowLbl(s)+'）'; }
+function toInputDate(s){ return s.replace(/\//g,'-'); }
+function fromInputDate(s){ return s.replace(/-/g,'/'); }
+function sgn(n){ return (n > 0 ? '+' : '') + n; }
+function nowHM(){ var t = new Date(); return p2(t.getHours())+':'+p2(t.getMinutes()); }
+
+var S = { data: null, logs: [], angle: '前', sel: [], shown: 24, loadErr: null, cmp: { a: null, b: null, mode: 'side' }, viewId: '' };
+var IMG = {}; // id → サムネイル（dataURL）
+function photos(){ return S.data ? S.data.photos : []; }
+function byId(id){ var L = photos(); for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i]; return null; }
+
+function render(){
+  if (!S.data) return;
+  $('dateLbl').textContent = S.data.today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(S.data.today)+'）';
+  S.sel = S.sel.filter(function(id){ return byId(id); });
+  var h = '';
+  if (S.loadErr) h += '<div class="banner">'+esc(S.loadErr)+'</div>';
+  if (S.data.offline) h += '<div class="banner info">オフラインです。保存済みの一覧を表示しています（撮影・削除・AI所見はオンラインの時だけできます）。</div>';
+  $('msg').innerHTML = h;
+  renderCmp(); renderGallery();
+}
+
+/* ---- 比較カード ---- */
+function renderCmp(){
+  var all = photos(), L = PL.byAngle(all, S.angle), h = '<h3>見比べる</h3>';
+  if (L.length < 2) { $('cmpCard').innerHTML = h + '<div class="empty" style="padding:10px 0">「'+S.angle+'」の写真が2枚以上たまると、見比べられます。</div>'; return; }
+  var latest = L[0];
+  h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-bottom:8px">最新（'+mdw(latest.date)+'）と、同じ向きの過去の写真を比べます。</div><div class="rowbtns" style="margin-top:0">';
+  [[7,'1週間前'],[30,'1か月前'],[90,'3か月前']].forEach(function(r){
+    var ref = PL.reference(all, latest, r[0]);
+    h += '<button class="btn small" data-ref="'+(ref?ref.id:'')+'"'+(ref?'':' disabled')+'>'+r[1]+(ref?'（'+mdw(ref.date).replace(/（.）/,'')+'）':'')+'</button>';
+  });
+  var fst = PL.first(all, latest);
+  h += '<button class="btn small" data-ref="'+(fst?fst.id:'')+'"'+(fst?'':' disabled')+'>最初（'+(fst?mdw(fst.date).replace(/（.）/,''):'－')+'）</button></div>';
+  h += '<div class="sel-bar" style="margin-top:10px">'+(S.sel.length ? '選んだ写真：'+S.sel.length+'/2' : '下の一覧で2枚を選んで、自由に比べることもできます。')+(S.sel.length===2 ? ' <button class="btn small primary" id="selGo">この2枚を比べる</button>' : '')+(S.sel.length ? ' <button class="btn small" id="selClr">選択を解除</button>' : '')+'</div>';
+  $('cmpCard').innerHTML = h;
+  $('cmpCard').onclick = function(e){
+    var b = e.target.closest('button'); if (!b || b.disabled) return;
+    if (b.hasAttribute('data-ref')) openCmp(b.getAttribute('data-ref'), latest.id);
+    else if (b.id === 'selGo') openCmp(S.sel[0], S.sel[1]);
+    else if (b.id === 'selClr') { S.sel = []; render(); }
+  };
+}
+
+/* ---- 一覧 ---- */
+function renderGallery(){
+  var L = PL.byAngle(photos(), S.angle);
+  var h = '<div class="tabs" id="angTabs">'+PL.ANGLES.map(function(a){ return '<button data-a="'+a+'"'+(a===S.angle?' class="on"':'')+'>'+a+'</button>'; }).join('')+'</div>';
+  if (!L.length) h += '<div class="empty">「'+S.angle+'」の写真はまだありません。「体つきを撮る」から追加してください。</div>';
+  else {
+    var shown = L.slice(0, S.shown), lastKey = '';
+    shown.forEach(function(p, i){
+      var key = p.date+'|'+(p.time||'');
+      if (key !== lastKey) { if (i) h += '</div>'; h += '<div class="dh">'+mdw(p.date)+'<small>'+esc(p.time||'')+(p.memo?' '+esc(p.memo):'')+'</small></div><div class="grid">'; lastKey = key; }
+      var on = S.sel.indexOf(p.id) >= 0;
+      h += '<div class="th'+(on?' sel':'')+'" data-id="'+esc(p.id)+'">'+(IMG[p.id]?'<img src="'+IMG[p.id]+'" alt="">':'<div class="ph">読込中…</div>')+'<button class="ck" data-ck="'+esc(p.id)+'" aria-label="比較に選ぶ">'+(on?'✓':'')+'</button></div>';
+    });
+    h += '</div>';
+    if (L.length > S.shown) h += '<div class="rowbtns"><button class="btn small" id="more">さらに表示（残り'+(L.length - S.shown)+'枚）</button></div>';
+  }
+  $('galCard').innerHTML = h;
+  $('galCard').onclick = function(e){
+    var t = e.target.closest('button'); 
+    if (t && t.hasAttribute('data-a')) { S.angle = t.getAttribute('data-a'); S.shown = 24; render(); return; }
+    if (t && t.id === 'more') { S.shown += 24; render(); return; }
+    if (t && t.hasAttribute('data-ck')) { toggleSel(t.getAttribute('data-ck')); return; }
+    var th = e.target.closest('.th'); if (th) openView(th.getAttribute('data-id'));
+  };
+  loadThumbs(shown_ids());
+}
+function shown_ids(){ return PL.byAngle(photos(), S.angle).slice(0, S.shown).map(function(p){ return p.id; }); }
+function toggleSel(id){
+  var i = S.sel.indexOf(id);
+  if (i >= 0) S.sel.splice(i, 1); else { if (S.sel.length >= 2) S.sel.shift(); S.sel.push(id); }
+  render();
+}
+var loading = false;
+function loadThumbs(ids){
+  var need = ids.filter(function(id){ return !IMG[id]; });
+  if (!need.length || loading) return;
+  loading = true;
+  KT.call('photoImages', need.slice(0, 12), 'thumb').then(function(m){
+    loading = false;
+    var got = 0; Object.keys(m).forEach(function(id){ if (m[id]) { IMG[id] = m[id]; got++; } });
+    // 画面を作り直さず、対応する枠だけ差し替える
+    Object.keys(m).forEach(function(id){
+      if (!m[id]) return;
+      var el = document.querySelector('.th[data-id="'+(window.CSS&&CSS.escape?CSS.escape(id):id)+'"]');
+      if (el) { var ph = el.querySelector('.ph'); if (ph) { var im = document.createElement('img'); im.src = m[id]; im.alt = ''; el.replaceChild(im, ph); } }
+    });
+    if (got) loadThumbs(shown_ids());
+  }, function(){ loading = false; });
+}
+
+/* ---- 追加（撮影） ---- */
+var SLOT = {}; // 向き → { image, thumb }（縮小済みdataURL）
+function slotHtml(a){
+  var s = SLOT[a];
+  return (s?'<img src="'+s.thumb+'" alt="">':'<div style="font-size:26px">＋</div>')+'<span>'+a+'</span><input type="file" accept="image/*" data-a="'+a+'">';
+}
+function renderSlots(){
+  $('slots').innerHTML = PL.ANGLES.map(function(a){ return '<label class="slot" data-a="'+a+'">'+slotHtml(a)+'</label>'; }).join('');
+}
+// 選んだ枠だけ作り直す（ほかの枠の選択を邪魔しない）
+function renderSlot(a){ var el = $('slots').querySelector('.slot[data-a="'+a+'"]'); if (el) el.innerHTML = slotHtml(a); }
+$('slots').addEventListener('change', function(e){
+  var inp = e.target; if (!inp.files || !inp.files[0]) return;
+  var a = inp.getAttribute('data-a'), f = inp.files[0];
+  shrink(f).then(function(r){ SLOT[a] = r; renderSlot(a); }, function(er){ toast(er.message, true); });
+});
+// 画像を縮小して JPEG にし直す（EXIF・位置情報は落ちる）。full＝長辺1280px、thumb＝長辺360px
+function shrink(file){
+  return new Promise(function(res, rej){
+    var url = URL.createObjectURL(file), im = new Image();
+    im.onload = function(){
+      try {
+        function enc(max, q){
+          var sz = PL.fitSize(im.naturalWidth, im.naturalHeight, max), c = document.createElement('canvas');
+          c.width = sz.w; c.height = sz.h;
+          var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, sz.w, sz.h); x.drawImage(im, 0, 0, sz.w, sz.h);
+          return c.toDataURL('image/jpeg', q);
+        }
+        var out = { image: enc(1280, 0.82), thumb: enc(360, 0.7) };
+        URL.revokeObjectURL(url); res(out);
+      } catch (e) { rej(new Error('写真を読み込めませんでした')); }
+    };
+    im.onerror = function(){ URL.revokeObjectURL(url); rej(new Error('写真を読み込めませんでした（JPEG・PNGなどを選んでください）')); };
+    im.src = url;
+  });
+}
+function openAdd(){
+  SLOT = {}; renderSlots();
+  $('aDate').value = toInputDate(S.data.today); $('aDate').max = toInputDate(S.data.today);
+  $('aTime').value = nowHM(); $('aMemo').value = '';
+  $('aSave').disabled = false; $('aSave').textContent = '保存';
+  $('addModal').classList.add('open');
+}
+$('addBtn').onclick = openAdd;
+$('aClose').onclick = $('aCancel').onclick = function(){ $('addModal').classList.remove('open'); };
+$('aSave').onclick = function(){
+  var date = fromInputDate($('aDate').value);
+  if (!date) { toast('日付を入力してください', true); return; }
+  var angles = PL.ANGLES.filter(function(a){ return SLOT[a]; });
+  if (!angles.length) { toast('写真を1枚以上選んでください', true); return; }
+  var setId = KT.uuid(), time = $('aTime').value || '', memo = $('aMemo').value.trim(), btn = $('aSave'), n = 0;
+  btn.disabled = true;
+  var chain = Promise.resolve();
+  angles.forEach(function(a){
+    chain = chain.then(function(){
+      btn.textContent = '送信中… ('+(n+1)+'/'+angles.length+')';
+      var s = SLOT[a], id = KT.uuid();
+      IMG[id] = s.thumb;
+      return KT.call('photoSave', { id: id, setId: setId, date: date, time: time, angle: a, memo: memo, image: s.image, thumb: s.thumb }).then(function(){ n++; });
+    });
+  });
+  chain.then(function(){
+    $('addModal').classList.remove('open'); S.data = LS_get(); S.angle = angles[0]; render(); toast(n+'枚を保存しました');
+  }, function(er){
+    btn.disabled = false; btn.textContent = '保存';
+    S.data = LS_get() || S.data; render();
+    toast((n ? n+'枚は保存済み。' : '')+er.message, true);
+  });
+};
+function LS_get(){ try { return JSON.parse(localStorage.getItem('kt_photo')); } catch (e) { return null; } }
+
+/* ---- 1枚を見る ---- */
+function openView(id){
+  var p = byId(id); if (!p) return;
+  S.viewId = id;
+  $('vTitle').textContent = p.angle+'　'+mdw(p.date)+(p.time?' '+p.time:'');
+  $('vBody').innerHTML = (IMG[id]?'<img src="'+IMG[id]+'" alt="">':'<div class="empty">読込中…</div>')+(p.memo?'<div class="hint" style="font-size:13px;color:var(--ink-2);margin-top:6px">'+esc(p.memo)+'</div>':'');
+  $('vSel').textContent = S.sel.indexOf(id) >= 0 ? '比較の選択を外す' : '比較に選ぶ';
+  $('viewModal').classList.add('open');
+  KT.call('photoImages', [id], 'full').then(function(m){ if (m[id] && S.viewId === id) { var im = $('vBody').querySelector('img'); if (im) im.src = m[id]; else $('vBody').insertAdjacentHTML('afterbegin', '<img src="'+m[id]+'" alt="">'); } });
+}
+$('vClose').onclick = function(){ $('viewModal').classList.remove('open'); S.viewId = ''; };
+$('vSel').onclick = function(){ var id = S.viewId; $('viewModal').classList.remove('open'); S.viewId = ''; toggleSel(id); };
+$('vDel').onclick = function(){
+  var id = S.viewId, p = byId(id); if (!p) return;
+  if (!confirm(p.angle+'　'+mdw(p.date)+' の写真を削除しますか？（ドライブからも削除されます）')) return;
+  KT.call('photoDelete', id).then(function(c){ $('viewModal').classList.remove('open'); S.viewId = ''; if (c) S.data = c; delete IMG[id]; render(); toast('削除しました'); }, function(er){ toast(er.message, true); });
+};
+
+/* ---- 比較 ---- */
+function openCmp(idA, idB){
+  var a = byId(idA), b = byId(idB); if (!a || !b) return;
+  var o = PL.order(a, b);
+  S.cmp = { a: o[0], b: o[1], mode: 'side', full: {} };
+  $('cTitle').textContent = (o[0].angle === o[1].angle ? o[0].angle+'の比較' : '比較')+'（'+PL.daysBetween(o[0].date, o[1].date)+'日間）';
+  Array.prototype.forEach.call($('cTabs').children, function(x){ x.classList.toggle('on', x.getAttribute('data-m') === 'side'); });
+  $('cAiOut').innerHTML = ''; $('cAi').disabled = false;
+  renderCmpBody(); renderNums();
+  $('cmpModal').classList.add('open');
+  KT.call('photoImages', [o[0].id, o[1].id], 'full').then(function(m){ S.cmp.full = m; renderCmpBody(); });
+}
+function src(p){ return (S.cmp.full && S.cmp.full[p.id]) || IMG[p.id] || ''; }
+function renderCmpBody(){
+  var c = S.cmp, a = c.a, b = c.b, h;
+  if (c.mode === 'side') {
+    h = '<div class="cmp2"><figure><img src="'+src(a)+'" alt=""><figcaption>BEFORE '+mdw(a.date)+(a.time?' '+a.time:'')+'</figcaption></figure><figure><img src="'+src(b)+'" alt=""><figcaption>AFTER '+mdw(b.date)+(b.time?' '+b.time:'')+'</figcaption></figure></div>';
+    $('cBody').innerHTML = h;
+  } else {
+    var pos = c.pos == null ? 50 : c.pos;
+    h = '<div class="over" id="over"><img src="'+src(a)+'" alt=""><img id="topImg" src="'+src(b)+'" alt="" style="clip-path:inset(0 0 0 '+pos+'%)"><div class="ln" id="ovLn" style="left:'+pos+'%"></div><span class="lb" style="left:6px">BEFORE '+mdw(a.date).replace(/（.）/,'')+'</span><span class="lb" style="right:6px">AFTER '+mdw(b.date).replace(/（.）/,'')+'</span></div><input class="rng" type="range" min="0" max="100" value="'+pos+'" id="ovRng" aria-label="見比べスライダー">';
+    $('cBody').innerHTML = h;
+    $('ovRng').oninput = function(){ var v = +this.value; S.cmp.pos = v; $('topImg').style.clipPath = 'inset(0 0 0 '+v+'%)'; $('ovLn').style.left = v+'%'; };
+  }
+}
+function renderNums(){
+  var d = PL.bodyDiff(S.logs, S.cmp.a, S.cmp.b);
+  if (!d.length) { $('cNums').innerHTML = '<div class="hint" style="font-size:12px;color:var(--ink-3);margin:8px 0">この日付の体組成の記録はまだありません（体組成画面で記録すると、ここに数値の変化が出ます）。</div>'; return; }
+  var h = '<table class="tbl" style="margin-top:10px"><thead><tr><th>体組成（日平均）</th><th>BEFORE</th><th>AFTER</th><th>差</th></tr></thead><tbody>';
+  d.forEach(function(r){
+    var good = r.key === 'muscle' ? r.diff > 0 : r.diff < 0, col = r.diff === 0 ? 'var(--ink-2)' : (good ? 'var(--good)' : 'var(--danger)');
+    h += '<tr><td>'+r.label+'</td><td class="num">'+r.before+r.unit+'</td><td class="num">'+r.after+r.unit+'</td><td class="num" style="color:'+col+';font-weight:700">'+sgn(r.diff)+r.unit+'</td></tr>';
+  });
+  $('cNums').innerHTML = h + '</tbody></table><div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:4px">写真の日付以前で最も新しい体組成の記録を使っています。</div>';
+}
+$('cTabs').onclick = function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  S.cmp.mode = b.getAttribute('data-m');
+  Array.prototype.forEach.call($('cTabs').children, function(x){ x.classList.toggle('on', x === b); });
+  renderCmpBody();
+};
+$('cClose').onclick = function(){ $('cmpModal').classList.remove('open'); };
+$('cAi').onclick = function(){
+  var btn = $('cAi'); btn.disabled = true; btn.textContent = 'AIが写真を見ています…';
+  $('cAiOut').innerHTML = '';
+  KT.call('photoCompare', S.cmp.a.id, S.cmp.b.id).then(function(r){
+    btn.disabled = false; btn.textContent = 'もう一度AIに聞く';
+    var h = '<h4>まとめ</h4><div>'+esc(r.summary)+'</div>';
+    if (r.changes && r.changes.length) h += '<h4>部位ごとの変化</h4><ul>'+r.changes.map(function(c){ return '<li><b>'+esc(c.area)+'</b>'+(c.clarity?'<span class="tag">'+esc(c.clarity)+'</span>':'')+'<br>'+esc(c.observation)+'</li>'; }).join('')+'</ul>';
+    if (r.numbersNote) h += '<h4>数値との照らし合わせ</h4><div>'+esc(r.numbersNote)+'</div>';
+    if (r.advice && r.advice.length) h += '<h4>これからのアドバイス</h4><ul>'+r.advice.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+    if (r.caveats) h += '<h4>見方の注意</h4><div style="color:var(--ink-3)">'+esc(r.caveats)+'</div>';
+    $('cAiOut').innerHTML = h;
+  }, function(er){ btn.disabled = false; btn.textContent = 'AIに所見を聞く'; toast(er.message, true); });
+};
+
+/* ---- 同期表示・起動 ---- */
+KT.onStatus(function(st){
+  var c = $('syncChip'); if (!c) return;
+  var cls = 'syncchip', txt;
+  if (!st.online) { cls += ' off'; txt = 'オフライン'; }
+  else if (st.error) { cls += ' err'; txt = '同期エラー'; }
+  else { var t = st.syncedAt ? new Date(st.syncedAt) : null; txt = t ? '同期済 '+t.getHours()+':'+p2(t.getMinutes()) : '同期'; }
+  c.className = cls; c.querySelector('span').textContent = txt;
+});
+$('syncChip').addEventListener('click', function(){ KT.call('photoInit').then(function(r){ S.data = r; S.loadErr = null; render(); toast('更新しました'); }, function(e){ toast(e.message, true); }); });
+
+function showSetup(msg){
+  $('app').innerHTML = '<div class="setup card"><h3 style="margin-top:0">アプリ版の設定が必要です</h3>'+(msg?'<p style="color:var(--danger)">'+esc(msg)+'</p>':'')
+    + '<p>先に筋トレ記録の画面で設定を済ませてください。</p><p><a class="navlink" href="index.html">筋トレ記録を開く</a></p></div>';
+}
+// 古い api.js が端末に残っていると「不明な操作：photoInit」になる。保存済みの画面ファイルを消して1回だけ読み込み直す
+function healStaleCache(e){
+  if (!e || !/^不明な操作：photo/.test(e.message)) return false;
+  try { if (sessionStorage.getItem('kt_heal_photo')) return false; sessionStorage.setItem('kt_heal_photo', '1'); } catch (x) { return false; }
+  var done = function(){ location.reload(); };
+  if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(done, done);
+  else done();
+  return true;
+}
+function init(){
+  if (!KT.configured()) { showSetup(); return; }
+  KT.call('photoCached').then(function(r){ if (r) { S.data = r; render(); } }, function(e){ healStaleCache(e); });
+  KT.call('bodyCached').then(function(r){ if (r) { S.logs = r.logs; } }, function(){});
+  KT.call('bodyInit').then(function(r){ S.logs = r.logs; }, function(){});
+  KT.call('photoInit').then(function(r){ S.data = r; S.loadErr = null; render(); }, function(e){
+    if (healStaleCache(e)) return;
+    if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
+    var hint = /^不明な操作：photoGet$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「体つき写真」を実行してください）' : (/^不明な操作/.test(e.message) ? '（アプリの画面ファイルが古いままです。アプリを閉じて開き直してください）' : '');
+    S.loadErr = '読み込みに失敗しました：' + e.message + hint;
+    if (!S.data) S.data = { today: KT.today(), photos: [], angles: PL.ANGLES };
+    render();
+  });
+}
+init();
+</script>
+</body>
+</html>

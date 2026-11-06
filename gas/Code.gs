@@ -751,6 +751,12 @@ function doPost(e) {
       cardioRoute: cardioRoute,
       // 体組成（Body.gs）
       bodyGet: bodyGet,
+      // 体つき写真（Photo.gs）
+      photoGet: photoGet,
+      photoSave: photoSave,
+      photoImages: photoImages,
+      photoDelete: photoDelete,
+      photoCompare: photoCompare,
       // 食事（Meal.gs）
       mealGet: mealGet,
       mealEstimate: mealEstimate,

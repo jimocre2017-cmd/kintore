@@ -357,6 +357,41 @@ var KT = (function () {
     return Promise.resolve(bodyLocal());
   }
 
+
+  /* ---------- 体つき写真：画像はこの端末のIndexedDBに保存（一覧のメタ情報だけlocalStorage） ---------- */
+  var PH = { mem: {}, db: null };
+  function phDb() {
+    if (PH.db) return PH.db;
+    PH.db = new Promise(function (res) {
+      try {
+        var rq = indexedDB.open('kt-photo', 1);
+        rq.onupgradeneeded = function () { rq.result.createObjectStore('img'); };
+        rq.onsuccess = function () { res(rq.result); };
+        rq.onerror = function () { res(null); };
+      } catch (e) { res(null); }
+    });
+    return PH.db;
+  }
+  function phGet(key) {
+    if (PH.mem[key]) return Promise.resolve(PH.mem[key]);
+    return phDb().then(function (db) {
+      if (!db) return null;
+      return new Promise(function (res) {
+        var rq = db.transaction('img').objectStore('img').get(key);
+        rq.onsuccess = function () { if (rq.result) PH.mem[key] = rq.result; res(rq.result || null); };
+        rq.onerror = function () { res(null); };
+      });
+    });
+  }
+  function phPut(key, val) {
+    PH.mem[key] = val;
+    return phDb().then(function (db) { if (db) try { db.transaction('img', 'readwrite').objectStore('img').put(val, key); } catch (e) {} });
+  }
+  function phDel(id) {
+    ['thumb', 'full'].forEach(function (k) { delete PH.mem[k + ':' + id]; });
+    return phDb().then(function (db) { if (db) try { var st = db.transaction('img', 'readwrite').objectStore('img'); st.delete('thumb:' + id); st.delete('full:' + id); } catch (e) {} });
+  }
+
   /* ---------- 食事：端末のデータ＋送信待ちの操作を重ねた表示用データ（ID単位で上書き） ---------- */
   var MEAL_OPS = { mealSave: 1, mealDelete: 1, mealGoal: 1, mealFood: 1, mealFoodDel: 1 };
   function mealApplyOp(v, op, pending) {
@@ -467,6 +502,57 @@ var KT = (function () {
       return bodyEnqueue({ qid: uuid(), type: 'bodyDelete', id: id });
     },
     bodySetGoal: function (goal) { return bodyEnqueue({ qid: uuid(), type: 'bodyGoal', goal: Number(goal) || 0 }); },
+
+
+    /* 体つき写真（前・横・後ろ）：保存・削除・比較はオンラインのみ。一覧は端末にも控える */
+    photoCached: function () { return Promise.resolve(LS.get('kt_photo', null)); },
+    photoInit: function () {
+      if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
+      return api('photoGet', [], 60000).then(function (d) { LS.set('kt_photo', d); return d; }, function (e) {
+        if (e.offline) { var c = LS.get('kt_photo', null) || { today: today(), photos: [], angles: ['前', '横', '後ろ'] }; c = clone(c); c.offline = true; return c; }
+        throw e;
+      });
+    },
+    // p = { id, setId, date, time, angle, memo, image(dataURL), thumb(dataURL) }
+    photoSave: function (p) {
+      p = clone(p); p.id = p.id || uuid();
+      return api('photoSave', [p], 120000).then(function () {
+        var c = LS.get('kt_photo', null) || { today: today(), photos: [], angles: ['前', '横', '後ろ'] };
+        c.photos = c.photos.filter(function (x) { return x.id !== p.id; });
+        c.photos.push({ id: p.id, date: p.date, time: p.time || '', angle: p.angle, memo: p.memo || '', setId: p.setId || '' });
+        LS.set('kt_photo', c);
+        var jobs = [];
+        if (p.thumb) jobs.push(phPut('thumb:' + p.id, p.thumb));
+        if (p.image) jobs.push(phPut('full:' + p.id, p.image));
+        return Promise.all(jobs).then(function () { return p.id; });
+      }, onlineOnly);
+    },
+    photoDelete: function (id) {
+      return api('photoDelete', [id], 60000).then(function () {
+        var c = LS.get('kt_photo', null);
+        if (c) { c.photos = c.photos.filter(function (x) { return x.id !== id; }); LS.set('kt_photo', c); }
+        return phDel(id).then(function () { return c; });
+      }, onlineOnly);
+    },
+    // 画像（dataURL）を { id: dataURL|null } で返す。端末に無いものだけサーバーから取る（10件ずつ）
+    photoImages: function (ids, kind) {
+      kind = kind === 'full' ? 'full' : 'thumb';
+      var out = {};
+      return Promise.all(ids.map(function (id) { return phGet(kind + ':' + id).then(function (v) { if (v) out[id] = v; }); })).then(function () {
+        var miss = ids.filter(function (id) { return !out[id]; });
+        if (!miss.length) return out;
+        var chunks = [], i;
+        for (i = 0; i < miss.length; i += 10) chunks.push(miss.slice(i, i + 10));
+        return chunks.reduce(function (pr, ch) {
+          return pr.then(function () {
+            return api('photoImages', [ch, kind], 120000).then(function (m) {
+              return Promise.all(ch.map(function (id) { if (m[id]) { out[id] = m[id]; return phPut(kind + ':' + id, m[id]); } }));
+            }, function (e) { if (!e.offline) throw e; });
+          });
+        }, Promise.resolve()).then(function () { return out; });
+      });
+    },
+    photoCompare: function (a, b) { return api('photoCompare', [{ a: a, b: b }], 150000).then(function (r) { return r; }, onlineOnly); },
 
     /* 食事 */
     mealCached: function () {
@@ -638,6 +724,7 @@ var KT = (function () {
 
   return {
     call: call,
+    uuid: uuid,
     sync: sync,
     schedule: schedule,
     configured: function () { return !!cfg(); },
