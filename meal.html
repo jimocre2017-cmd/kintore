@@ -190,8 +190,9 @@ header .sp{margin-left:auto}
 .est .li:last-of-type{border-bottom:0}
 .est .conf{font-size:12px;color:var(--ink-2);margin-top:6px}
 .wk{display:flex;align-items:flex-end;gap:6px;height:118px;margin-top:6px;position:relative}
-.wk .c{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.wk .c{border:0;background:none;padding:0;flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
 .wk .c i{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0}
+.wk .c.sel span{color:var(--accent);font-weight:700}
 .wk .c.zero i{background:var(--line);height:2px!important}
 .wk .c span{font-size:10px;color:var(--ink-3);margin-top:3px}
 .wk .gl2{position:absolute;left:0;right:0;border-top:1.5px dashed var(--good);pointer-events:none}
@@ -277,7 +278,7 @@ function render(){
   var d = S.data, dt = d.today.split('/');
   $('dateLbl').textContent = (+dt[0])+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
   if (!S.date) S.date = d.today;
-  renderMsg(); renderDay(); renderList(); renderWeek();
+  renderMsg(); renderDay(); renderAdd(); renderList(); renderWeek();
 }
 function renderMsg(){
   var h = '';
@@ -304,8 +305,12 @@ function renderDay(){
   }
   if (!g.kcal && !g.protein) h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">下の「1日の目標を設定」で目標を入れると、達成率が表示されます。</div>';
   $('dayCard').innerHTML = h;
-  $('dPrev').onclick = function(){ S.date = ML.fromDays(ML.toDays(S.date)-1); renderDay(); renderList(); };
-  $('dNext').onclick = function(){ if (S.date < d.today) { S.date = ML.fromDays(ML.toDays(S.date)+1); renderDay(); renderList(); } };
+  $('dPrev').onclick = function(){ S.date = ML.fromDays(ML.toDays(S.date)-1); renderDay(); renderAdd(); renderList(); };
+  $('dNext').onclick = function(){ if (S.date < d.today) { S.date = ML.fromDays(ML.toDays(S.date)+1); renderDay(); renderAdd(); renderList(); } };
+}
+function renderAdd(){
+  var past = S.date !== S.data.today;
+  $('addBtn').textContent = past ? '＋ '+mdw(S.date)+' の食事を後から追加' : '＋ 食事を記録（AIが栄養を見積もります）';
 }
 function renderList(){
   var L = S.data.logs.filter(function(l){ return l.date === S.date; }).sort(function(a,b){ return (a.time||'99') < (b.time||'99') ? -1 : 1; });
@@ -325,14 +330,16 @@ function renderWeek(){
   h += '<div class="legend" style="margin:0 0 4px"><span>カロリー（点線＝目標）</span></div><div class="wk">';
   days.forEach(function(x){
     var hh = Math.round(x.kcal / mx * 100);  // px（棒の最大の高さ100px）
-    h += '<div class="c'+(x.meals?'':' zero')+'" title="'+mdw(x.date)+' '+x.kcal+'kcal"><i style="height:'+hh+'px"></i><span>'+(+x.date.split('/')[2])+'</span></div>';
+    h += '<button class="c'+(x.meals?'':' zero')+(x.date===S.date?' sel':'')+'" data-d="'+x.date+'" title="'+mdw(x.date)+' '+x.kcal+'kcal"><i style="height:'+hh+'px"></i><span>'+(+x.date.split('/')[2])+(x.meals?'':'<b style="color:var(--warn)">未</b>')+'</span></button>';
   });
   if (g.kcal) h += '<div class="gl2" style="bottom:'+(15+Math.round(g.kcal/mx*100))+'px"></div>';
   h += '</div>';
   var sp = ML.energySplit(av);
   h += '<div class="kv" style="margin-top:12px"><div><b class="num">'+av.kcal+'</b><span>平均kcal/日</span></div><div><b class="num">'+av.protein+'</b><span>平均たんぱく質g'+(g.protein?'（目標'+g.protein+'）':'')+'</span></div><div><b class="num">'+av.fat+'</b><span>平均脂質g</span></div></div>';
   h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">記録した日（'+av.days+'日）だけの平均です。'+(sp?'エネルギー比：たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%。':'')+'見積もりは概算なので、細かい差より傾向を見てください。</div>';
+  h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:4px">棒をタップすると、その日の記録を開いて後から追加できます。「未」は記録のない日です。</div>';
   $('weekCard').innerHTML = h;
+  $('weekCard').onclick = function(e){ var b = e.target.closest('.wk .c'); if (b) { S.date = b.getAttribute('data-d'); renderDay(); renderAdd(); renderList(); renderWeek(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 }
 
 /* ---- 入力 ---- */
@@ -341,10 +348,16 @@ function setType(t){
   $('fType').innerHTML = ML.TYPES.map(function(x){ return '<button data-v="'+x+'"'+(x===t?' class="on"':'')+' style="flex:1 0 30%">'+x+'</button>'; }).join('');
 }
 $('fType').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) setType(b.getAttribute('data-v')); });
-function guessType(){ var h = new Date().getHours(); return h < 10 ? '朝食' : h < 15 ? '昼食' : h < 21 ? '夕食' : '間食'; }
+function guessType(date){
+  // 今日はいまの時刻から。過去の日は、まだ記録していない 朝食→昼食→夕食 の順に提案する（後から入れるとき用）
+  if (date === S.data.today) { var h = new Date().getHours(); return h < 10 ? '朝食' : h < 15 ? '昼食' : h < 21 ? '夕食' : '間食'; }
+  var have = {}; S.data.logs.forEach(function(l){ if (l.date === date) have[l.type] = 1; });
+  var t = ['朝食','昼食','夕食'].filter(function(x){ return !have[x]; })[0];
+  return t || '間食';
+}
 function openForm(id){
   var d = S.data, ex = id ? d.logs.filter(function(l){ return l.id === id; })[0] : null;
-  S.form = { id: ex ? ex.id : uid(), edit: !!ex, items: ex ? ex.items : '', note: ex ? ex.note : '', type: ex ? ex.type : guessType(), busy: false };
+  S.form = { id: ex ? ex.id : uid(), edit: !!ex, items: ex ? ex.items : '', note: ex ? ex.note : '', type: ex ? ex.type : guessType(S.date), busy: false };
   $('fTitle').textContent = ex ? '食事を編集' : '食事を記録';
   $('fDate').value = toInputDate(ex ? ex.date : S.date); $('fDate').max = toInputDate(d.today);
   $('fTime').value = ex ? ex.time : (S.date === d.today ? p2(new Date().getHours())+':'+p2(new Date().getMinutes()) : '');
