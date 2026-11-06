@@ -207,6 +207,12 @@ var KT = (function () {
         var fl = failed();
         q.forEach(function (op) { var r = done[op.qid]; if (r && !r.ok) { op.error = r.error; fl.push(op); } });
         LS.set('kt_failed', fl);
+        // 送信できた有酸素の操作は、端末に持っているデータにも反映しておく（送信待ちから消えても表示が消えないように）
+        var cbase = LS.get('kt_cardio', null);
+        if (cbase) {
+          q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && CARDIO_OPS[op.type]) cardioApplyOp(cbase, op, false); });
+          LS.set('kt_cardio', cbase);
+        }
         LS.set('kt_queue', queue().filter(function (op) { return !done[op.qid]; }));
       }
       LS.set('kt_init', init);
@@ -265,8 +271,97 @@ var KT = (function () {
     }, Promise.resolve()).catch(function () {});
   }
 
+  /* ---------- 有酸素：端末のデータ＋送信待ちの操作を重ねた表示用データ ---------- */
+  var CARDIO_OPS = { cardioSave: 1, cardioDelete: 1, cardioPlace: 1, cardioPlaceDel: 1, cardioCourse: 1, cardioCourseDel: 1 };
+  function upsertById(arr, item) {
+    for (var i = 0; i < arr.length; i++) if (arr[i].id === item.id) { arr[i] = item; return; }
+    arr.push(item);
+  }
+  function removeById(arr, id) {
+    for (var i = arr.length - 1; i >= 0; i--) if (arr[i].id === id) arr.splice(i, 1);
+  }
+  // 操作を表示用データに反映（pending=true なら「送信待ち」の印を付ける）
+  function cardioApplyOp(v, op, pending) {
+    if (op.type === 'cardioSave') {
+      var e = clone(op.entry); e.hasRoute = !!e.route; delete e.route;
+      if (pending) e.pending = true;
+      upsertById(v.logs, e);
+    } else if (op.type === 'cardioDelete') removeById(v.logs, op.id);
+    else if (op.type === 'cardioPlace') upsertById(v.places, clone(op.place));
+    else if (op.type === 'cardioPlaceDel') removeById(v.places, op.id);
+    else if (op.type === 'cardioCourse') upsertById(v.courses, clone(op.course));
+    else if (op.type === 'cardioCourseDel') removeById(v.courses, op.id);
+  }
+  function cardioLocal() {
+    var v = clone(LS.get('kt_cardio', null) || { today: today(), logs: [], courses: [], places: [] });
+    v.today = today();
+    queue().forEach(function (op) { if (CARDIO_OPS[op.type]) cardioApplyOp(v, op, true); });
+    v.logs.sort(function (a, b) { return a.date === b.date ? ((a.start || '') < (b.start || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });
+    return v;
+  }
+  // ルートは長いので一覧とは別に、記録IDごとに端末へ保存（最大40件）
+  function routeCache() { return LS.get('kt_croutes', {}); }
+  function routePut(id, route) {
+    var c = routeCache(); c[id] = route;
+    var keys = Object.keys(c);
+    if (keys.length > 40) keys.slice(0, keys.length - 40).forEach(function (k) { delete c[k]; });
+    LS.set('kt_croutes', c);
+  }
+  function cardioEnqueue(op) {
+    var q = queue(); q.push(op); setQueue(q); schedule(300);
+    return Promise.resolve(cardioLocal());
+  }
+
   /* ---------- 画面から呼ぶ関数（GAS版の google.script.run と同じ名前） ---------- */
   var handlers = {
+    /* 有酸素：端末にあるデータをすぐ返す（無ければ null） */
+    cardioCached: function () {
+      return Promise.resolve(LS.get('kt_cardio', null) || queue().some(function (o) { return CARDIO_OPS[o.type]; }) ? cardioLocal() : null);
+    },
+    /* 有酸素：サーバーの最新を取り直す（先に送信待ちを送る）。オフラインなら端末のデータ */
+    cardioInit: function () {
+      if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
+      if (navigator.onLine === false) return Promise.resolve(cardioLocal());
+      var pre = queue().length ? sync().catch(function () {}) : Promise.resolve();
+      return pre.then(function () { return api('cardioGet', [], 60000); }).then(function (d) {
+        LS.set('kt_cardio', d); LS.set('kt_cardio_at', Date.now());
+        return cardioLocal();
+      }, function (e) {
+        if (e.offline) return cardioLocal();
+        throw e;
+      });
+    },
+    cardioSave: function (entry) {
+      entry = clone(entry); entry.id = entry.id || uuid();
+      if (entry.route) routePut(entry.id, entry.route);
+      return cardioEnqueue({ qid: uuid(), type: 'cardioSave', entry: entry }).then(function (v) { v.savedId = entry.id; return v; });
+    },
+    cardioDelete: function (id) {
+      var q = queue().filter(function (op) { return !(op.type === 'cardioSave' && op.entry.id === id); });
+      // まだ送っていない新規記録なら、取り消すだけでよい（サーバーには何も無い）
+      var wasPendingOnly = q.length !== queue().length && !(LS.get('kt_cardio', null) || { logs: [] }).logs.some(function (l) { return l.id === id; });
+      if (wasPendingOnly) { setQueue(q); return Promise.resolve(cardioLocal()); }
+      setQueue(q);
+      return cardioEnqueue({ qid: uuid(), type: 'cardioDelete', id: id });
+    },
+    cardioRoute: function (id) {
+      var q = queue(), i;
+      for (i = q.length - 1; i >= 0; i--) if (q[i].type === 'cardioSave' && q[i].entry.id === id) return Promise.resolve(q[i].entry.route || '');
+      var c = routeCache();
+      if (c[id] !== undefined) return Promise.resolve(c[id]);
+      return api('cardioRoute', [id], 60000).then(function (r) { routePut(id, r || ''); return r || ''; });
+    },
+    cardioSavePlace: function (place) {
+      place = clone(place); place.id = place.id || uuid();
+      return cardioEnqueue({ qid: uuid(), type: 'cardioPlace', place: place });
+    },
+    cardioDeletePlace: function (id) { return cardioEnqueue({ qid: uuid(), type: 'cardioPlaceDel', id: id }); },
+    cardioSaveCourse: function (course) {
+      course = clone(course); course.id = course.id || uuid();
+      return cardioEnqueue({ qid: uuid(), type: 'cardioCourse', course: course });
+    },
+    cardioDeleteCourse: function (id) { return cardioEnqueue({ qid: uuid(), type: 'cardioCourseDel', id: id }); },
+
     getInitData: function () {
       var cached = LS.get('kt_init', null);
       if (cached) {
