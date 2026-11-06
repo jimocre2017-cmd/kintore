@@ -446,16 +446,19 @@ function aiModel_(exclude) {
   return { name: name, auto: true };
 }
 
-function gemini_(system, user, schema) {
+// images（任意）：[{ mime, data(base64) }]。写真を見て答えさせるときに、文章の前に付ける
+function gemini_(system, user, schema, images) {
   var key = geminiKey_();
   var model = aiModel_();
   var useSchema = true;
   for (var attempt = 0; attempt < 3; attempt++) {
     var gen = { responseMimeType: 'application/json' };
     if (useSchema && schema) gen.responseSchema = schema;
+    var parts = (images || []).map(function (im) { return { inlineData: { mimeType: im.mime, data: im.data } }; });
+    parts.push({ text: user + (useSchema ? '' : '\n\n出力は次の JSON スキーマに従う JSON のみ：' + JSON.stringify(schema)) });
     var body = {
       systemInstruction: { parts: [{ text: system }] },
-      contents: [{ role: 'user', parts: [{ text: user + (useSchema ? '' : '\n\n出力は次の JSON スキーマに従う JSON のみ：' + JSON.stringify(schema)) }] }],
+      contents: [{ role: 'user', parts: parts }],
       generationConfig: gen
     };
     var res = UrlFetchApp.fetch(GEMINI_BASE + 'models/' + encodeURIComponent(model.name) + ':generateContent', {
