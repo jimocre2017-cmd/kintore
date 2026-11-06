@@ -66,6 +66,56 @@ var BodyLib = (function () {
     });
   }
 
-  return { compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
+
+  // ---- 1日に複数回の測定 → 日ごとの平均 ----
+  // 測定のタイミング・条件（サーバーの BTAGS と同じ）
+  var TAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
+  var AVG_FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  // 測定を新しい順（日付→時刻→ID）に並べる。時刻なしはその日の最初扱い
+  function sortEntries(entries) {
+    return entries.slice().sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+      var ta = a.time || '', tb = b.time || '';
+      if (ta !== tb) return ta < tb ? 1 : -1;
+      return String(a.id || '') < String(b.id || '') ? 1 : -1;
+    });
+  }
+  // 日ごとの平均（項目ごとに、値がある測定だけで平均）。新しい日が先頭。
+  // 戻り値の1件：{date, weight..visceral(平均), height(その日で最後の値), memo, count, first, last, range:{field:[min,max]}, pending}
+  function daily(entries, tag) {
+    var byDate = {}, order = [];
+    sortEntries(entries).forEach(function (e) {
+      if (tag && (e.tags || []).indexOf(tag) < 0) return;
+      if (!byDate[e.date]) { byDate[e.date] = []; order.push(e.date); }
+      byDate[e.date].push(e);
+    });
+    return order.map(function (date) {
+      var list = byDate[date].slice().reverse(); // その日の古い順
+      var out = { date: date, count: list.length, height: null, memo: '', range: {}, pending: false };
+      AVG_FIELDS.forEach(function (f) {
+        var vals = list.map(function (e) { return e[f]; }).filter(function (x) { return x != null; });
+        if (!vals.length) { out[f] = null; return; }
+        var sum = vals.reduce(function (a, b) { return a + b; }, 0);
+        out[f] = f === 'bmr' ? Math.round(sum / vals.length) : r1(sum / vals.length);
+        out.range[f] = [Math.min.apply(null, vals), Math.max.apply(null, vals)];
+      });
+      var memos = [];
+      list.forEach(function (e) {
+        if (e.height != null) out.height = e.height;
+        if (e.memo) memos.push(e.memo);
+        if (e.pending) out.pending = true;
+      });
+      out.memo = memos.join(' / ');
+      return out;
+    });
+  }
+  // 同じ日の測定のうち、最初と最後の差（朝→夜の変化）。2回未満なら null
+  function intraday(entries, date, field) {
+    var vals = entries.filter(function (e) { return e.date === date && e[field] != null; }).sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : ((a.time || '') > (b.time || '') ? 1 : 0); });
+    if (vals.length < 2) return null;
+    return { first: vals[0][field], last: vals[vals.length - 1][field], diff: r1(vals[vals.length - 1][field] - vals[0][field]) };
+  }
+
+  return { TAGS: TAGS, daily: daily, sortEntries: sortEntries, intraday: intraday, compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = BodyLib;
