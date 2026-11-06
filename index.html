@@ -889,6 +889,7 @@ function plus(){
   call('recordSet', payload).then(function(r){
     if ((APP.memo[ex.id]||'') === sentMemo) APP.memo[ex.id] = '';
     applyResult(r);
+    Timer.chime();
     toast(ex.name+' '+(r.sets.length)+'セット目を記録');
   }).catch(function(e){
     toast('記録できませんでした：'+e.message, true);
@@ -1075,6 +1076,18 @@ var Timer = {
       g.gain.setValueAtTime(0.0001,c.currentTime); g.gain.exponentialRampToValueAtTime(0.35,c.currentTime+0.02); g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+len);
       o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+len+0.05);
     } catch(e){}
+  },
+  // セットを記録できたときの短い2音（ピロン）。休憩終了のブザー（beep）とは別の音
+  chime: function(){
+    try {
+      var c=this.ctx; if (!c) return;
+      [[660,0],[990,0.11]].forEach(function(n){
+        var t=c.currentTime+n[1], o=c.createOscillator(), g=c.createGain(); o.frequency.value=n[0]; o.type='sine';
+        g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+        o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.2);
+      });
+    } catch(e){}
+    if (navigator.vibrate) navigator.vibrate(40);
   },
   beep: function(){
     try {
