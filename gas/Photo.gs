@@ -166,9 +166,30 @@ function photoCompare(req) {
   var logs = [];
   try { logs = bodyGet().logs; } catch (e) {}
   function snap(o) {
-    var b = photoBodyAt_(logs, o.date);
-    return { date: o.date, angle: o.angle, memo: o.memo || null, body: b ? { measuredOn: b.date, weightKg: b.weight, fatPercent: b.fat, musclePercent: b.muscle, visceral: b.visceral } : null };
+    var b = photoBodyAt_(logs, o.date), body = null;
+    if (b) {
+      body = { measuredOn: b.date, weightKg: b.weight, fatPercent: b.fat, musclePercent: b.muscle, visceral: b.visceral, bmi: b.bmi, bmr: b.bmr, measurementsThatDay: b.count };
+      if (b.weight !== null && b.fat !== null) { body.leanMassKg = r1_(b.weight * (1 - b.fat / 100)); body.fatMassKg = r1_(b.weight * b.fat / 100); }
+    }
+    return { date: o.date, angle: o.angle, memo: o.memo || null, body: body };
   }
+  var sb = snap(A), sa = snap(B), change = null;
+  if (sb.body && sa.body) {
+    change = {};
+    ['weightKg', 'fatPercent', 'musclePercent', 'visceral', 'leanMassKg', 'fatMassKg'].forEach(function (k) {
+      if (sb.body[k] != null && sa.body[k] != null) change[k] = r1_(sa.body[k] - sb.body[k]);
+    });
+  }
+  // 2枚の間の体組成の推移（日平均、最大30点）と有酸素の実績
+  var from = sb.body ? sb.body.measuredOn : A.date; // before の体組成を測った日から
+  var trend = logs.filter(function (l) { return l.date >= from && l.date <= B.date; }).reverse().map(function (l) { return { date: l.date, weightKg: l.weight, fatPercent: l.fat, musclePercent: l.muscle }; });
+  if (trend.length > 30) { var st = trend.length / 30; trend = Array.apply(null, Array(30)).map(function (_, i) { return trend[Math.min(trend.length - 1, Math.round(i * st))]; }); }
+  var cardio = null;
+  try {
+    var km = 0, n = 0;
+    cardioGet().logs.forEach(function (l) { if (l.date >= A.date && l.date <= B.date && l.km) { km += l.km; n++; } });
+    cardio = { sessions: n, totalKm: r1_(km) };
+  } catch (e) {}
   var days = toDays_(B.date) - toDays_(A.date);
   var images = [ra, rb].map(function (r) {
     var blob = DriveApp.getFileById(String(r[4])).getBlob();
@@ -179,24 +200,28 @@ function photoCompare(req) {
     '1枚目が before（古い日付）、2枚目が after（新しい日付）の体つきの写真です。同じ向き（前・横・後ろ）の比較が前提です。',
     '写真から見て取れる変化だけを、部位ごとに述べます（例：ウエストまわり、お腹、肩・背中のライン、腕、胸、お尻・脚、姿勢）。見えないものは推測しません。',
     '写真の光・角度・ポーズ・服装・パンプ・姿勢の違いで見え方が変わるので、小さな差は断定せず、「変化が見える」「変化は分かりにくい」とはっきり区別します。',
-    '体重・体脂肪率などの数値は before.body・after.body に計算済みで入っています。引用するだけで、再計算や、写真からの体重・体脂肪率の推測はしません。写真の印象と数値の動きが合っているかも一言添えます。',
+    '判断は「実際の計測データ」と「写真の見た目」を合わせた総合判断にします。計測データ（before.body・after.body、bodyChange、bodyTrend、cardio。体重・体脂肪率・骨格筋率・除脂肪体重・脂肪量・内臓脂肪）は計算済みなので、そのまま引用し、再計算しません。',
+    'まず計測データの動き（脂肪が減ったか、筋肉・除脂肪体重が保てているか）を土台にし、写真でその変化が見た目（ウエスト・背中・肩・腕・姿勢など）に出ているかを確かめます。数値と写真が一致するなら自信を持って伝え、食い違うとき（数値は動いたが写真は変化が小さい、またはその逆）は、測定のタイミング・水分・光・ポーズの違いなど考えられる理由を挙げて、どちらをどの程度信じるかを説明します。',
+    '写真を見て新しい体重や体脂肪率の数値を作ることはしません（数値は計測データだけを使う）。見た目の印象は述べてかまいません。計測データが無い・少ないときは、写真だけの判断で精度が下がることを明記します。',
+    'overall には、総合判断（verdict）と、その根拠（数値と写真のどちらから何が言えたか）を入れます。',
     '体型を評価・批判する言い方、他人との比較、食事制限を煽る表現はしません。医学的な診断はせず、痛みなどが続く場合は専門家への相談を勧めます。',
     'advice には、次の1〜2か月のための実践的な提案（トレーニング、有酸素、たんぱく質、姿勢ケア、写真の撮り方の改善など）を2〜4個入れます。'
   ].join('\n');
   var user = JSON.stringify({
-    daysBetween: days, before: snap(A), after: snap(B),
+    daysBetween: days, before: sb, after: sa, bodyChange: change, bodyTrend: trend, cardio: cardio,
     note: '同じ向きの2枚かどうか（angle）を確認し、違う向きなら比較の精度が下がることを最初に伝える'
   });
   var schema = {
     type: 'OBJECT',
     properties: {
+      overall: { type: 'OBJECT', properties: { verdict: { type: 'STRING', enum: ['脂肪が減り筋肉も保てている', '減量は進んでいるが筋肉も減った可能性', '変化は小さい', '体重・脂肪が増えている', '判断材料が不足'] }, rationale: { type: 'STRING' }, confidence: { type: 'STRING', enum: ['高い', '中くらい', '低い'] } }, required: ['verdict', 'rationale', 'confidence'] },
       summary: { type: 'STRING' },
       changes: { type: 'ARRAY', items: { type: 'OBJECT', properties: { area: { type: 'STRING' }, observation: { type: 'STRING' }, clarity: { type: 'STRING', enum: ['はっきり', 'わずか', '分かりにくい'] } }, required: ['area', 'observation', 'clarity'] } },
       numbersNote: { type: 'STRING' },
       advice: { type: 'ARRAY', items: { type: 'STRING' } },
       caveats: { type: 'STRING' }
     },
-    required: ['summary', 'changes', 'advice', 'caveats']
+    required: ['overall', 'summary', 'changes', 'advice', 'caveats']
   };
   var out = gemini_(system, user, schema, images);
   out.before = A; out.after = B; out.daysBetween = days;

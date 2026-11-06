@@ -484,7 +484,9 @@ $('cAi').onclick = function(){
   $('cAiOut').innerHTML = '';
   KT.call('photoCompare', S.cmp.a.id, S.cmp.b.id).then(function(r){
     btn.disabled = false; btn.textContent = 'もう一度AIに聞く';
-    var h = '<h4>まとめ</h4><div>'+esc(r.summary)+'</div>';
+    var h = '';
+    if (r.overall) h += '<h4>総合判断（計測データ＋写真）</h4><div><b>'+esc(r.overall.verdict)+'</b>'+(r.overall.confidence?'<span class="tag">確度 '+esc(r.overall.confidence)+'</span>':'')+'<br>'+esc(r.overall.rationale)+'</div>';
+    h += '<h4>まとめ</h4><div>'+esc(r.summary)+'</div>';
     if (r.changes && r.changes.length) h += '<h4>部位ごとの変化</h4><ul>'+r.changes.map(function(c){ return '<li><b>'+esc(c.area)+'</b>'+(c.clarity?'<span class="tag">'+esc(c.clarity)+'</span>':'')+'<br>'+esc(c.observation)+'</li>'; }).join('')+'</ul>';
     if (r.numbersNote) h += '<h4>数値との照らし合わせ</h4><div>'+esc(r.numbersNote)+'</div>';
     if (r.advice && r.advice.length) h += '<h4>これからのアドバイス</h4><ul>'+r.advice.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
