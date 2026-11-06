@@ -469,6 +469,7 @@ function gemini_(system, user, schema) {
     }
     if (code === 404 && model.auto) { model = aiModel_(model.name); continue; } // 自動選択したモデルが廃止された
     if (code === 400 && useSchema) { useSchema = false; continue; }              // スキーマ指定に非対応のモデル
+    if ((code === 503 || code === 500) && attempt < 2) { Utilities.sleep(2000 * (attempt + 1)); continue; } // 一時的な混雑：少し待って再試行
     throw new Error(aiHttpError_(res));
   }
   throw new Error('Gemini の呼び出しに失敗しました');
