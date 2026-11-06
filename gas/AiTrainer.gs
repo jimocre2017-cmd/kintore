@@ -211,7 +211,8 @@ function aiContext_() {
       thisMonth: { from: monthStart, trainingDays: Object.keys(monthDays).length, byGroup: month },
       last8Weeks: { weekStarts: weeks, trainingDays: Object.keys(trainDays).length, weeklySetsByGroup: weekly },
       exercises: exList,
-      recentMemos: memos
+      recentMemos: memos,
+      cardio: aiCardio_(today) // ウォーキング・ランニングの要約（無ければ null）
     }
   };
 }
@@ -237,6 +238,7 @@ function aiSystemPrompt_() {
     '- 漸進性過負荷：前回の記録（lastSets）を基準に、重さ→回数→セット数の順で少しずつ上げる。ダンベル片手20kgの上限に届いた種目は、回数を増やす（〜20回以上）、下ろす動作を3秒かける、片側ずつ行う、休憩を短くする等で負荷を上げる。',
     '- 1回あたりの時間に収まるように組む（1セット約1分＋休憩で概算し、ウォームアップも含める）。',
     '- recentMemos に痛み・違和感の記述があれば、その部位は負荷を下げるか避け、無理をしない内容にする。痛みが続く場合は医療機関への相談を勧める。診断はしない。',
+    '- cardio（ウォーキング・ランニング）がある場合は、疲労や回復への影響（脚の日の前後に長いランニングが重なっていないか等）と、継続や空き日数を summary・advice で短く触れる。cardio が null なら触れない。',
     '- データに無いことを推測で断定しない。記録が少ない場合はそう書く。',
     '- 数値は記録データから正確に引用する。',
     '- 日本語で、簡潔に。専門用語には短い説明を添える。',

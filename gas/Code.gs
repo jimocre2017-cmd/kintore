@@ -703,6 +703,13 @@ function syncOps(ops) {
       else if (op.type === 'cancel') cancelRecord(op.id);
       else if (op.type === 'memo') updateMemo(op.id, op.memo);
       else if (op.type === 'interval') saveInterval(op.secs);
+      // 有酸素（Cardio.gs）
+      else if (op.type === 'cardioSave') cardioSave(op.entry);
+      else if (op.type === 'cardioDelete') cardioDelete(op.id);
+      else if (op.type === 'cardioPlace') cardioSavePlace(op.place);
+      else if (op.type === 'cardioPlaceDel') cardioDeletePlace(op.id);
+      else if (op.type === 'cardioCourse') cardioSaveCourse(op.course);
+      else if (op.type === 'cardioCourseDel') cardioDeleteCourse(op.id);
       else throw new Error('不明な操作：' + op.type);
       results.push({ qid: op.qid, ok: true });
     } catch (err) {
@@ -729,6 +736,9 @@ function doPost(e) {
       updateExerciseLinks: updateExerciseLinks,
       updateExerciseFields: updateExerciseFields,
       updateExerciseTags: updateExerciseTags,
+      // 有酸素（Cardio.gs）
+      cardioGet: cardioGet,
+      cardioRoute: cardioRoute,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,

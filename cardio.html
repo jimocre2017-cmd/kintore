@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>有酸素記録</title>
+<meta name="theme-color" content="#121211">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+:root{
+  --bg:#f4f4f2; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc;
+  --ink:#141413; --ink-2:#55544f; --ink-3:#8a8983;
+  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb;
+  --good:#1a7f4b; --good-soft:#dff3e8; --danger:#c73a39; --danger-soft:#fbe7e7; --warn:#b26b00;
+  --radius:14px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121211; --surface:#1c1c1a; --surface-2:#262624; --line:#34332f;
+    --ink:#f5f4ef; --ink-2:#c3c2b7; --ink-3:#8f8e86;
+    --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44;
+    --good:#3fb57a; --good-soft:#1c3a2b; --danger:#e66767; --danger-soft:#3a1f1f; --warn:#e0a030;
+  }
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:"Hiragino Sans","Noto Sans JP","Yu Gothic UI",system-ui,sans-serif;font-size:16px}
+button{font:inherit;color:inherit;cursor:pointer;touch-action:manipulation}
+input,select,textarea{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+
+header{position:sticky;top:0;z-index:5;background:var(--surface);border-bottom:1px solid var(--line);padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+header h1{font-size:18px;margin:0;white-space:nowrap}
+header .date{color:var(--ink-2);font-size:14px;white-space:nowrap}
+header .sp{margin-left:auto}
+@media (max-width:480px){ header .date{display:none} }
+.navlink{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;background:var(--accent);color:var(--accent-ink);text-decoration:none;font-weight:600;white-space:nowrap}
+.syncchip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600;white-space:nowrap}
+.syncchip i{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block}
+.syncchip.pend i{background:var(--warn)} .syncchip.off i{background:var(--ink-3)} .syncchip.err i{background:var(--danger)}
+.syncchip.err{color:var(--danger);border-color:var(--danger)}
+
+.wrap{max-width:760px;margin:0 auto;padding:16px;padding-bottom:80px;display:flex;flex-direction:column;gap:14px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
+.card h3{margin:0 0 10px;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.04em}
+.banner{border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.7;background:var(--danger-soft);color:var(--danger)}
+.banner.info{background:var(--accent-soft);color:var(--ink)}
+.loading,.empty{color:var(--ink-3);text-align:center;padding:18px 8px;font-size:14px}
+
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px}
+.stat b{display:block;font-size:26px;line-height:1.15}
+.stat b small{font-size:14px;font-weight:600;margin-left:2px}
+.stat span{font-size:12px;color:var(--ink-3)}
+.stat.hot b{color:var(--good)} .stat.cold b{color:var(--danger)}
+
+.actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.actions .wide{grid-column:1/-1}
+.btn{min-height:52px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-weight:700;padding:0 14px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:var(--danger-soft);border-color:var(--danger);color:var(--danger)}
+.btn.small{min-height:40px;font-size:14px;padding:0 12px}
+.btn:disabled{opacity:.5}
+
+.rec{border:2px solid var(--good);background:var(--good-soft)}
+.rec .big{font-size:44px;font-weight:800;line-height:1.1}
+.rec .row{display:flex;gap:18px;flex-wrap:wrap;margin:8px 0 12px}
+.rec .row div b{font-size:22px;display:block}
+.rec .row div span{font-size:12px;color:var(--ink-2)}
+.rec .acts{display:grid;grid-template-columns:2fr 1fr;gap:10px}
+.rec .note{font-size:12px;color:var(--ink-2);margin-top:8px;line-height:1.6}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--danger);margin-right:6px;animation:blink 1.2s infinite}
+@keyframes blink{50%{opacity:.2}}
+
+.calhead,.anhead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.calhead b,.anhead b{flex:1;text-align:center;font-size:16px}
+.iconbtn{width:40px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal .dw{font-size:11px;color:var(--ink-3);text-align:center;padding:2px 0}
+.cal .d{aspect-ratio:1;border-radius:8px;border:1px solid transparent;background:var(--surface-2);display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:13px;color:var(--ink-2);padding:0;line-height:1.1}
+.cal .d small{font-size:9px;color:inherit;opacity:.85}
+.cal .d.blank{background:none;pointer-events:none}
+.cal .d.done{background:var(--good);color:#fff;font-weight:700}
+.cal .d.miss{background:var(--danger-soft);color:var(--danger)}
+.cal .d.future{opacity:.35}
+.cal .d.today{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.legend{display:flex;gap:12px;font-size:11px;color:var(--ink-3);margin-top:8px;flex-wrap:wrap}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+
+.tabs{display:flex;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+.tabs button{flex:1;min-width:48px;height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:600;font-size:14px}
+.tabs button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:10px 0}
+.kv div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.kv b{display:block;font-size:18px}
+.kv span{font-size:11px;color:var(--ink-3)}
+.bars{display:flex;align-items:flex-end;gap:2px;height:96px;margin-top:6px}
+.bars .bar{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;min-width:0}
+.bars .bar i{display:block;width:100%;background:var(--accent);border-radius:3px 3px 0 0;min-height:0}
+.bars .bar.zero i{background:var(--line);height:2px!important}
+.bars-l{display:flex;gap:2px;margin-top:3px}
+.bars-l span{flex:1;text-align:center;font-size:10px;color:var(--ink-3);min-width:0;overflow:hidden;white-space:nowrap}
+
+.hist .item{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px 4px;border:0;border-bottom:1px solid var(--line);background:none}
+.hist .item:last-child{border-bottom:0}
+.hist .ic{font-size:24px;width:32px;text-align:center}
+.hist .m{flex:1;min-width:0}
+.hist .m b{font-size:15px}
+.hist .m div{font-size:12px;color:var(--ink-3);margin-top:2px}
+.hist .r{text-align:right;font-weight:700;font-size:16px;white-space:nowrap}
+.hist .r small{display:block;font-size:11px;font-weight:500;color:var(--ink-3)}
+.tag{display:inline-block;font-size:10px;border-radius:6px;padding:1px 6px;margin-left:6px;background:var(--surface-2);color:var(--ink-2);font-weight:600;vertical-align:1px}
+.tag.pend{background:none;outline:1px dashed var(--warn);color:var(--warn)}
+
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:30;display:none;align-items:flex-end;justify-content:center}
+.modal.open{display:flex}
+.modal .box{background:var(--surface);width:100%;max-width:560px;max-height:92dvh;overflow-y:auto;border-radius:18px 18px 0 0;padding:16px;padding-bottom:calc(16px + env(safe-area-inset-bottom))}
+@media (min-width:600px){ .modal{align-items:center} .modal .box{border-radius:18px} }
+.modal h2{margin:0 0 12px;font-size:17px;display:flex;align-items:center;gap:8px}
+.modal h2 .x{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)}
+.f{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.f label{font-size:12px;color:var(--ink-3);font-weight:600}
+.f input,.f select,.f textarea{height:46px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);padding:0 12px;width:100%}
+.f textarea{height:auto;padding:10px 12px;resize:vertical}
+.f .hint{font-size:12px;color:var(--ink-3);line-height:1.6}
+.f2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.f3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.seg{display:flex;gap:8px}
+.seg button{flex:1;height:46px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);font-weight:700}
+.seg button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.preview{font-size:14px;background:var(--accent-soft);border-radius:10px;padding:8px 12px;margin-bottom:12px}
+.mbtns{display:grid;grid-template-columns:1fr 2fr;gap:10px;margin-top:6px}
+.dgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.dgrid div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
+.dgrid b{display:block;font-size:18px}
+.dgrid span{font-size:11px;color:var(--ink-3)}
+.map{width:100%;aspect-ratio:16/9;display:block;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);margin-bottom:12px}
+.mapnote{font-size:11px;color:var(--ink-3);margin:-8px 0 12px}
+.rowbtns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.mgr .li{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--line);font-size:14px}
+.mgr .li .t{flex:1;min-width:0}
+.mgr .li .t small{display:block;color:var(--ink-3);font-size:11px}
+.mgr h4{margin:14px 0 6px;font-size:13px;color:var(--ink-3)}
+.toast{position:fixed;left:50%;top:70px;transform:translateX(-50%);z-index:40;background:var(--ink);color:var(--bg);padding:12px 18px;border-radius:12px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90vw}
+.toast.show{opacity:1}
+.toast.err{background:var(--danger);color:#fff}
+.setup{max-width:560px;margin:40px auto;padding:0 16px;line-height:1.8}
+</style>
+</head>
+<body>
+<header>
+  <h1>有酸素記録</h1>
+  <span class="date" id="dateLbl"></span>
+  <span class="sp"></span>
+  <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
+  <a class="navlink" href="index.html">← 筋トレ</a>
+</header>
+
+<div class="wrap" id="app">
+  <div id="msg"></div>
+  <section class="stats" id="stats"></section>
+  <section class="actions" id="actions">
+    <button class="btn primary" id="gpsWalk">🚶 歩く（GPS記録）</button>
+    <button class="btn primary" id="gpsRun">🏃 走る（GPS記録）</button>
+    <button class="btn wide" id="manBtn">＋ 手動で追加（持ち歩けなかった時など）</button>
+  </section>
+  <section class="card rec" id="rec" style="display:none"></section>
+  <section class="card" id="calCard"><div class="loading">読み込み中…</div></section>
+  <section class="card" id="anCard"></section>
+  <section class="card hist" id="histCard"></section>
+  <section class="card"><button class="btn" style="width:100%" id="mgrBtn">地点・コースの管理</button></section>
+</div>
+
+<!-- 追加・編集 -->
+<div class="modal" id="formModal"><div class="box">
+  <h2><span id="fTitle">手動で追加</span><button class="x" id="fClose" aria-label="閉じる">✕</button></h2>
+  <div class="f"><label>日付</label><input type="date" id="fDate"></div>
+  <div class="f"><label>種類</label><div class="seg" id="fType"><button data-v="ウォーキング">🚶 ウォーキング</button><button data-v="ランニング">🏃 ランニング</button></div></div>
+  <div class="f3">
+    <div class="f"><label>開始</label><input type="time" id="fStart"></div>
+    <div class="f"><label>終了</label><input type="time" id="fEnd"></div>
+    <div class="f"><label>所要（分）</label><input type="number" id="fMins" inputmode="numeric" min="0" max="1440" step="1"></div>
+  </div>
+  <div class="f"><label>距離（km）</label><input type="number" id="fKm" inputmode="decimal" min="0" max="500" step="0.01" placeholder="分かれば入力"></div>
+  <div class="f"><label>ルート</label>
+    <select id="fRoute"></select>
+    <div class="hint" id="fRouteHint"></div>
+  </div>
+  <div class="f2" id="fPlaces" style="display:none">
+    <div class="f"><label>出発地</label><select id="fFrom"></select></div>
+    <div class="f"><label>到着地</label><select id="fTo"></select></div>
+  </div>
+  <div class="f" id="fCourseBox" style="display:none"><label>コース</label><select id="fCourse"></select></div>
+  <div class="preview num" id="fPreview"></div>
+  <div class="f"><label>備考</label><textarea id="fMemo" rows="2" maxlength="500"></textarea></div>
+  <div class="mbtns"><button class="btn" id="fCancel">キャンセル</button><button class="btn primary" id="fSave">保存</button></div>
+</div></div>
+
+<!-- 詳細 -->
+<div class="modal" id="detModal"><div class="box">
+  <h2><span id="dTitle"></span><button class="x" id="dClose" aria-label="閉じる">✕</button></h2>
+  <div id="dBody"></div>
+</div></div>
+
+<!-- 地点・コース -->
+<div class="modal" id="mgrModal"><div class="box mgr">
+  <h2><span>地点・コースの管理</span><button class="x" id="mClose" aria-label="閉じる">✕</button></h2>
+  <h4>地点（出発地・到着地として選べます）</h4>
+  <div id="mPlaces"></div>
+  <div class="rowbtns"><button class="btn small" id="mHere">📍 いまいる場所を地点に登録</button></div>
+  <h4>コース（GPSで記録したルートを登録すると、手動入力で選べます）</h4>
+  <div id="mCourses"></div>
+  <div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">コースは、記録の詳細画面の「このルートをコースに登録」から追加します。</div>
+</div></div>
+
+<div class="toast" id="toast"></div>
+
+<script src="api.js"></script>
+<script src="cardio-lib.js"></script>
+<script>
+var CL = CardioLib;
+var $ = function (id) { return document.getElementById(id); };
+function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+var tTimer = null;
+function toast(msg, err){
+  var t = $('toast'); t.textContent = msg; t.className = 'toast show' + (err ? ' err' : '');
+  clearTimeout(tTimer); tTimer = setTimeout(function(){ t.className = 'toast' + (err ? ' err' : ''); }, 2600);
+}
+function p2(n){ return ('0'+n).slice(-2); }
+function ymdOf(d){ return d.getFullYear()+'/'+p2(d.getMonth()+1)+'/'+p2(d.getDate()); }
+function hmOf(d){ return p2(d.getHours())+':'+p2(d.getMinutes()); }
+function dowLbl(s){ return '日月火水木金土'.charAt(CL.dow(s)); }
+function mdw(s){ var p = s.split('/'); return (+p[1])+'/'+(+p[2])+'（'+dowLbl(s)+'）'; }
+function toInputDate(s){ return s.replace(/\//g,'-'); }
+function fromInputDate(s){ return s.replace(/-/g,'/'); }
+function fmtKm(n){ n = Number(n)||0; return (Math.round(n*100)/100).toLocaleString('ja-JP'); }
+function typeIcon(t){ return t === 'ランニング' ? '🏃' : '🚶'; }
+
+var S = { data: null, cal: null, an: { type: 'day', anchor: null }, histN: 30, form: null, rec: null, detail: null, loadErr: null };
+
+/* ============================ 画面の描画 ============================ */
+function render(){
+  if (!S.data) return;
+  var d = S.data;
+  var dt = d.today.split('/');
+  $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
+  if (!S.cal) S.cal = { y: +dt[0], m: +dt[1] };
+  if (!S.an.anchor) S.an.anchor = d.today;
+  renderMsg(); renderStats(); renderCal(); renderAn(); renderHist();
+}
+function renderMsg(){
+  var h = '';
+  if (S.loadErr) h += '<div class="banner">'+esc(S.loadErr)+'</div>';
+  var fl = KT.failed().filter(function(o){ return /^cardio/.test(o.type); });
+  if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
+  $('msg').innerHTML = h;
+}
+function renderStats(){
+  var d = S.data, si = CL.streakInfo(d.logs, d.today), dt = d.today.split('/');
+  var mr = CL.periodRange('month', d.today), ag = CL.aggregate(d.logs, mr.from, mr.to);
+  var gapTxt, gapSub, gapCls = '';
+  if (si.last === null) { gapTxt = '—'; gapSub = 'まだ記録がありません'; }
+  else if (si.doneToday) { gapTxt = '今日済み'; gapSub = '最後の記録：今日'; gapCls = 'hot'; }
+  else { gapTxt = si.gap + '<small>日</small>'; gapSub = '最後の記録：' + mdw(si.last) + (si.gap >= 3 ? ' ／ そろそろ動きましょう' : ''); gapCls = si.gap >= 3 ? 'cold' : ''; }
+  $('stats').innerHTML =
+    '<div class="stat '+(si.streak>0?'hot':'')+'"><b class="num">'+si.streak+'<small>日</small></b><span>継続日数（最長 '+si.best+'日）</span></div>'
+  + '<div class="stat '+gapCls+'"><b class="num">'+gapTxt+'</b><span>'+esc(si.doneToday ? '空き日数 0' : '空き日数 ／ '+gapSub)+'</span></div>'
+  + '<div class="stat"><b class="num">'+fmtKm(ag.km)+'<small>km</small></b><span>'+(+dt[1])+'月の距離（'+ag.count+'回・'+ag.days+'日）</span></div>'
+  + '<div class="stat"><b class="num">'+(ag.avg==null?'—':ag.avg+'<small>km/h</small>')+'</b><span>'+(+dt[1])+'月の平均時速</span></div>';
+}
+
+/* ---- カレンダー ---- */
+function renderCal(){
+  var d = S.data, y = S.cal.y, m = S.cal.m;
+  var mm = CL.monthMap(d.logs, y, m), first = y+'/'+p2(m)+'/01', n = CL.daysInMonth(y, m);
+  var firstLog = null; d.logs.forEach(function(l){ if (!firstLog || l.date < firstLog) firstLog = l.date; });
+  var h = '<div class="calhead"><button class="iconbtn" id="calPrev" aria-label="前の月">◀</button><b>'+y+'年'+m+'月</b><button class="iconbtn" id="calNext" aria-label="次の月">▶</button></div><div class="cal">';
+  '月火水木金土日'.split('').forEach(function(w){ h += '<div class="dw">'+w+'</div>'; });
+  var off = (CL.dow(first)+6)%7, i;
+  for (i = 0; i < off; i++) h += '<div class="d blank"></div>';
+  for (i = 1; i <= n; i++) {
+    var ds = y+'/'+p2(m)+'/'+p2(i), r = mm[ds], cls = 'd';
+    if (ds > d.today) cls += ' future';
+    else if (r) cls += ' done';
+    else if (firstLog && ds > firstLog) cls += ' miss';
+    if (ds === d.today) cls += ' today';
+    h += '<button class="'+cls+'" data-d="'+ds+'">'+i+(r ? '<small>'+fmtKm(r.km)+'</small>' : '')+'</button>';
+  }
+  h += '</div><div class="legend"><span><i style="background:var(--good)"></i>記録あり</span><span><i style="background:var(--danger-soft);border:1px solid var(--danger)"></i>空いた日</span><span>日付をタップ：記録を開く／記録がない日は追加</span></div>';
+  $('calCard').innerHTML = h;
+  $('calPrev').onclick = function(){ S.cal.m--; if (S.cal.m < 1) { S.cal.m = 12; S.cal.y--; } renderCal(); };
+  $('calNext').onclick = function(){ S.cal.m++; if (S.cal.m > 12) { S.cal.m = 1; S.cal.y++; } renderCal(); };
+  Array.prototype.forEach.call($('calCard').querySelectorAll('.d[data-d]'), function(b){
+    b.onclick = function(){
+      var ds = b.getAttribute('data-d');
+      if (ds > S.data.today) return;
+      var day = S.data.logs.filter(function(l){ return l.date === ds; });
+      if (day.length) openDetail(day[0].id); else openForm({ date: ds });
+    };
+  });
+}
+
+/* ---- 分析（日・週・月・四半期・年） ---- */
+var AN_TABS = [['day','日'],['week','週'],['month','月'],['quarter','四半期'],['year','年']];
+function shiftAnchor(type, anchor, n){
+  var p = anchor.split('/'), y = +p[0], m = +p[1];
+  if (type === 'day') return CL.addDays(anchor, n);
+  if (type === 'week') return CL.addDays(anchor, 7*n);
+  var months = type === 'month' ? n : type === 'quarter' ? 3*n : 12*n;
+  var idx = y*12 + (m-1) + months;
+  return Math.floor(idx/12)+'/'+p2(idx%12+1)+'/01';
+}
+function anLabel(type, anchor, r){
+  var p = anchor.split('/'), y = +p[0], m = +p[1];
+  if (type === 'day') return y+'年'+mdw(anchor);
+  if (type === 'week') return mdw(r.from).replace(/（.*/,'')+' 〜 '+mdw(r.to).replace(/（.*/,'');
+  if (type === 'month') return y+'年'+m+'月';
+  if (type === 'quarter') return y+'年 第'+(Math.floor((m-1)/3)+1)+'四半期';
+  return y+'年';
+}
+function anBuckets(type, r, logs){
+  var out = [], i;
+  if (type === 'week') {
+    for (i = 0; i < 7; i++) { var ds = CL.addDays(r.from, i); out.push({ l: '月火水木金土日'.charAt(i), km: CL.aggregate(logs, ds, ds).km }); }
+  } else if (type === 'month') {
+    var p = r.from.split('/'), n = CL.daysInMonth(+p[0], +p[1]);
+    for (i = 1; i <= n; i++) { var dd = p[0]+'/'+p[1]+'/'+p2(i); out.push({ l: (i===1||i%5===0)?String(i):'', km: CL.aggregate(logs, dd, dd).km }); }
+  } else if (type === 'quarter' || type === 'year') {
+    var q = r.from.split('/'), cnt = type === 'year' ? 12 : 3, m0 = +q[1];
+    for (i = 0; i < cnt; i++) {
+      var mr = CL.periodRange('month', q[0]+'/'+p2(m0+i)+'/01');
+      out.push({ l: (m0+i)+'月', km: CL.aggregate(logs, mr.from, mr.to).km });
+    }
+  }
+  return out;
+}
+function renderAn(){
+  var d = S.data, type = S.an.type, r = CL.periodRange(type, S.an.anchor), ag = CL.aggregate(d.logs, r.from, r.to);
+  var h = '<h3>集計</h3><div class="tabs">';
+  AN_TABS.forEach(function(t){ h += '<button data-t="'+t[0]+'" class="'+(t[0]===type?'on':'')+'">'+t[1]+'</button>'; });
+  h += '</div><div class="anhead"><button class="iconbtn" id="anPrev" aria-label="前">◀</button><b>'+esc(anLabel(type, S.an.anchor, r))+'</b><button class="iconbtn" id="anNext" aria-label="次">▶</button></div>';
+  h += '<div class="kv num"><div><b>'+fmtKm(ag.km)+' km</b><span>距離</span></div><div><b>'+ag.count+' 回</b><span>回数（'+ag.days+'日）</span></div><div><b>'+(ag.avg==null?'—':ag.avg+' km/h')+'</b><span>平均時速</span></div>'
+    + '<div><b>'+CL.fmtDur(ag.mins)+'</b><span>合計時間</span></div><div><b>🚶 '+fmtKm(ag.walk.km)+' km</b><span>ウォーキング '+ag.walk.count+'回</span></div><div><b>🏃 '+fmtKm(ag.run.km)+' km</b><span>ランニング '+ag.run.count+'回</span></div></div>';
+  var bs = anBuckets(type, r, d.logs);
+  if (bs.length) {
+    var mx = bs.reduce(function(a,b){ return Math.max(a,b.km); }, 0) || 1;
+    h += '<div class="bars">' + bs.map(function(b){ return '<div class="bar'+(b.km>0?'':' zero')+'" title="'+fmtKm(b.km)+' km"><i style="height:'+Math.round(b.km/mx*100)+'%"></i></div>'; }).join('') + '</div>'
+      + '<div class="bars-l">' + bs.map(function(b){ return '<span>'+esc(b.l)+'</span>'; }).join('') + '</div>';
+  }
+  $('anCard').innerHTML = h;
+  Array.prototype.forEach.call($('anCard').querySelectorAll('.tabs button'), function(b){
+    b.onclick = function(){ S.an.type = b.getAttribute('data-t'); S.an.anchor = S.data.today; renderAn(); };
+  });
+  $('anPrev').onclick = function(){ S.an.anchor = shiftAnchor(type, S.an.anchor, -1); renderAn(); };
+  $('anNext').onclick = function(){ S.an.anchor = shiftAnchor(type, S.an.anchor, 1); renderAn(); };
+}
+
+/* ---- 履歴 ---- */
+function renderHist(){
+  var logs = S.data.logs, h = '<h3>履歴</h3>';
+  if (!logs.length) h += '<div class="empty">まだ記録がありません。上のボタンから最初の1回を記録しましょう。</div>';
+  logs.slice(0, S.histN).forEach(function(l){
+    var sub = [];
+    if (l.start) sub.push(l.start + (l.end ? '〜'+l.end : ''));
+    if (l.from || l.to) sub.push((l.from||'?')+' → '+(l.to||'?'));
+    h += '<button class="item" data-id="'+esc(l.id)+'"><span class="ic">'+typeIcon(l.type)+'</span><span class="m"><b>'+esc(mdw(l.date))+'</b>'
+      + (l.source==='GPS'?'<span class="tag">GPS</span>':'') + (l.hasRoute?'<span class="tag">🗺</span>':'') + (l.pending?'<span class="tag pend">送信待ち</span>':'')
+      + '<div>'+esc(sub.join(' ／ ') || l.type)+'</div></span>'
+      + '<span class="r num">'+(l.km>0?fmtKm(l.km)+' km':'—')+'<small>'+(l.mins>0?CL.fmtDur(l.mins):'')+(l.avg!=null?' ・'+l.avg+'km/h':'')+'</small></span></button>';
+  });
+  if (logs.length > S.histN) h += '<button class="btn small" style="width:100%;margin-top:8px" id="histMore">もっと見る（残り'+(logs.length-S.histN)+'件）</button>';
+  $('histCard').innerHTML = h;
+  Array.prototype.forEach.call($('histCard').querySelectorAll('.item'), function(b){ b.onclick = function(){ openDetail(b.getAttribute('data-id')); }; });
+  if ($('histMore')) $('histMore').onclick = function(){ S.histN += 30; renderHist(); };
+}
+
+/* ============================ 地図（SVG＋OpenStreetMapタイル） ============================ */
+// ルートは常に線で描く。背景の地図タイルはオンラインの時だけ表示される（オフラインでも線は見える）
+function mapSvg(pts, dashed){
+  if (!pts.length) return '';
+  var W = 640, H = 360, i;
+  function proj(z, lat, lng){
+    var s = 256*Math.pow(2, z), sin = Math.sin(lat*Math.PI/180);
+    return [(lng+180)/360*s, (0.5 - Math.log((1+sin)/(1-sin))/(4*Math.PI))*s];
+  }
+  var minLa = 90, maxLa = -90, minLo = 180, maxLo = -180;
+  pts.forEach(function(p){ minLa = Math.min(minLa,p[0]); maxLa = Math.max(maxLa,p[0]); minLo = Math.min(minLo,p[1]); maxLo = Math.max(maxLo,p[1]); });
+  var z = 17, a, b;
+  for (; z >= 2; z--) {
+    a = proj(z, minLa, minLo); b = proj(z, maxLa, maxLo);
+    if (Math.abs(b[0]-a[0]) <= W*0.72 && Math.abs(a[1]-b[1]) <= H*0.72) break;
+  }
+  a = proj(z, minLa, minLo); b = proj(z, maxLa, maxLo);
+  var cx = (a[0]+b[0])/2, cy = (a[1]+b[1])/2, vx = cx-W/2, vy = cy-H/2, n = Math.pow(2, z);
+  var s = '<svg class="map" viewBox="'+vx.toFixed(1)+' '+vy.toFixed(1)+' '+W+' '+H+'" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ルート">';
+  for (var tx = Math.floor(vx/256); tx <= Math.floor((vx+W)/256); tx++) {
+    for (var ty = Math.floor(vy/256); ty <= Math.floor((vy+H)/256); ty++) {
+      if (ty < 0 || ty >= n) continue;
+      s += '<image href="https://tile.openstreetmap.org/'+z+'/'+(((tx%n)+n)%n)+'/'+ty+'.png" x="'+(tx*256)+'" y="'+(ty*256)+'" width="256" height="256"/>';
+    }
+  }
+  var xy = pts.map(function(p){ var q = proj(z, p[0], p[1]); return q[0].toFixed(1)+','+q[1].toFixed(1); }).join(' ');
+  if (pts.length > 1) {
+    s += '<polyline points="'+xy+'" fill="none" stroke="#fff" stroke-width="8" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke" opacity=".9"/>';
+    s += '<polyline points="'+xy+'" fill="none" stroke="#2a78d6" stroke-width="4" stroke-linejoin="round" stroke-linecap="round" vector-effect="non-scaling-stroke"'+(dashed?' stroke-dasharray="8 8"':'')+'/>';
+  }
+  var f = proj(z, pts[0][0], pts[0][1]), l = proj(z, pts[pts.length-1][0], pts[pts.length-1][1]);
+  s += '<circle cx="'+f[0].toFixed(1)+'" cy="'+f[1].toFixed(1)+'" r="8" fill="#1a7f4b" stroke="#fff" stroke-width="3"/>';
+  if (pts.length > 1) s += '<circle cx="'+l[0].toFixed(1)+'" cy="'+l[1].toFixed(1)+'" r="8" fill="#c73a39" stroke="#fff" stroke-width="3"/>';
+  s += '<text x="'+(vx+W-6)+'" y="'+(vy+H-6)+'" text-anchor="end" font-size="11" fill="#444" stroke="#fff" stroke-width="3" paint-order="stroke">© OpenStreetMap contributors</text></svg>';
+  return s;
+}
+
+/* ============================ 詳細 ============================ */
+function logById(id){ return (S.data.logs.filter(function(l){ return l.id === id; })[0]) || null; }
+function openDetail(id){
+  var l = logById(id); if (!l) return;
+  S.detail = id;
+  $('dTitle').textContent = typeIcon(l.type)+' '+mdw(l.date)+' '+l.type;
+  var h = '<div class="dgrid num"><div><b>'+(l.km>0?fmtKm(l.km)+' km':'—')+'</b><span>距離</span></div>'
+    + '<div><b>'+(l.mins>0?CL.fmtDur(l.mins):'—')+'</b><span>'+esc(l.start ? l.start+(l.end?'〜'+l.end:'') : '所要時間')+'</span></div>'
+    + '<div><b>'+(l.avg!=null?l.avg+' km/h':'—')+'</b><span>平均時速</span></div></div>';
+  if (l.from || l.to) h += '<p style="margin:0 0 12px">📍 '+esc(l.from||'?')+' → '+esc(l.to||'?')+'</p>';
+  h += '<div id="dMap">'+(l.hasRoute ? '<div class="loading">ルートを読み込み中…</div>' : '')+'</div>';
+  if (l.memo) h += '<p style="white-space:pre-wrap;margin:0 0 12px">'+esc(l.memo)+'</p>';
+  h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">記録元：'+esc(l.source)+(l.hasRoute ? '／ルート：'+esc(l.routeKind) : '')+(l.pending ? '／送信待ち' : '')+'</div>';
+  h += '<div class="rowbtns"><button class="btn small" id="dEdit">編集</button><button class="btn small danger" id="dDel">削除</button>'
+    + '<span id="dRouteBtns"></span></div>';
+  $('dBody').innerHTML = h;
+  $('detModal').classList.add('open');
+  $('dEdit').onclick = function(){ closeDetail(); openForm({ log: l }); };
+  $('dDel').onclick = function(){
+    if (!confirm(mdw(l.date)+' の記録を削除しますか？')) return;
+    KT.call('cardioDelete', l.id).then(function(v){ S.data = v; closeDetail(); render(); toast('削除しました'); }, function(e){ toast(e.message, true); });
+  };
+  if (l.hasRoute) {
+    KT.call('cardioRoute', l.id).then(function(route){
+      if (S.detail !== id) return;
+      var pts = CL.decodePolyline(route);
+      $('dMap').innerHTML = pts.length ? mapSvg(pts, l.routeKind === '推定') + '<div class="mapnote">'+(l.routeKind==='推定'?'推定ルート（点線）':'GPSで記録したルート')+'　緑＝出発　赤＝到着</div>' : '';
+      var bt = '';
+      if (pts.length > 1) bt += '<button class="btn small" id="dCourse">このルートをコースに登録</button>';
+      if (pts.length > 1 && l.routeKind === '実測') bt += '<button class="btn small" id="dPlA">出発点を地点に登録</button><button class="btn small" id="dPlB">到着点を地点に登録</button>';
+      $('dRouteBtns').innerHTML = bt;
+      if ($('dCourse')) $('dCourse').onclick = function(){ registerCourse(l, route, pts); };
+      if ($('dPlA')) $('dPlA').onclick = function(){ registerPlace(pts[0], l.from); };
+      if ($('dPlB')) $('dPlB').onclick = function(){ registerPlace(pts[pts.length-1], l.to); };
+    }, function(e){
+      if (S.detail !== id) return;
+      $('dMap').innerHTML = '<div class="empty">'+(e.offline ? 'オフラインのためルートを表示できません（オンラインの時に開くと表示されます）' : esc(e.message))+'</div>';
+    });
+  }
+}
+function closeDetail(){ S.detail = null; $('detModal').classList.remove('open'); }
+$('dClose').onclick = closeDetail;
+$('detModal').addEventListener('click', function(e){ if (e.target === $('detModal')) closeDetail(); });
+
+function registerCourse(l, route, pts){
+  var name = prompt('コース名を入力してください（例：川沿い3km）', l.to && l.from ? l.from+'〜'+l.to : '');
+  if (!name || !name.trim()) return;
+  KT.call('cardioSaveCourse', { name: name.trim().slice(0,30), km: l.km || CL.routeKm(pts), from: l.from || '', to: l.to || '', route: route })
+    .then(function(v){ S.data = v; render(); toast('コースに登録しました'); }, function(e){ toast(e.message, true); });
+}
+function registerPlace(pt, hint){
+  var name = prompt('この地点の名前を入力してください（例：自宅）', hint || '');
+  if (!name || !name.trim()) return;
+  KT.call('cardioSavePlace', { name: name.trim().slice(0,30), lat: pt[0], lng: pt[1] })
+    .then(function(v){ S.data = v; render(); toast('地点を登録しました'); }, function(e){ toast(e.message, true); });
+}
+
+/* ============================ 追加・編集フォーム ============================ */
+/* S.form: { id, source, type, routeMode:'none'|'course'|'places'|'keep', keepRoute, keepKind, keepFrom, keepTo, keepCourse, createdFromGps } */
+function openForm(o){
+  var l = o.log || null, d = S.data, g = o.gps || null;
+  var f = S.form = { id: l ? l.id : null, source: l ? l.source : (g ? 'GPS' : '手動'), type: l ? l.type : (g ? g.type : 'ウォーキング'), routeMode: 'none', keepRoute: '', keepKind: 'なし', keepFrom: '', keepTo: '', keepCourse: '', loading: false };
+  $('fTitle').textContent = l ? '記録を編集' : (g ? 'GPS記録を保存' : '手動で追加');
+  $('fDate').value = toInputDate(l ? l.date : (g ? g.date : (o.date || d.today)));
+  $('fDate').max = toInputDate(d.today);
+  $('fStart').value = l ? l.start : (g ? g.start : '');
+  $('fEnd').value = l ? l.end : (g ? g.end : '');
+  $('fMins').value = l ? (l.mins || '') : (g ? g.mins : '');
+  $('fKm').value = l ? (l.km || '') : (g ? g.km : '');
+  $('fMemo').value = l ? l.memo : '';
+  if (g) { f.routeMode = g.route ? 'keep' : 'none'; f.keepRoute = g.route || ''; f.keepKind = g.route ? '実測' : 'なし'; }
+  if (l && l.hasRoute) {
+    if (l.routeKind === '実測') { f.routeMode = 'keep'; f.keepKind = '実測'; f.keepFrom = l.from; f.keepTo = l.to; f.keepCourse = l.courseId; f.loading = true;
+      KT.call('cardioRoute', l.id).then(function(r){ if (S.form === f) { f.keepRoute = r; f.loading = false; fillRouteUi(); } }, function(){ if (S.form === f) { f.loading = false; f.routeMode = 'none'; fillRouteUi(); } });
+    } else if (l.courseId && d.courses.some(function(c){ return c.id === l.courseId; })) f.routeMode = 'course';
+    else if (l.from && l.to) f.routeMode = 'places';
+  }
+  fillRouteUi(l);
+  setFormType(f.type);
+  updatePreview();
+  $('formModal').classList.add('open');
+}
+function placeOpts(sel){
+  return '<option value="">選択してください</option>' + S.data.places.map(function(p){ return '<option value="'+esc(p.id)+'"'+(p.id===sel?' selected':'')+'>'+esc(p.name)+'</option>'; }).join('');
+}
+function fillRouteUi(l){
+  var f = S.form, d = S.data, opts = [['none','ルートなし（距離と時間だけ）']];
+  if (f.routeMode === 'keep') opts.unshift(['keep','GPSで記録したルートを残す']);
+  opts.push(['course','登録済みのコースから選ぶ'], ['places','出発地と到着地を選ぶ（直線で表示）']);
+  $('fRoute').innerHTML = opts.map(function(o){ return '<option value="'+o[0]+'"'+(o[0]===f.routeMode?' selected':'')+'>'+o[1]+'</option>'; }).join('');
+  var c = l && l.courseId ? l.courseId : '';
+  $('fCourse').innerHTML = '<option value="">選択してください</option>' + d.courses.map(function(x){ return '<option value="'+esc(x.id)+'"'+(x.id===c?' selected':'')+'>'+esc(x.name)+(x.km?'（'+fmtKm(x.km)+'km）':'')+'</option>'; }).join('');
+  var fromId = '', toId = '';
+  if (l && l.from) d.places.forEach(function(p){ if (p.name === l.from) fromId = p.id; if (p.name === l.to) toId = p.id; });
+  $('fFrom').innerHTML = placeOpts(fromId); $('fTo').innerHTML = placeOpts(toId);
+  syncRouteUi();
+}
+function syncRouteUi(){
+  var f = S.form, m = $('fRoute').value;
+  f.routeMode = m;
+  $('fCourseBox').style.display = m === 'course' ? '' : 'none';
+  $('fPlaces').style.display = m === 'places' ? '' : 'none';
+  var hint = '';
+  if (m === 'keep') hint = f.loading ? 'ルートを読み込み中…' : 'GPSの軌跡をそのまま保存します。';
+  else if (m === 'course') hint = S.data.courses.length ? '距離を空欄にすると、コースの距離が入ります。' : 'コースがまだありません。GPSで記録した詳細画面から登録できます。';
+  else if (m === 'places') hint = S.data.places.length < 2 ? '地点がまだ足りません。「地点・コースの管理」から登録できます。' : '地図には出発地と到着地を結ぶ線（推定）で残ります。';
+  $('fRouteHint').textContent = hint;
+}
+function setFormType(t){
+  S.form.type = t;
+  Array.prototype.forEach.call($('fType').querySelectorAll('button'), function(b){ b.classList.toggle('on', b.getAttribute('data-v') === t); });
+}
+function curMins(){
+  var m = Math.round(Number($('fMins').value) || 0);
+  return m || CL.minsBetween($('fStart').value, $('fEnd').value);
+}
+function curKm(){
+  var k = Number($('fKm').value) || 0;
+  if (!k && $('fRoute').value === 'course') { var c = courseById($('fCourse').value); if (c) k = c.km || 0; }
+  return k;
+}
+function courseById(id){ return S.data.courses.filter(function(c){ return c.id === id; })[0] || null; }
+function placeById(id){ return S.data.places.filter(function(p){ return p.id === id; })[0] || null; }
+function updatePreview(){
+  var mins = curMins(), km = curKm(), sp = CL.avgSpeed(km, mins);
+  $('fPreview').textContent = '距離 ' + (km > 0 ? fmtKm(km)+' km' : '—') + ' ／ 時間 ' + (mins > 0 ? CL.fmtDur(mins) : '—') + ' ／ 平均時速 ' + (sp != null ? sp+' km/h' : '—（距離と時間がそろうと計算します）');
+}
+['fStart','fEnd'].forEach(function(id){
+  $(id).addEventListener('input', function(){
+    var m = CL.minsBetween($('fStart').value, $('fEnd').value);
+    if (m) $('fMins').value = m;
+    updatePreview();
+  });
+});
+['fMins','fKm','fCourse'].forEach(function(id){ $(id).addEventListener('input', updatePreview); });
+$('fRoute').addEventListener('change', function(){ syncRouteUi(); updatePreview(); });
+$('fType').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) setFormType(b.getAttribute('data-v')); });
+function closeForm(){
+  if (S.form && S.form.fromGps && !confirm('保存せずに閉じると、このGPS記録は消えます。閉じますか？')) return;
+  if (S.form && S.form.fromGps) Rec.clearStore();
+  S.form = null; $('formModal').classList.remove('open');
+}
+$('fClose').onclick = closeForm; $('fCancel').onclick = closeForm;
+
+$('fSave').onclick = function(){
+  var f = S.form; if (!f) return;
+  var date = fromInputDate($('fDate').value);
+  if (!date) { toast('日付を入力してください', true); return; }
+  if (date > S.data.today) { toast('未来の日付は記録できません', true); return; }
+  var start = $('fStart').value, end = $('fEnd').value, mins = curMins(), km = Math.round(curKm()*100)/100;
+  if (km < 0 || km > 500) { toast('距離を確認してください', true); return; }
+  if (mins < 0 || mins > 1440) { toast('所要時間を確認してください', true); return; }
+  var mode = $('fRoute').value;
+  var e = { id: f.id || undefined, date: date, type: f.type, source: f.source, start: start, end: end, mins: mins, km: km,
+            avg: CL.avgSpeed(km, mins), from: '', to: '', courseId: '', route: '', routeKind: 'なし', memo: $('fMemo').value.trim() };
+  if (mode === 'keep') {
+    if (f.loading) { toast('ルートを読み込み中です。少し待ってください', true); return; }
+    e.route = f.keepRoute; e.routeKind = f.keepRoute ? '実測' : 'なし'; e.from = f.keepFrom; e.to = f.keepTo; e.courseId = f.keepCourse;
+  } else if (mode === 'course') {
+    var c = courseById($('fCourse').value);
+    if (!c) { toast('コースを選んでください', true); return; }
+    e.route = c.route; e.routeKind = c.route ? '推定' : 'なし'; e.courseId = c.id; e.from = c.from; e.to = c.to;
+  } else if (mode === 'places') {
+    var a = placeById($('fFrom').value), b = placeById($('fTo').value);
+    if (!a || !b) { toast('出発地と到着地を選んでください', true); return; }
+    e.route = CL.encodePolyline([[a.lat, a.lng],[b.lat, b.lng]]); e.routeKind = '推定'; e.from = a.name; e.to = b.name;
+    if (!km) { e.km = Math.round(CL.haversine([a.lat,a.lng],[b.lat,b.lng])/10)/100; e.avg = CL.avgSpeed(e.km, mins); }
+  }
+  if (!(e.km > 0) && !(e.mins > 0)) { toast('距離か時間のどちらかは入力してください', true); return; }
+  if (!f.id) delete e.id;
+  var wasGps = f.fromGps; // GPS記録の保存なら、保存後に記録中の一時データを消す
+  $('fSave').disabled = true;
+  KT.call('cardioSave', e).then(function(v){
+    $('fSave').disabled = false;
+    S.data = v;
+    if (wasGps) { Rec.clearStore(); if (S.form) S.form.fromGps = false; }
+    closeForm(); render(); toast('保存しました');
+  }, function(err){ $('fSave').disabled = false; toast(err.message, true); });
+};
+$('manBtn').onclick = function(){ openForm({}); };
+
+/* ============================ GPS記録 ============================ */
+var REC_KEY = 'kt_cardio_rec';
+var Rec = {
+  watchId: null, iv: null, wake: null, saveN: 0,
+  load: function(){ try { return JSON.parse(localStorage.getItem(REC_KEY) || 'null'); } catch (e) { return null; } },
+  store: function(){ try { if (S.rec) localStorage.setItem(REC_KEY, JSON.stringify(S.rec)); } catch (e) {} },
+  clearStore: function(){ try { localStorage.removeItem(REC_KEY); } catch (e) {} },
+  start: function(type){
+    if (!navigator.geolocation) { toast('この端末では位置情報が使えません', true); return; }
+    S.rec = { t0: Date.now(), type: type, pts: [], meters: 0, acc: null, hidden: 0, hiddenAt: null, state: 'run' };
+    Rec.store(); Rec.watch();
+  },
+  resume: function(){ if (S.rec && S.rec.state === 'run') Rec.watch(); },
+  watch: function(){
+    if (Rec.watchId !== null) return;
+    Rec.watchId = navigator.geolocation.watchPosition(Rec.onPos, Rec.onErr, { enableHighAccuracy: true, maximumAge: 0, timeout: 30000 });
+    Rec.iv = setInterval(renderRec, 1000);
+    Rec.lock();
+    renderRec();
+  },
+  lock: function(){
+    try { if (navigator.wakeLock) navigator.wakeLock.request('screen').then(function(w){ Rec.wake = w; }, function(){}); } catch (e) {}
+  },
+  unwatch: function(){
+    if (Rec.watchId !== null) { navigator.geolocation.clearWatch(Rec.watchId); Rec.watchId = null; }
+    clearInterval(Rec.iv); Rec.iv = null;
+    try { if (Rec.wake) Rec.wake.release(); } catch (e) {} Rec.wake = null;
+  },
+  onPos: function(p){
+    var r = S.rec; if (!r || r.state !== 'run') return;
+    var c = p.coords; r.acc = Math.round(c.accuracy);
+    if (c.accuracy > 40) { renderRec(); return; }            // 精度が悪い点は使わない
+    var pt = [Math.round(c.latitude*1e6)/1e6, Math.round(c.longitude*1e6)/1e6, p.timestamp];
+    var last = r.pts.length ? r.pts[r.pts.length-1] : null;
+    if (last) {
+      var d = CL.haversine(last, pt), dt = (pt[2]-last[2])/1000;
+      if (d < 3) { renderRec(); return; }                    // ほぼ動いていない
+      if (dt > 0 && dt < 120 && d/dt > 15) { renderRec(); return; } // 時速54km超の瞬間移動は誤差として除外
+      r.meters += d;
+    }
+    r.pts.push(pt);
+    if (++Rec.saveN % 8 === 0) Rec.store();
+    renderRec();
+  },
+  onErr: function(err){
+    if (err.code === 1) { toast('位置情報が許可されていません。ブラウザの設定で許可してください', true); Rec.unwatch(); S.rec = null; Rec.clearStore(); renderRec(); }
+    // 一時的な取得失敗（code 2/3）は無視して待つ
+  },
+  // 記録データ → 保存フォームに渡す値（終了時刻 t1 は終了ボタンを押した時刻）
+  build: function(r, t1ms){
+    var t0 = new Date(r.t0), t1 = new Date(t1ms);
+    var route = r.pts.length >= 2 ? CL.encodePolyline(CL.thinRoute(r.pts, 5, 1500)) : '';
+    var km = Math.round(r.meters/10)/100;
+    return { type: r.type, date: ymdOf(t0), start: hmOf(t0), end: hmOf(t1), mins: Math.max(1, Math.round((t1ms - r.t0)/60000)), km: km || '', route: route };
+  },
+  finish: function(){
+    var r = S.rec; if (!r) return;
+    if (r.pts.length < 2 && !confirm('ルートが取れていません（位置が取得できませんでした）。時間だけで保存しますか？')) return;
+    Rec.unwatch();
+    var gps = Rec.build(r, Date.now());
+    // 保存画面で閉じてしまってもデータが消えないよう、「終了済み」として端末に残しておく
+    r.state = 'finished'; r.endAt = Date.now(); Rec.store();
+    S.rec = null; renderRec();
+    Rec.openSave(gps);
+  },
+  openSave: function(gps){
+    openForm({ gps: gps });
+    S.form.fromGps = true;
+  },
+  discard: function(){
+    if (!confirm('この記録を破棄しますか？（保存されません）')) return;
+    Rec.unwatch(); S.rec = null; Rec.clearStore(); renderRec();
+  }
+};
+function renderRec(){
+  var box = $('rec'), r = S.rec;
+  if (!r) { box.style.display = 'none'; box.innerHTML = ''; $('actions').style.display = ''; return; }
+  $('actions').style.display = 'none';
+  box.style.display = '';
+  var sec = (Date.now() - r.t0)/1000, km = r.meters/1000, sp = CL.avgSpeed(km, sec/60);
+  box.innerHTML = '<div><span class="dot"></span><b>'+typeIcon(r.type)+' '+esc(r.type)+'を記録中</b></div>'
+    + '<div class="big num">'+CL.fmtClock(sec)+'</div>'
+    + '<div class="row num"><div><b>'+(Math.round(km*100)/100).toFixed(2)+' km</b><span>距離</span></div><div><b>'+(sp!=null?sp+' km/h':'—')+'</b><span>平均時速</span></div><div><b>'+(r.acc==null?'—':r.acc+' m')+'</b><span>位置の誤差</span></div><div><b>'+r.pts.length+'</b><span>記録点</span></div></div>'
+    + '<div class="acts"><button class="btn primary" id="recStop">■ 終了して保存</button><button class="btn danger" id="recDrop">破棄</button></div>'
+    + '<div class="note">'+(r.hidden>0 ? '⚠ 画面が消えていた時間：約'+Math.round(r.hidden/1000)+'秒。その間のルートは直線で結ばれ、距離が実際より短くなることがあります。<br>' : '')
+    + '記録中は画面を点けたままにしてください（自動で消えないよう設定しています）。電波の悪い場所では点が取れないことがあります。</div>';
+  $('recStop').onclick = Rec.finish; $('recDrop').onclick = Rec.discard;
+}
+$('gpsWalk').onclick = function(){ Rec.start('ウォーキング'); };
+$('gpsRun').onclick = function(){ Rec.start('ランニング'); };
+document.addEventListener('visibilitychange', function(){
+  var r = S.rec; if (!r || r.state !== 'run') return;
+  if (document.hidden) { r.hiddenAt = Date.now(); Rec.store(); }
+  else { if (r.hiddenAt) { r.hidden += Date.now() - r.hiddenAt; r.hiddenAt = null; } Rec.lock(); renderRec(); Rec.store(); }
+});
+window.addEventListener('pagehide', function(){ Rec.store(); });
+
+/* ============================ 地点・コース管理 ============================ */
+function renderMgr(){
+  var d = S.data;
+  $('mPlaces').innerHTML = d.places.length ? d.places.map(function(p){
+    return '<div class="li"><div class="t">'+esc(p.name)+'<small class="num">'+p.lat.toFixed(5)+', '+p.lng.toFixed(5)+'</small></div><button class="btn small danger" data-p="'+esc(p.id)+'">削除</button></div>';
+  }).join('') : '<div class="empty">まだありません</div>';
+  $('mCourses').innerHTML = d.courses.length ? d.courses.map(function(c){
+    return '<div class="li"><div class="t">'+esc(c.name)+'<small>'+(c.km?fmtKm(c.km)+' km':'距離なし')+((c.from||c.to)?' ／ '+esc(c.from||'?')+' → '+esc(c.to||'?'):'')+'</small></div><button class="btn small danger" data-c="'+esc(c.id)+'">削除</button></div>';
+  }).join('') : '<div class="empty">まだありません</div>';
+  Array.prototype.forEach.call($('mPlaces').querySelectorAll('[data-p]'), function(b){ b.onclick = function(){
+    if (!confirm('この地点を削除しますか？（過去の記録の表示は変わりません）')) return;
+    KT.call('cardioDeletePlace', b.getAttribute('data-p')).then(function(v){ S.data = v; renderMgr(); });
+  }; });
+  Array.prototype.forEach.call($('mCourses').querySelectorAll('[data-c]'), function(b){ b.onclick = function(){
+    if (!confirm('このコースを削除しますか？（過去の記録の表示は変わりません）')) return;
+    KT.call('cardioDeleteCourse', b.getAttribute('data-c')).then(function(v){ S.data = v; renderMgr(); });
+  }; });
+}
+$('mgrBtn').onclick = function(){ renderMgr(); $('mgrModal').classList.add('open'); };
+$('mClose').onclick = function(){ $('mgrModal').classList.remove('open'); render(); };
+$('mgrModal').addEventListener('click', function(e){ if (e.target === $('mgrModal')) { $('mgrModal').classList.remove('open'); render(); } });
+$('mHere').onclick = function(){
+  if (!navigator.geolocation) { toast('この端末では位置情報が使えません', true); return; }
+  toast('位置を取得しています…');
+  navigator.geolocation.getCurrentPosition(function(p){
+    var name = prompt('この場所の名前を入力してください（例：自宅）', '');
+    if (!name || !name.trim()) return;
+    KT.call('cardioSavePlace', { name: name.trim().slice(0,30), lat: p.coords.latitude, lng: p.coords.longitude })
+      .then(function(v){ S.data = v; renderMgr(); toast('登録しました'); }, function(e){ toast(e.message, true); });
+  }, function(){ toast('位置を取得できませんでした', true); }, { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 });
+};
+['formModal'].forEach(function(id){ /* フォームは誤タップで閉じないよう、外側タップでは閉じない */ });
+
+/* ============================ 同期表示・起動 ============================ */
+KT.onStatus(function(st){
+  var c = $('syncChip'); if (!c) return;
+  var cls = 'syncchip', txt;
+  if (st.failed) { cls += ' err'; txt = '送信失敗 '+st.failed; }
+  else if (st.syncing) { cls += ' pend'; txt = '送信中…'; }
+  else if (st.pending) { cls += st.online ? ' pend' : ' off'; txt = (st.online ? '未送信 ' : 'オフライン・未送信 ')+st.pending; }
+  else if (!st.online) { cls += ' off'; txt = 'オフライン'; }
+  else if (st.error) { cls += ' err'; txt = '同期エラー'; }
+  else { var t = st.syncedAt ? new Date(st.syncedAt) : null; txt = t ? '同期済 '+t.getHours()+':'+p2(t.getMinutes()) : '同期'; }
+  c.className = cls; c.querySelector('span').textContent = txt;
+  c.title = st.error ? st.error.message : '';
+});
+$('syncChip').addEventListener('click', function(){
+  var fl = KT.failed();
+  if (fl.length) {
+    if (confirm('送信できなかった操作が '+fl.length+' 件あります。\n\n最初のエラー：'+(fl[0].error||'')+'\n\nOK＝もう一度送る ／ キャンセル＝そのまま')) KT.retryFailed();
+    return;
+  }
+  KT.sync().then(function(){ return KT.call('cardioInit'); }).then(function(v){ S.data = v; S.loadErr = null; render(); toast('同期しました'); }, function(e){
+    toast(e.offline ? 'オフラインです。つながったら自動で送信します' : '同期できませんでした：'+e.message, !e.offline);
+  });
+});
+KT.onUpdate(function(){ KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } }); });
+
+function showSetup(msg){
+  $('app').innerHTML = '<div class="setup card"><h3 style="margin-top:0">アプリ版の設定が必要です</h3>'+(msg?'<p style="color:var(--danger)">'+esc(msg)+'</p>':'')
+    + '<p>先に筋トレ記録の画面で設定を済ませてください。</p><p><a class="navlink" href="index.html">筋トレ記録を開く</a></p></div>';
+}
+function init(){
+  if (!KT.configured()) { showSetup(); return; }
+  var saved = Rec.load();
+  if (saved && saved.state === 'run') {
+    // 記録中にページが閉じた／再読み込みされた場合：続きから再開するか、そこまでで保存するかを選べる
+    S.rec = saved;
+    if (confirm('記録中のデータが残っています。続きから再開しますか？\n（キャンセル＝ここまでの記録で終了して保存画面へ）')) Rec.resume();
+    else { saved.state = 'finished'; saved.endAt = saved.pts.length ? saved.pts[saved.pts.length-1][2] : Date.now(); Rec.store(); S.rec = null; }
+    saved = Rec.load();
+  }
+  if (saved && saved.state === 'finished') {
+    if (!S.rec) setTimeout(function(){ Rec.openSave(Rec.build(saved, saved.endAt || Date.now())); }, 400);
+  }
+  renderRec();
+  KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } });
+  KT.call('cardioInit').then(function(v){ S.data = v; S.loadErr = null; render(); }, function(e){
+    if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
+    var hint = /不明な操作/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「有酸素の導入手順」を実行してください）' : '';
+    S.loadErr = '読み込みに失敗しました：' + e.message + hint;
+    if (!S.data) S.data = { today: KT.today(), logs: [], courses: [], places: [] };
+    render();
+  });
+}
+init();
+</script>
+</body>
+</html>
