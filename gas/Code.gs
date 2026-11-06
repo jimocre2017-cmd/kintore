@@ -710,6 +710,10 @@ function syncOps(ops) {
       else if (op.type === 'cardioPlaceDel') cardioDeletePlace(op.id);
       else if (op.type === 'cardioCourse') cardioSaveCourse(op.course);
       else if (op.type === 'cardioCourseDel') cardioDeleteCourse(op.id);
+      // 体組成（Body.gs）
+      else if (op.type === 'bodySave') bodySave(op.entry);
+      else if (op.type === 'bodyDelete') bodyDelete(op.date);
+      else if (op.type === 'bodyGoal') bodySetGoal(op.goal);
       else throw new Error('不明な操作：' + op.type);
       results.push({ qid: op.qid, ok: true });
     } catch (err) {
@@ -739,6 +743,8 @@ function doPost(e) {
       // 有酸素（Cardio.gs）
       cardioGet: cardioGet,
       cardioRoute: cardioRoute,
+      // 体組成（Body.gs）
+      bodyGet: bodyGet,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,
