@@ -390,7 +390,8 @@ $('fEst').onclick = function(){
       + '<div class="conf">確からしさ：<b>'+esc(r.confidence)+'</b>'+(r.note?'　'+esc(r.note):'')+'　下の数値は直せます。</div>';
     toast('見積もりました。内容を確認して保存してください');
   }, function(e){
-    toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : e.message, true);
+    if (healStaleCache(e)) { toast('画面を更新します…'); return; }
+    toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : (/^不明な操作/.test(e.message) ? e.message+'（画面が古いようです。アプリを閉じて開き直してください）' : e.message), true);
   }).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
 };
 function num(i){ var s = $(i).value.trim(); return s === '' ? 0 : Number(s); }
@@ -402,7 +403,7 @@ $('fSave').onclick = function(){
   if (e.text && !e.kcal && !f.edit) { if (!confirm('カロリーが未入力です。AIで見積もらずに保存しますか？')) return; }
   var chk = [['kcal','カロリー',6000],['protein','たんぱく質',500],['fat','脂質',500],['carbs','炭水化物',1000]];
   for (var i = 0; i < chk.length; i++) { var x = e[chk[i][0]]; if (isNaN(x) || x < 0 || x > chk[i][2]) { toast(chk[i][1]+'は0〜'+chk[i][2]+'で入力してください', true); return; } }
-  KT.call('mealSave', e).then(function(r){ S.data = r; S.date = e.date; closeForm(); render(); toast('保存しました'); }, function(er){ toast(er.message, true); });
+  KT.call('mealSave', e).then(function(r){ S.data = r; S.date = e.date; closeForm(); render(); toast('保存しました'); }, function(er){ if (healStaleCache(er)) return; toast(er.message, true); });
 };
 $('fDel').onclick = function(){
   var f = S.form; if (!f || !confirm('この食事の記録を削除しますか？')) return;
@@ -462,7 +463,7 @@ function showSetup(msg){
 }
 function healStaleCache(e){
   if (!e || !/^不明な操作：meal(Init|Cached|Save|Delete|SetGoals|Estimate)$/.test(e.message)) return false;
-  try { if (sessionStorage.getItem('kt_heal')) return false; sessionStorage.setItem('kt_heal', '1'); } catch (x) { return false; }
+  try { if (sessionStorage.getItem('kt_heal_meal')) return false; sessionStorage.setItem('kt_heal_meal', '1'); } catch (x) { return false; }
   var done = function(){ location.reload(); };
   if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(done, done);
   else done();
