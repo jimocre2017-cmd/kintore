@@ -180,6 +180,7 @@ header .sp{margin-left:auto}
   <section class="stats" id="stats"></section>
   <section class="actions"><button class="btn primary wide" id="addBtn">＋ 今日の数値を記録</button></section>
   <section class="card" id="chartCard"><div class="loading">読み込み中…</div></section>
+  <section class="card" id="cmpCard"></section>
   <section class="card" id="planCard"></section>
   <section class="card" id="histCard"></section>
 </div>
@@ -244,7 +245,7 @@ function lastOf(k){ var L = S.data.logs; for (var i = 0; i < L.length; i++) if (
 function render(){
   if (!S.data) return;
   $('dateLbl').textContent = S.data.today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(S.data.today)+'）';
-  renderMsg(); renderStats(); renderChart(); renderPlan(); renderHist();
+  renderMsg(); renderStats(); renderChart(); renderCmp(); renderPlan(); renderHist();
 }
 function renderMsg(){
   var h = '';
@@ -300,6 +301,32 @@ function lineSvg(pts, F){
   var a = pts[0].date.split('/'), b = pts[pts.length-1].date.split('/');
   s += '<text x="'+pl+'" y="'+(H-8)+'">'+(+a[1])+'/'+(+a[2])+'</text><text x="'+(W-pr)+'" y="'+(H-8)+'" text-anchor="end">'+(+b[1])+'/'+(+b[2])+'</text>';
   return s + '</svg>';
+}
+
+/* ---- 過去との比較 ---- */
+var CMP = [[7,'1週間前'],[14,'2週間前'],[30,'1か月前'],[90,'3か月前'],[180,'半年前']];
+function renderCmp(){
+  var d = S.data;
+  if (!d.logs.length) { $('cmpCard').innerHTML = ''; return; }
+  var rows = BL.compare(d.logs, d.today, CMP.map(function(c){ return c[0]; }));
+  var h = '<h3>過去との比較（最新の値との差）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>比較</th>'
+    + FIELDS.map(function(f){ return '<th>'+f.label+'</th>'; }).join('') + '</tr></thead><tbody>';
+  var any = false;
+  rows.forEach(function(r, i){
+    var cells = FIELDS.map(function(f){
+      var c = r.fields[f.k];
+      if (!c) return '<td class="num" style="color:var(--ink-3)">－</td>';
+      any = true;
+      // 体重・体脂肪率・BMI・内臓脂肪は下がると良い（緑）、骨格筋率・基礎代謝は上がると良い
+      var good = f.goalDown ? c.diff < 0 : c.diff > 0, col = c.diff === 0 ? 'var(--ink-2)' : (good ? 'var(--good)' : 'var(--danger)');
+      return '<td class="num" title="'+mdw(c.from)+' '+c.then+(f.unit||'')+' → '+c.now+(f.unit||'')+'" style="color:'+col+';font-weight:700">'+(c.diff > 0 ? '+' : '')+c.diff.toFixed(f.d)+'</td>';
+    }).join('');
+    h += '<tr><td>'+CMP[i][1]+'</td>'+cells+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += any ? '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">各行は、その日以前で最も新しい記録との差です。緑＝良い方向、赤＝逆方向（体重・体脂肪率・BMI・内臓脂肪は下がると良い、骨格筋率・基礎代謝は上がると良い）。日ごとの変動があるので、傾向で見てください。</div>'
+    : '<div class="empty">比べられる過去の記録がまだありません。記録がたまると表示されます。</div>';
+  $('cmpCard').innerHTML = h;
 }
 
 /* ---- 目標と試算 ---- */
