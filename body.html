@@ -170,6 +170,12 @@ header .sp{margin-left:auto}
 .mini .md{font-size:11px;margin-bottom:2px}
 .mini .chart{margin-top:2px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips button{height:34px;padding:0 12px;border-radius:17px;border:1px solid var(--line);background:var(--surface-2);font-size:13px;font-weight:600;color:var(--ink-2)}
+.chips button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chips button small{opacity:.7;margin-left:3px;font-weight:500}
+.tag.cond{background:var(--accent);color:var(--accent-ink);margin:0 4px 0 0}
+.avgrow td{font-weight:700;background:var(--surface-2)}
 </style>
 </head>
 <body>
@@ -185,7 +191,9 @@ header .sp{margin-left:auto}
 <div class="wrap" id="app">
   <div id="msg"></div>
   <section class="stats" id="stats"></section>
-  <section class="actions"><button class="btn primary wide" id="addBtn">＋ 今日の数値を記録</button></section>
+  <section class="actions"><button class="btn primary wide" id="addBtn">＋ 測定を記録（朝・昼・晩など何回でも）</button></section>
+  <section class="card" id="filterCard"></section>
+  <section class="card" id="dayCard"></section>
   <section class="card" id="chartCard"><div class="loading">読み込み中…</div></section>
   <section class="card" id="cmpCard"></section>
   <section class="card" id="planCard"></section>
@@ -194,7 +202,11 @@ header .sp{margin-left:auto}
 
 <div class="modal" id="formModal"><div class="box">
   <h2><span id="fTitle">体重計の数値を記録</span><button class="x" id="fClose" aria-label="閉じる">✕</button></h2>
-  <div class="f"><label>日付</label><input type="date" id="fDate"></div>
+  <div class="fgrid">
+    <div class="f"><label>日付</label><input type="date" id="fDate"></div>
+    <div class="f"><label>測った時刻</label><input type="time" id="fTime"></div>
+  </div>
+  <div class="f"><label>測定のタイミング・条件（複数選べます）</label><div class="chips" id="fTags"></div><div class="hint">体重・体脂肪率は、同じ条件で測ると比べやすくなります（例：起床後・排便後）。</div></div>
   <div class="fgrid">
     <div class="f"><label>体重（kg）</label><input type="number" id="fWeight" inputmode="decimal" step="0.1" min="20" max="300"></div>
     <div class="f"><label>体脂肪率（%）</label><input type="number" id="fFat" inputmode="decimal" step="0.1" min="1" max="70"></div>
@@ -243,16 +255,17 @@ var FIELDS = [
   { k: 'bmr', label: '基礎代謝', unit: 'kcal', d: 0 },
   { k: 'visceral', label: '内臓脂肪', unit: '', d: 1, goalDown: true }
 ];
-var S = { data: null, mode: 'single', field: 'weight', range: 90, form: null, loadErr: null };
+var S = { tag: '', day: '', data: null, view: null, mode: 'single', field: 'weight', range: 90, form: null, loadErr: null };
 
-function latest(){ return S.data && S.data.logs.length ? S.data.logs[0] : null; }
+function latest(){ return S.view && S.view.logs.length ? S.view.logs[0] : null; }
 // 項目ごとに、記録がある最新の値
-function lastOf(k){ var L = S.data.logs; for (var i = 0; i < L.length; i++) if (L[i][k] != null) return L[i]; return null; }
+function lastOf(k){ var L = S.view.logs; for (var i = 0; i < L.length; i++) if (L[i][k] != null) return L[i]; return null; }
 
 function render(){
   if (!S.data) return;
+  S.view = { today: S.data.today, goalFat: S.data.goalFat, logs: S.tag ? BL.daily(S.data.entries || [], S.tag) : S.data.logs };
   $('dateLbl').textContent = S.data.today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(S.data.today)+'）';
-  renderMsg(); renderStats(); renderChart(); renderCmp(); renderPlan(); renderHist();
+  renderMsg(); renderFilter(); renderDay(); renderStats(); renderChart(); renderCmp(); renderPlan(); renderHist();
 }
 function renderMsg(){
   var h = '';
@@ -262,12 +275,12 @@ function renderMsg(){
   $('msg').innerHTML = h;
 }
 function renderStats(){
-  var d = S.data, L = latest();
-  if (!L) { $('stats').innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty">まだ記録がありません。「今日の数値を記録」から入力してください。</div></div>'; return; }
+  var d = S.view, L = latest();
+  if (!L) { $('stats').innerHTML = '<div class="card" style="grid-column:1/-1"><div class="empty">'+(S.tag?'「'+esc(S.tag)+'」の測定がまだありません。':'まだ記録がありません。「測定を記録」から入力してください。')+'</div></div>'; return; }
   var w = lastOf('weight'), c = BL.change(d.logs, 'weight', d.today, 28), sk = BL.streak(d.logs, d.today);
   var h = '';
-  h += '<div class="stat"><b class="num">'+v(w && w.weight,'',1)+'<small>kg</small></b><span>体重（'+(w?mdw(w.date):'－')+'）</span></div>';
-  h += '<div class="stat"><b class="num">'+v(lastOf('fat') && lastOf('fat').fat,'',1)+'<small>%</small></b><span>体脂肪率</span></div>';
+  h += '<div class="stat"><b class="num">'+v(w && w.weight,'',1)+'<small>kg</small></b><span>体重（'+(S.tag||'日平均')+'・'+(w?mdw(w.date):'－')+'）</span></div>';
+  h += '<div class="stat"><b class="num">'+v(lastOf('fat') && lastOf('fat').fat,'',1)+'<small>%</small></b><span>体脂肪率（'+(S.tag||'日平均')+'）</span></div>';
   h += '<div class="stat"><b class="num">'+(c?sgn(c.diff):'－')+'<small>kg</small></b><span>体重の4週間の変化'+(c?'':'（比べる記録なし）')+'</span></div>';
   h += '<div class="stat '+(sk?'hot':'')+'"><b class="num">'+sk+'<small>日</small></b><span>連続記録</span></div>';
   $('stats').innerHTML = h;
@@ -276,7 +289,7 @@ function renderStats(){
 /* ---- 推移グラフ ---- */
 var COLORS = { weight: '#2a78d6', fat: '#d9534f', muscle: '#1a9e5c', bmi: '#8e6bd1', bmr: '#d98a1f', visceral: '#c2478f' };
 function renderChart(){
-  var d = S.data;
+  var d = S.view;
   var h = '<div class="tabs" id="mTabs">'+[['single','1項目'],['all','全項目を並べる'],['overlay','重ねて比較']].map(function(m){ return '<button data-m="'+m[0]+'"'+(m[0]===S.mode?' class="on"':'')+'>'+m[1]+'</button>'; }).join('')+'</div>';
   if (S.mode === 'single') h += '<div class="tabs" id="fTabs">'+FIELDS.map(function(f){ return '<button data-k="'+f.k+'"'+(f.k===S.field?' class="on"':'')+'>'+f.label+'</button>'; }).join('')+'</div>';
   h += '<div class="tabs" id="rTabs">'+[[30,'30日'],[90,'90日'],[365,'1年'],[3650,'全期間']].map(function(r){ return '<button data-r="'+r[0]+'"'+(r[0]===S.range?' class="on"':'')+'>'+r[1]+'</button>'; }).join('')+'</div>';
@@ -362,7 +375,7 @@ function overlaySvg(d){
 /* ---- 過去との比較 ---- */
 var CMP = [[7,'1週間前'],[14,'2週間前'],[30,'1か月前'],[90,'3か月前'],[180,'半年前']];
 function renderCmp(){
-  var d = S.data;
+  var d = S.view;
   if (!d.logs.length) { $('cmpCard').innerHTML = ''; return; }
   var rows = BL.compare(d.logs, d.today, CMP.map(function(c){ return c[0]; }));
   var h = '<h3>過去との比較（最新の値との差）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>比較</th>'
@@ -387,7 +400,7 @@ function renderCmp(){
 
 /* ---- 目標と試算 ---- */
 function renderPlan(){
-  var d = S.data, w = lastOf('weight'), f = lastOf('fat'), g = d.goalFat || 0, h = '<h3>目標と試算</h3>';
+  var d = S.view, w = lastOf('weight'), f = lastOf('fat'), g = d.goalFat || 0, h = '<h3>目標と試算</h3>';
   if (!g) h += '<div class="plan">目標の体脂肪率を設定すると、目標体重と減らす脂肪量を試算します。</div>';
   else if (!w || !f) h += '<div class="plan">体重と体脂肪率の記録が必要です。</div>';
   else {
@@ -405,28 +418,86 @@ function renderPlan(){
   $('goalBtn').onclick = function(){ $('gFat').value = d.goalFat || ''; $('goalModal').classList.add('open'); };
 }
 
-/* ---- 履歴 ---- */
+/* ---- 集計条件（測定のタイミングで絞る） ---- */
+function renderFilter(){
+  var E = S.data.entries || [];
+  if (!E.length) { $('filterCard').innerHTML = ''; return; }
+  var cnt = {}; E.forEach(function(e){ (e.tags||[]).forEach(function(t){ cnt[t] = (cnt[t]||0)+1; }); });
+  var h = '<h3>集計の条件</h3><div class="chips" id="fltChips"><button data-t=""'+(S.tag===''?' class="on"':'')+'>全測定の日平均</button>';
+  BL.TAGS.forEach(function(t){ if (cnt[t]) h += '<button data-t="'+t+'"'+(S.tag===t?' class="on"':'')+'>'+t+'<small>'+cnt[t]+'</small></button>'; });
+  h += '</div><div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">'+(S.tag
+    ? '「'+esc(S.tag)+'」を付けた測定だけで、グラフ・比較・試算を出しています（同じ条件どうしの比較）。'
+    : '1日の測定をすべて平均して、グラフ・比較・試算を出しています。起床後や排便後など、条件で絞ることもできます。')+'</div>';
+  $('filterCard').innerHTML = h;
+  $('fltChips').onclick = function(e){ var b = e.target.closest('button'); if (!b) return; S.tag = b.getAttribute('data-t'); render(); };
+}
+
+/* ---- その日の測定（時刻・条件ごと） ---- */
+function tagsHtml(l){ return (l.tags||[]).map(function(t){ return '<span class="tag cond">'+esc(t)+'</span>'; }).join(''); }
+function renderDay(){
+  var d = S.data, E = d.entries || [], day = S.day || d.today;
+  var list = E.filter(function(e){ return e.date === day; }).sort(function(a,b){ return (a.time||'') < (b.time||'') ? -1 : ((a.time||'') > (b.time||'') ? 1 : 0); });
+  var h = '<h3>'+(day === d.today ? '今日' : mdw(day))+'の測定'+(list.length?'（'+list.length+'回）':'')+'</h3>';
+  if (!list.length) h += '<div class="empty" style="padding:14px 0">この日の測定はまだありません。</div>';
+  else {
+    h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻・条件</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>内臓</th></tr></thead><tbody>';
+    list.forEach(function(e){
+      h += '<tr class="row" data-id="'+esc(e.id)+'"><td>'+(e.time?esc(e.time):'－')+(e.pending?'<span class="tag pend">未送信</span>':'')+'<div style="margin-top:3px">'+tagsHtml(e)+'</div></td><td class="num">'+v(e.weight,'',1)+'</td><td class="num">'+v(e.fat,'',1)+'</td><td class="num">'+v(e.muscle,'',1)+'</td><td class="num">'+v(e.bmi,'',1)+'</td><td class="num">'+v(e.visceral)+'</td></tr>';
+    });
+    if (list.length > 1) {
+      var av = BL.daily(list)[0];
+      h += '<tr class="avgrow"><td>平均</td><td class="num">'+v(av.weight,'',1)+'</td><td class="num">'+v(av.fat,'',1)+'</td><td class="num">'+v(av.muscle,'',1)+'</td><td class="num">'+v(av.bmi,'',1)+'</td><td class="num">'+v(av.visceral)+'</td></tr>';
+    }
+    h += '</tbody></table></div>';
+    var iw = BL.intraday(list, day, 'weight'), ifat = BL.intraday(list, day, 'fat');
+    if (iw || ifat) h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">この日の最初→最後：'+(iw?'体重 '+sgn(iw.diff)+'kg':'')+(iw&&ifat?'　':'')+(ifat?'体脂肪率 '+sgn(ifat.diff)+'%':'')+'（条件が違う測定の差は、水分・食事・運動の影響を含みます）</div>';
+  }
+  h += '<div class="rowbtns"><button class="btn small" id="dayAdd">この日に測定を追加</button>'+(day !== d.today ? '<button class="btn small" id="dayToday">今日に戻る</button>' : '')+'</div>';
+  $('dayCard').innerHTML = h;
+  $('dayCard').onclick = function(e){
+    var tr = e.target.closest('tr.row'); if (tr) { openForm(tr.getAttribute('data-id')); return; }
+    if (e.target.id === 'dayAdd') openForm(null, day);
+    else if (e.target.id === 'dayToday') { S.day = ''; renderDay(); }
+  };
+}
+
+/* ---- 履歴（日ごとの平均） ---- */
 function renderHist(){
-  var L = S.data.logs;
+  var L = S.view.logs, cnt = {};
+  (S.data.entries || []).forEach(function(e){ cnt[e.date] = (cnt[e.date]||0)+1; });
   if (!L.length) { $('histCard').innerHTML = ''; return; }
-  var h = '<h3>記録の一覧（タップで編集）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日付</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>基代</th><th>内臓</th></tr></thead><tbody>';
+  var h = '<h3>日ごとの一覧（'+(S.tag?esc(S.tag)+'の平均':'日平均')+'・タップでその日の測定を表示）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日付</th><th>回数</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>基代</th><th>内臓</th></tr></thead><tbody>';
   L.slice(0, 60).forEach(function(l){
-    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
+    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+(S.tag ? l.count+'/' : '')+(cnt[l.date]||l.count||1)+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
   });
   h += '</tbody></table></div>';
   $('histCard').innerHTML = h;
-  $('histCard').onclick = function(e){ var tr = e.target.closest('tr.row'); if (tr) openForm(tr.getAttribute('data-d')); };
+  $('histCard').onclick = function(e){ var tr = e.target.closest('tr.row'); if (tr) { S.day = tr.getAttribute('data-d'); renderDay(); $('dayCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
 }
 
 /* ---- 入力 ---- */
-function openForm(date){
-  var d = S.data, ex = date ? d.logs.filter(function(l){ return l.date === date; })[0] : null;
-  S.form = { edit: !!ex };
-  $('fTitle').textContent = ex ? mdw(ex.date)+' の記録を編集' : '体重計の数値を記録';
-  $('fDate').value = toInputDate(ex ? ex.date : d.today);
+function nowHM(){ var t = new Date(); return p2(t.getHours())+':'+p2(t.getMinutes()); }
+function renderFormTags(sel){
+  $('fTags').innerHTML = BL.TAGS.map(function(t){ return '<button type="button" data-t="'+t+'"'+(sel.indexOf(t)>=0?' class="on"':'')+'>'+t+'</button>'; }).join('');
+}
+$('fTags').onclick = function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  var t = b.getAttribute('data-t'), i = S.form.tags.indexOf(t);
+  if (i >= 0) S.form.tags.splice(i, 1); else S.form.tags.push(t);
+  renderFormTags(S.form.tags);
+};
+// id を渡すとその測定を編集、無ければ新しい測定（date＝その日付、省略は今日）
+function openForm(id, date){
+  var d = S.data, ex = id ? (d.entries||[]).filter(function(e){ return e.id === id; })[0] : null;
+  var dt = ex ? ex.date : (date || d.today);
+  S.form = { id: ex ? ex.id : '', edit: !!ex, tags: ex ? (ex.tags||[]).slice() : [] };
+  $('fTitle').textContent = ex ? mdw(ex.date)+(ex.time?' '+ex.time:'')+' の測定を編集' : '測定を記録';
+  $('fDate').value = toInputDate(dt);
   $('fDate').max = toInputDate(d.today);
+  $('fTime').value = ex ? (ex.time||'') : (dt === d.today ? nowHM() : '');
+  renderFormTags(S.form.tags);
   function set(id, val){ $(id).value = val == null ? '' : val; }
-  var hl = lastOf('height');
+  var hl = null; (d.entries||[]).some(function(e){ if (e.height != null) { hl = e; return true; } });
   set('fWeight', ex && ex.weight); set('fFat', ex && ex.fat); set('fMuscle', ex && ex.muscle); set('fBmi', ex && ex.bmi);
   set('fBmr', ex && ex.bmr); set('fVisceral', ex && ex.visceral); set('fHeight', ex ? ex.height : (hl && hl.height)); set('fMemo', ex && ex.memo);
   $('fDel').style.display = ex ? '' : 'none';
@@ -435,18 +506,13 @@ function openForm(date){
   if (!ex) setTimeout(function(){ $('fWeight').focus(); }, 50);
 }
 function closeForm(){ $('formModal').classList.remove('open'); S.form = null; }
-// 日付を変えたら、その日に記録済みなら読み込む
-$('fDate').addEventListener('change', function(){
-  var dt = fromInputDate($('fDate').value), ex = S.data.logs.filter(function(l){ return l.date === dt; })[0];
-  if (ex && !S.form.edit) { closeForm(); openForm(dt); }
-});
 function num(id){ var s = $(id).value.trim(); return s === '' ? '' : Number(s); }
-$('addBtn').onclick = function(){ openForm(null); };
+$('addBtn').onclick = function(){ openForm(null, S.day || null); };
 $('fClose').onclick = closeForm;
 $('fSave').onclick = function(){
   var date = fromInputDate($('fDate').value);
   if (!date) { toast('日付を入力してください', true); return; }
-  var e = { date: date, weight: num('fWeight'), fat: num('fFat'), muscle: num('fMuscle'), bmi: num('fBmi'), bmr: num('fBmr'), visceral: num('fVisceral'), height: num('fHeight'), memo: $('fMemo').value.trim() };
+  var e = { id: S.form.id || undefined, date: date, time: $('fTime').value || '', tags: S.form.tags.slice(), weight: num('fWeight'), fat: num('fFat'), muscle: num('fMuscle'), bmi: num('fBmi'), bmr: num('fBmr'), visceral: num('fVisceral'), height: num('fHeight'), memo: $('fMemo').value.trim() };
   if (e.weight === '' && e.fat === '' && e.muscle === '' && e.bmr === '' && e.visceral === '') { toast('数値を1つ以上入力してください', true); return; }
   var chk = [['weight','体重',20,300],['fat','体脂肪率',1,70],['muscle','骨格筋率',5,70],['bmi','BMI',8,80],['bmr','基礎代謝',500,5000],['visceral','内臓脂肪レベル',1,59],['height','身長',100,230]];
   for (var i = 0; i < chk.length; i++) {
@@ -455,12 +521,11 @@ $('fSave').onclick = function(){
   }
   if (e.bmi === '' && e.weight !== '' && e.height !== '') e.bmi = BL.bmi(e.weight, e.height);
   ['weight','fat','muscle','bmi','bmr','visceral','height'].forEach(function(k){ e[k] = e[k] === '' ? null : e[k]; });
-  KT.call('bodySave', e).then(function(r){ S.data = r; closeForm(); render(); toast('保存しました'); }, function(er){ toast(er.message, true); });
+  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); }, function(er){ toast(er.message, true); });
 };
 $('fDel').onclick = function(){
-  var date = fromInputDate($('fDate').value);
-  if (!confirm(mdw(date)+' の記録を削除しますか？')) return;
-  KT.call('bodyDelete', date).then(function(r){ S.data = r; closeForm(); render(); toast('削除しました'); }, function(er){ toast(er.message, true); });
+  if (!confirm('この測定を削除しますか？')) return;
+  KT.call('bodyDelete', S.form.id).then(function(r){ S.data = r; closeForm(); render(); toast('削除しました'); }, function(er){ toast(er.message, true); });
 };
 $('gClose').onclick = $('gCancel').onclick = function(){ $('goalModal').classList.remove('open'); };
 $('gSave').onclick = function(){
@@ -515,7 +580,7 @@ function init(){
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
     var hint = /^不明な操作：bodyGet$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「体組成の導入手順」を実行してください）' : (/^不明な操作/.test(e.message) ? '（アプリの画面ファイルが古いままです。アプリを閉じて開き直してください）' : '');
     S.loadErr = '読み込みに失敗しました：' + e.message + hint;
-    if (!S.data) S.data = { today: KT.today(), logs: [], goalFat: 0 };
+    if (!S.data) S.data = { today: KT.today(), entries: [], logs: [], goalFat: 0 };
     render();
   });
 }

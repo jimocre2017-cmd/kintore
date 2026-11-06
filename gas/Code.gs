@@ -712,7 +712,7 @@ function syncOps(ops) {
       else if (op.type === 'cardioCourseDel') cardioDeleteCourse(op.id);
       // 体組成（Body.gs）
       else if (op.type === 'bodySave') bodySave(op.entry);
-      else if (op.type === 'bodyDelete') bodyDelete(op.date);
+      else if (op.type === 'bodyDelete') bodyDelete(op.id || op.date);
       else if (op.type === 'bodyGoal') bodySetGoal(op.goal);
       // 食事（Meal.gs）
       else if (op.type === 'mealSave') mealSave(op.entry);

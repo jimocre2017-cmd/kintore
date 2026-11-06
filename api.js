@@ -322,23 +322,34 @@ var KT = (function () {
     return Promise.resolve(cardioLocal());
   }
 
-  /* ---------- 体組成：端末のデータ＋送信待ちの操作を重ねた表示用データ（日付が1日1件のID） ---------- */
+  /* ---------- 体組成：端末のデータ＋送信待ちの操作を重ねた表示用データ（1測定＝1件、IDで上書き） ---------- */
   var BODY_OPS = { bodySave: 1, bodyDelete: 1, bodyGoal: 1 };
+  // 端末に残っている古い形式（日ごとの logs だけ）も、測定1件ずつの entries に直して使う
+  function bodyEntries(v) {
+    if (!v.entries) v.entries = (v.logs || []).map(function (l) { var e = clone(l); e.id = 'L' + l.date; e.time = ''; e.tags = []; delete e.count; delete e.range; return e; });
+    return v.entries;
+  }
   function bodyApplyOp(v, op, pending) {
+    var E = bodyEntries(v);
     if (op.type === 'bodySave') {
       var e = clone(op.entry);
+      if (!e.id) e.id = 'L' + e.date;
+      if (!e.tags) e.tags = [];
       if (pending) e.pending = true;
-      for (var i = v.logs.length - 1; i >= 0; i--) if (v.logs[i].date === e.date) v.logs.splice(i, 1);
-      v.logs.push(e);
+      for (var i = E.length - 1; i >= 0; i--) if (E[i].id === e.id) E.splice(i, 1);
+      E.push(e);
     } else if (op.type === 'bodyDelete') {
-      for (var j = v.logs.length - 1; j >= 0; j--) if (v.logs[j].date === op.date) v.logs.splice(j, 1);
+      var key = op.id || op.date, byDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(key);
+      for (var j = E.length - 1; j >= 0; j--) if (byDate ? E[j].date === key : E[j].id === key) E.splice(j, 1);
     } else if (op.type === 'bodyGoal') v.goalFat = Number(op.goal) || 0;
   }
   function bodyLocal() {
-    var v = clone(LS.get('kt_body', null) || { today: today(), logs: [], goalFat: 0 });
+    var v = clone(LS.get('kt_body', null) || { today: today(), entries: [], goalFat: 0 });
     v.today = today();
+    bodyEntries(v);
     queue().forEach(function (op) { if (BODY_OPS[op.type]) bodyApplyOp(v, op, true); });
-    v.logs.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+    v.entries = BodyLib.sortEntries(v.entries);
+    v.logs = BodyLib.daily(v.entries); // 日ごとの平均
     return v;
   }
   function bodyEnqueue(op) {
@@ -444,15 +455,16 @@ var KT = (function () {
     bodySave: function (entry) {
       entry = clone(entry);
       if (!entry.date) return Promise.reject(new Error('日付が正しくありません'));
+      if (!entry.id) entry.id = uuid();
       return bodyEnqueue({ qid: uuid(), type: 'bodySave', entry: entry });
     },
-    bodyDelete: function (date) {
+    bodyDelete: function (id) {
       // まだ送っていない新規記録なら取り消すだけでよい
-      var q = queue().filter(function (op) { return !(op.type === 'bodySave' && op.entry.date === date); });
-      var onServer = (LS.get('kt_body', null) || { logs: [] }).logs.some(function (l) { return l.date === date; });
+      var q = queue().filter(function (op) { return !(op.type === 'bodySave' && op.entry.id === id); });
+      var onServer = bodyEntries(LS.get('kt_body', null) || { entries: [] }).some(function (e) { return e.id === id; });
       if (q.length !== queue().length && !onServer) { setQueue(q); return Promise.resolve(bodyLocal()); }
       setQueue(q);
-      return bodyEnqueue({ qid: uuid(), type: 'bodyDelete', date: date });
+      return bodyEnqueue({ qid: uuid(), type: 'bodyDelete', id: id });
     },
     bodySetGoal: function (goal) { return bodyEnqueue({ qid: uuid(), type: 'bodyGoal', goal: Number(goal) || 0 }); },
 

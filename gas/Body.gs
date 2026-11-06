@@ -1,40 +1,95 @@
 /**
  * 体組成（体重計の数値）の記録 - バックエンド
  * スプレッドシート：体組成ログ（初回の呼び出し時に自動で作られる）
- * 1日1件。同じ日付で保存し直すと上書きされる（日付がID）ので、オフライン中の操作を何度送り直しても安全。
+ * 1日に何回でも測れる（朝・昼・晩など）。1測定＝1行で、ID（と時刻）を持つ。同じIDで保存し直すと上書きされるので、
+ * オフライン中の操作を何度送り直しても安全。日ごとの平均は bodyGet が計算して返す（グラフ・比較・AI分析は日平均で見る）。
+ * 以前の「1日1件」の行（IDなし）は 'L'+日付 のIDとして扱う。
  * 項目はオムロンの体重計の表示に合わせている（体重・体脂肪率・骨格筋率・BMI・基礎代謝・内臓脂肪レベル）。
  */
 
 var BSH = '体組成ログ';
-var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時'];
+var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング'];
+// 測定のタイミング・条件（複数選べる）。同じ条件どうしで比べると体重・体脂肪率のブレが小さくなる
+var BTAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
 var BODY_READY = false;
 
 function ensureBody_() {
   if (BODY_READY) return;
   var ss = ss_();
-  var sh = ss.getSheetByName(BSH), created = false;
+  var sh = ss.getSheetByName(BSH), created = false, hadCols = true;
   if (!sh) { sh = ss.insertSheet(BSH); created = true; }
+  else hadCols = sh.getLastColumn() >= 13 && String(sh.getRange(1, 13).getValue()) === 'タイミング';
   sh.getRange(1, 1, 1, BHEAD.length).setValues([BHEAD]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
   sh.setFrozenRows(1);
   // 日付・登録日時は文字列のまま保存する（シートが日付に自動変換しないように）
-  if (created) [1, 10].forEach(function (c) { sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('@'); });
+  if (created) [1, 10, 11, 12, 13].forEach(function (c) { sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('@'); });
+  else if (!hadCols) [11, 12, 13].forEach(function (c) { sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('@'); }); // 旧シートにID・時刻・タイミングの列を足す
   BODY_READY = true;
 }
 
 function bNum_(v) { return v === '' || v === null || v === undefined ? null : Number(v); }
 
+function bTime_(v) {
+  if (v instanceof Date) return Utilities.formatDate(v, TZ, 'HH:mm');
+  var m = String(v == null ? '' : v).trim().match(/^(\d{1,2}):(\d{2})/);
+  return m ? ('0' + m[1]).slice(-2) + ':' + m[2] : '';
+}
+
+function bTags_(v) {
+  var a = Array.isArray(v) ? v : String(v == null ? '' : v).split(/[,、]/), out = [];
+  a.forEach(function (t) { t = String(t).trim(); if (BTAGS.indexOf(t) >= 0 && out.indexOf(t) < 0) out.push(t); });
+  return out;
+}
+
 function bodyObj_(r) {
+  var date = ymd_(r[0]);
   return {
-    date: ymd_(r[0]), weight: bNum_(r[1]), fat: bNum_(r[2]), muscle: bNum_(r[3]), bmi: bNum_(r[4]),
+    id: String(r[10] || '') || ('L' + date), time: bTime_(r[11]), tags: bTags_(r[12]), date: date,
+    weight: bNum_(r[1]), fat: bNum_(r[2]), muscle: bNum_(r[3]), bmi: bNum_(r[4]),
     bmr: bNum_(r[5]), visceral: bNum_(r[6]), height: bNum_(r[7]), memo: String(r[8] || '')
   };
 }
 
+function bodySort_(entries) {
+  return entries.sort(function (a, b) {
+    if (a.date !== b.date) return a.date < b.date ? 1 : -1;
+    if (a.time !== b.time) return a.time < b.time ? 1 : -1;
+    return a.id < b.id ? 1 : (a.id > b.id ? -1 : 0);
+  });
+}
+
+/** 日ごとの平均（body-lib.js の BodyLib.daily と同じ計算）。新しい日が先頭 */
+function bodyDaily_(entries, tag) {
+  var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  bodySort_(entries.slice()).forEach(function (e) {
+    if (tag && e.tags.indexOf(tag) < 0) return;
+    if (!byDate[e.date]) { byDate[e.date] = []; order.push(e.date); }
+    byDate[e.date].push(e);
+  });
+  return order.map(function (date) {
+    var list = byDate[date].slice().reverse(), out = { date: date, count: list.length, height: null, memo: '', range: {} }, memos = [];
+    F.forEach(function (f) {
+      var vals = list.map(function (e) { return e[f]; }).filter(function (x) { return x !== null; });
+      if (!vals.length) { out[f] = null; return; }
+      var sum = vals.reduce(function (a, b) { return a + b; }, 0);
+      out[f] = f === 'bmr' ? Math.round(sum / vals.length) : r1_(sum / vals.length);
+      out.range[f] = [Math.min.apply(null, vals), Math.max.apply(null, vals)];
+    });
+    list.forEach(function (e) { if (e.height !== null) out.height = e.height; if (e.memo) memos.push(e.memo); });
+    out.memo = memos.join(' / ');
+    return out;
+  });
+}
+
+function bodyEntries_() {
+  return bodySort_(rows_(BSH).filter(function (r) { return String(r[0]).trim() !== ''; }).map(bodyObj_));
+}
+
+// entries＝測定1回ごと（新しい順）、logs＝日ごとの平均（新しい順）
 function bodyGet() {
   ensureBody_();
-  var logs = rows_(BSH).filter(function (r) { return String(r[0]).trim() !== ''; }).map(bodyObj_);
-  logs.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
-  return { today: today_(), logs: logs, goalFat: goalFat_() };
+  var entries = bodyEntries_();
+  return { today: today_(), entries: entries, logs: bodyDaily_(entries), goalFat: goalFat_(), tags: BTAGS };
 }
 
 // 目標の体脂肪率（%）。スクリプトのプロパティに保存。未設定なら 0（目標なし）
@@ -65,6 +120,8 @@ function bodySave(p) {
   p = p || {};
   var date = ymd_(p.date);
   if (!date) throw new Error('日付が正しくありません');
+  var id = String(p.id || '').trim() || ('L' + date); // IDなし（旧版の送信待ち）は、その日の旧1件を上書きする
+  var time = bTime_(p.time), tags = bTags_(p.tags);
   if (toDays_(date) > toDays_(today_())) throw new Error('未来の日付は記録できません');
   var weight = bVal_(p.weight, '体重', 20, 300, 2);
   var fat = bVal_(p.fat, '体脂肪率', 1, 70, 1);
@@ -82,33 +139,38 @@ function bodySave(p) {
   try {
     var sh = sheet_(BSH), last = sh.getLastRow(), rowIdx = 0, created = '';
     if (last >= 2) {
-      var ds = sh.getRange(2, 1, last - 1, 1).getValues();
-      for (var i = 0; i < ds.length; i++) if (ymd_(ds[i][0]) === date) { rowIdx = i + 2; break; }
+      var ds = sh.getRange(2, 1, last - 1, 11).getValues();
+      for (var i = 0; i < ds.length; i++) if (bodyObj_(ds[i].concat([''])).id === id) { rowIdx = i + 2; break; }
       if (rowIdx) created = sh.getRange(rowIdx, 10).getValue();
     }
     if (!created) created = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss');
     function c(v) { return v === null ? '' : v; }
-    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created];
+    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(',')];
     if (rowIdx) sh.getRange(rowIdx, 1, 1, row.length).setValues([row]);
     else sh.getRange(Math.max(last, 1) + 1, 1, 1, row.length).setValues([row]);
     invalidate_(BSH);
   } finally {
     lock.releaseLock();
   }
-  return date;
+  return id;
 }
 
-function bodyDelete(date) {
+// id を渡すとその1測定を、日付（yyyy/MM/dd）を渡すとその日の測定すべてを削除する（旧版の送信待ち用）
+function bodyDelete(key) {
   ensureBody_();
-  date = ymd_(date);
-  if (!date) return true;
+  key = String(key == null ? '' : key).trim();
+  if (!key) return true;
+  var byDate = /^\d{4}\/\d{1,2}\/\d{1,2}$/.test(key) ? ymd_(key) : '';
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     var sh = sheet_(BSH), last = sh.getLastRow();
     if (last >= 2) {
-      var ds = sh.getRange(2, 1, last - 1, 1).getValues();
-      for (var i = ds.length - 1; i >= 0; i--) if (ymd_(ds[i][0]) === date) sh.deleteRow(i + 2);
+      var ds = sh.getRange(2, 1, last - 1, 11).getValues();
+      for (var i = ds.length - 1; i >= 0; i--) {
+        var o = bodyObj_(ds[i].concat(['']));
+        if (byDate ? o.date === byDate : o.id === key) sh.deleteRow(i + 2);
+      }
     }
     invalidate_(BSH);
   } finally {
@@ -120,10 +182,11 @@ function bodyDelete(date) {
 /** 動作確認用：エディタから実行して、シートが作られ読み書きできるか確かめる（テスト記録は削除される） */
 function bodyTest() {
   var d = '2000/01/01';
-  bodySave({ date: d, weight: 66.3, fat: 25.4, muscle: 33.4, bmr: 1540, visceral: 10, height: 164 });
+  bodySave({ id: 'test-a', time: '07:30', date: d, weight: 66.3, fat: 25.4, muscle: 33.4, bmr: 1540, visceral: 10, height: 164 });
+  bodySave({ id: 'test-b', time: '21:00', date: d, weight: 67.1, fat: 24.6 });
   var g = bodyGet().logs.filter(function (x) { return x.date === d; })[0];
-  Logger.log('テスト記録: ' + JSON.stringify(g));
-  bodyDelete(d);
+  Logger.log('テスト記録（2回の平均）: ' + JSON.stringify(g));
+  bodyDelete('test-a'); bodyDelete('test-b');
   Logger.log('テスト記録を削除しました');
 }
 
@@ -203,15 +266,30 @@ function bodyCompare_(logs, today) {
   return out;
 }
 
+/** 条件（タイミング）ごとの直近28日の平均。同じ条件どうしの比較用。測定が無い条件は省く */
+function bodyConditions_(entries, today) {
+  var from = addDays_(today, -27), out = [];
+  BTAGS.forEach(function (t) {
+    var list = entries.filter(function (e) { return e.date >= from && e.date <= today && e.tags.indexOf(t) >= 0; });
+    if (!list.length) return;
+    function avg(f) { var v = list.map(function (e) { return e[f]; }).filter(function (x) { return x !== null; }); return v.length ? r1_(v.reduce(function (a, b) { return a + b; }, 0) / v.length) : null; }
+    out.push({ condition: t, count: list.length, weightAvg: avg('weight'), fatAvg: avg('fat'), muscleAvg: avg('muscle'), latestDate: list[0].date, latestWeight: list[0].weight });
+  });
+  return out;
+}
+
 /**
  * AIトレーナー（AiTrainer.gs）に渡す体組成の要約。記録が無い・読めない場合は null
  * 最新値、約4週前との差、直近8週の週ごとの平均、目標体脂肪率に向けた試算（plan）
  */
 function aiBody_(today) {
   try {
-    var logs = bodyGet().logs; // 新しい順
+    var g = bodyGet(), logs = g.logs; // 日ごとの平均（新しい順）
     if (!logs.length) return null;
-    var latest = logs[0];
+    var latest = logs[0], entries = g.entries;
+    var dayList = entries.filter(function (e) { return e.date === latest.date; }).reverse().map(function (e) {
+      return { time: e.time || null, tags: e.tags, weight: e.weight, fat: e.fat, muscle: e.muscle, visceral: e.visceral };
+    });
     var weekStart = addDays_(today, -((dow_(today) + 6) % 7)), weeks = [], w;
     for (w = 7; w >= 0; w--) weeks.push(addDays_(weekStart, -7 * w));
     function avgBy(field) {
@@ -226,7 +304,9 @@ function aiBody_(today) {
     logs.forEach(function (l) { if (l.date <= target && (!ref || l.date > ref.date)) ref = l; });
     function diff(f) { return ref && latest[f] !== null && ref[f] !== null ? r1_(latest[f] - ref[f]) : null; }
     return {
-      latest: latest,
+      latest: latest, // 日平均（count＝その日の測定回数、range＝その日の最小・最大）
+      conditionSummary: bodyConditions_(entries, today),
+      latestDayMeasurements: dayList, // 最新の日の測定を時刻順に（朝→夜の変化を見る）
       changeSince4WeeksAgo: ref ? { from: ref.date, weight: diff('weight'), fat: diff('fat'), muscle: diff('muscle') } : null,
       last8Weeks: { weekStarts: weeks, weightAvg: avgBy('weight'), fatAvg: avgBy('fat'), muscleAvg: avgBy('muscle') },
       comparisons: bodyCompare_(logs, today),
