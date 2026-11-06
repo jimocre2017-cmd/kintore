@@ -8,6 +8,8 @@
 var MSH = '食事ログ';
 var MHEAD = ['ID', '日付', '時刻', '区分', '内容', 'kcal', 'たんぱく質g', '脂質g', '炭水化物g', '内訳', '見積もりメモ', '登録日時'];
 var MEAL_TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
+var MFSH = '食事品目';
+var MFHEAD = ['ID', '名前', '内容', 'kcal', 'たんぱく質g', '脂質g', '炭水化物g', '内訳', '登録日時'];
 var MEAL_READY = false;
 
 function ensureMeal_() {
@@ -18,7 +20,85 @@ function ensureMeal_() {
   sh.getRange(1, 1, 1, MHEAD.length).setValues([MHEAD]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
   sh.setFrozenRows(1);
   if (created) [1, 2, 3, 12].forEach(function (c) { sh.getRange(1, c, sh.getMaxRows(), 1).setNumberFormat('@'); });
+  var fs = ss.getSheetByName(MFSH);
+  if (!fs) fs = ss.insertSheet(MFSH);
+  fs.getRange(1, 1, 1, MFHEAD.length).setValues([MFHEAD]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+  fs.setFrozenRows(1);
   MEAL_READY = true;
+}
+
+/* ============================================================
+ * 品目（よく食べるもの・オリジナルの組み合わせ）：名前で内容と栄養を覚えておく
+ * 例：「オリジナルプロテインシェイク」＝プロテイン30g＋牛乳150g＋ヨーグルト100g＋ポカリ粉末12g
+ * ============================================================ */
+
+function foodObj_(r) {
+  return { id: String(r[0]), name: String(r[1] || ''), text: String(r[2] || ''), kcal: mNum_(r[3]), protein: mNum_(r[4]), fat: mNum_(r[5]), carbs: mNum_(r[6]), items: String(r[7] || '') };
+}
+
+function mealFoods_() {
+  ensureMeal_();
+  return rows_(MFSH).filter(function (r) { return String(r[0]).trim() !== ''; }).map(foodObj_)
+    .sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+}
+
+function mealFoodSave(p) {
+  ensureMeal_();
+  p = p || {};
+  var id = String(p.id || '').trim();
+  if (!id) throw new Error('IDがありません');
+  var name = String(p.name || '').replace(/\s+/g, ' ').trim().slice(0, 30);
+  if (!name) throw new Error('品目の名前を入力してください');
+  function n(v, label, max) {
+    var x = v === '' || v === null || v === undefined ? 0 : Number(v);
+    if (isNaN(x) || x < 0 || x > max) throw new Error(label + 'は0〜' + max + 'で入力してください');
+    return Math.round(x * 10) / 10;
+  }
+  var kcal = Math.round(n(p.kcal, 'カロリー', 6000));
+  if (!kcal) throw new Error('カロリーを入力してください（先にAIで見積もるか、数値を入れてください）');
+  var row = [id, name, String(p.text || '').replace(/\r\n?/g, '\n').trim().slice(0, 600), kcal,
+    n(p.protein, 'たんぱく質', 500), n(p.fat, '脂質', 500), n(p.carbs, '炭水化物', 1000), String(p.items || '').slice(0, 1500), ''];
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_(MFSH), last = sh.getLastRow(), rowIdx = 0, sameName = 0;
+    if (last >= 2) {
+      var vs = sh.getRange(2, 1, last - 1, 2).getValues();
+      for (var i = 0; i < vs.length; i++) {
+        if (String(vs[i][0]) === id) rowIdx = i + 2;
+        else if (String(vs[i][1]) === name && !sameName) sameName = i + 2;
+      }
+    }
+    // 同じ名前の品目があれば、そこを上書きする（名前が品目の識別になる）
+    if (!rowIdx && sameName) { rowIdx = sameName; row[0] = String(sh.getRange(sameName, 1).getValue()); }
+    row[8] = rowIdx ? sh.getRange(rowIdx, 9).getValue() || Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss') : Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss');
+    if (rowIdx) sh.getRange(rowIdx, 1, 1, row.length).setValues([row]);
+    else sh.getRange(Math.max(last, 1) + 1, 1, 1, row.length).setValues([row]);
+    invalidate_(MFSH);
+    id = row[0];
+  } finally {
+    lock.releaseLock();
+  }
+  return id;
+}
+
+function mealFoodDelete(id) {
+  ensureMeal_();
+  id = String(id || '');
+  if (!id) return true;
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_(MFSH), last = sh.getLastRow();
+    if (last >= 2) {
+      var ids = sh.getRange(2, 1, last - 1, 1).getValues();
+      for (var i = ids.length - 1; i >= 0; i--) if (String(ids[i][0]) === id) sh.deleteRow(i + 2);
+    }
+    invalidate_(MFSH);
+  } finally {
+    lock.releaseLock();
+  }
+  return true;
 }
 
 function mNum_(v) { var n = Number(v); return isNaN(n) ? 0 : n; }
@@ -53,7 +133,7 @@ function mealGet() {
   var from = addDays_(today_(), -120);
   var logs = rows_(MSH).filter(function (r) { return String(r[0]).trim() !== '' && ymd_(r[1]) >= from; }).map(mealObj_);
   logs.sort(function (a, b) { return a.date === b.date ? (a.time < b.time ? 1 : -1) : (a.date < b.date ? 1 : -1); });
-  return { today: today_(), logs: logs, goals: mealGoals_(), suggest: mealSuggest_() };
+  return { today: today_(), logs: logs, goals: mealGoals_(), suggest: mealSuggest_(), foods: mealFoods_() };
 }
 
 function mealSave(p) {
@@ -147,6 +227,7 @@ function mealEstimateSystem_() {
     '- 数値は小数1桁まで。たんぱく質・脂質・炭水化物はグラム。',
     '- 推定の確からしさ confidence は「高」「中」「低」のいずれか。量が曖昧、外食、品名が不明なら「中」または「低」にし、note に、何がぶれやすいか（例：油の量、ご飯の量）を1〜2文で書く。',
     '- 食事と無関係な内容や、読み取れない内容のときは items を空にし、note に理由を書く。',
+    '- 「登録済みの品目」が渡された場合、食事の内容にその名前（またはほぼ同じ呼び名）が出てきたら、その品目に登録された栄養をそのまま使う（推測し直さない）。「半分」「2杯」「1.5倍」など量の指定があれば、その倍率で栄養を掛ける。登録済みの品目の行は name に品目名を使い、amount に量（例：1回分、×2）を書く。登録済みの品目と、それ以外の食品が混ざっていれば、それ以外だけを見積もる。',
     '- 日本語で、簡潔に。'
   ].join('\n');
 }
@@ -198,7 +279,11 @@ function mealEstimate(req) {
   if (text.length < 2) throw new Error('食事の内容を入力してください');
   if (text.length > 600) throw new Error('食事の内容は600文字以内で入力してください');
   var type = MEAL_TYPES.indexOf(req.type) >= 0 ? req.type : 'その他';
-  var res = gemini_(mealEstimateSystem_(), '区分：' + type + '\n食事の内容：\n' + text, mealEstimateSchema_());
+  var foods = mealFoods_().slice(0, 60);
+  var foodTxt = foods.length ? '\n\n登録済みの品目（1回分の栄養）：\n' + foods.map(function (f) {
+    return '- ' + f.name + '：' + f.kcal + 'kcal、たんぱく質' + f.protein + 'g、脂質' + f.fat + 'g、炭水化物' + f.carbs + 'g' + (f.text ? '（内容：' + f.text.replace(/\n/g, ' ').slice(0, 120) + '）' : '');
+  }).join('\n') : '';
+  var res = gemini_(mealEstimateSystem_(), '区分：' + type + '\n食事の内容：\n' + text + foodTxt, mealEstimateSchema_());
   var out = mealNormalize_(res);
   if (!out.items.length) throw new Error(out.note || '食事の内容から栄養を見積もれませんでした。食べたものをもう少し具体的に書いてください');
   out.items.forEach(function (it) { it.line = it.name + (it.amount ? '（' + it.amount + '）' : '') + ' ' + it.kcal + 'kcal P' + it.protein + ' F' + it.fat + ' C' + it.carbs; });

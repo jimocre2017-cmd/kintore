@@ -501,7 +501,7 @@ function showSetup(msg){
 // 古い api.js が端末に残っていると「不明な操作：bodyInit」になる。保存済みの画面ファイルを消して1回だけ読み込み直す
 function healStaleCache(e){
   if (!e || !/^不明な操作：body(Init|Cached|Save|Delete|SetGoal)$/.test(e.message)) return false;
-  try { if (sessionStorage.getItem('kt_heal')) return false; sessionStorage.setItem('kt_heal', '1'); } catch (x) { return false; }
+  try { if (sessionStorage.getItem('kt_heal_body')) return false; sessionStorage.setItem('kt_heal_body', '1'); } catch (x) { return false; }
   var done = function(){ location.reload(); };
   if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(done, done);
   else done();

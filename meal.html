@@ -196,6 +196,10 @@ header .sp{margin-left:auto}
 .wk .c.zero i{background:var(--line);height:2px!important}
 .wk .c span{font-size:10px;color:var(--ink-3);margin-top:3px}
 .wk .gl2{position:absolute;left:0;right:0;border-top:1.5px dashed var(--good);pointer-events:none}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chips button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:600}
+.chips button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.f input[type=text]{height:46px}
 .split{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:6px 0}
 .split i{display:block;height:100%}
 </style>
@@ -216,6 +220,7 @@ header .sp{margin-left:auto}
   <section class="actions"><button class="btn primary wide" id="addBtn">＋ 食事を記録（AIが栄養を見積もります）</button></section>
   <section class="card hist" id="listCard"></section>
   <section class="card" id="weekCard"></section>
+  <section class="card"><button class="btn" style="width:100%" id="foodsBtn">覚えた品目の管理</button></section>
   <section class="card"><button class="btn" style="width:100%" id="goalBtn">1日の目標を設定</button></section>
 </div>
 
@@ -226,6 +231,8 @@ header .sp{margin-left:auto}
     <div class="f"><label>時刻</label><input type="time" id="fTime"></div>
   </div>
   <div class="f"><label>区分</label><div class="seg" id="fType" style="flex-wrap:wrap"></div></div>
+  <div class="f" id="fFoodsBox" style="display:none"><label>覚えた品目（タップで入力）</label><div class="chips" id="fFoods"></div>
+    <div class="f2" id="fMulBox" style="display:none;margin-top:6px"><div class="f" style="margin:0"><label>量（倍率）</label><input type="number" id="fMul" inputmode="decimal" step="0.5" min="0.1" max="10" value="1"></div><div class="hint" style="align-self:end" id="fMulName"></div></div></div>
   <div class="f"><label>食べたもの（ざっくりでOK）</label><textarea id="fText" rows="3" maxlength="600" placeholder="例：トースト2枚、目玉焼き（卵2個）、ブラックコーヒー／ コンビニの鮭おにぎり2個とサラダチキン／ ビール350ml×2、枝豆、唐揚げ5個"></textarea>
     <div class="hint">量が分かれば書いてください。書かなければ標準的な1人前で見積もります。</div></div>
   <div class="rowbtns" style="margin:-4px 0 12px"><button class="btn primary small" id="fEst" style="flex:1">🤖 AIで栄養を見積もる</button></div>
@@ -236,6 +243,8 @@ header .sp{margin-left:auto}
     <div class="f"><label>脂質（g）</label><input type="number" id="fF" inputmode="decimal" step="0.1" min="0" max="500"></div>
     <div class="f"><label>炭水化物（g）</label><input type="number" id="fC" inputmode="decimal" step="0.1" min="0" max="1000"></div>
   </div>
+  <div class="f" style="margin-bottom:8px"><label>この内容を品目として覚える（次から名前で入力できます）</label>
+    <div style="display:flex;gap:8px"><input type="text" id="fFoodName" maxlength="30" placeholder="例：オリジナルプロテインシェイク" style="flex:1"><button class="btn small" id="fFoodSave" type="button">覚える</button></div></div>
   <div class="hint" style="margin:-4px 0 12px" id="fHint">見積もりは概算です。分かっている数値があれば直して保存してください。圏外でも、数値を直接入れて保存できます。</div>
   <div class="mbtns"><button class="btn danger" id="fDel" style="display:none">削除</button><button class="btn primary" id="fSave">保存</button></div>
 </div></div>
@@ -250,6 +259,12 @@ header .sp{margin-left:auto}
   <div class="hint" id="gHint" style="margin-bottom:10px"></div>
   <div class="rowbtns" style="margin-bottom:10px"><button class="btn small" id="gFill">体組成から目安を入れる</button></div>
   <div class="mbtns"><button class="btn" id="gCancel">キャンセル</button><button class="btn primary" id="gSave">保存</button></div>
+</div></div>
+
+<div class="modal" id="foodsModal"><div class="box mgr">
+  <h2><span>覚えた品目</span><button class="x" id="foClose" aria-label="閉じる">✕</button></h2>
+  <div id="foList"></div>
+  <div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:8px">品目は、食事の入力画面の「この内容を品目として覚える」から追加します。同じ名前で覚え直すと上書きされます。食事の内容に品目の名前を書いてAIで見積もることもできます（例：「オリジナルプロテインシェイクを2杯」）。</div>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -357,7 +372,7 @@ function guessType(date){
 }
 function openForm(id){
   var d = S.data, ex = id ? d.logs.filter(function(l){ return l.id === id; })[0] : null;
-  S.form = { id: ex ? ex.id : uid(), edit: !!ex, items: ex ? ex.items : '', note: ex ? ex.note : '', type: ex ? ex.type : guessType(S.date), busy: false };
+  S.form = { foodId: null, base: null, id: ex ? ex.id : uid(), edit: !!ex, items: ex ? ex.items : '', note: ex ? ex.note : '', type: ex ? ex.type : guessType(S.date), busy: false };
   $('fTitle').textContent = ex ? '食事を編集' : '食事を記録';
   $('fDate').value = toInputDate(ex ? ex.date : S.date); $('fDate').max = toInputDate(d.today);
   $('fTime').value = ex ? ex.time : (S.date === d.today ? p2(new Date().getHours())+':'+p2(new Date().getMinutes()) : '');
@@ -369,6 +384,7 @@ function openForm(id){
   if (ex && ex.items) { box.style.display = ''; box.innerHTML = '<b>前回の見積もり</b><div style="white-space:pre-wrap">'+esc(ex.items)+'</div>'+(ex.note?'<div class="conf">'+esc(ex.note)+'</div>':''); }
   else { box.style.display = 'none'; box.innerHTML = ''; }
   $('fEst').textContent = '🤖 AIで栄養を見積もる';
+  $('fMulBox').style.display = 'none'; $('fFoodName').value = ''; renderFoodChips();
   $('fDel').style.display = ex ? '' : 'none'; $('fSave').style.gridColumn = ex ? '' : '1 / -1';
   $('formModal').classList.add('open');
   if (!ex) setTimeout(function(){ $('fText').focus(); }, 50);
@@ -383,6 +399,7 @@ $('fEst').onclick = function(){
   f.busy = true; $('fEst').disabled = true; $('fEst').textContent = '見積もり中…（数秒かかります）';
   KT.call('mealEstimate', { text: text, type: f.type }).then(function(r){
     if (S.form !== f) return;
+    f.base = null; f.foodId = null; $('fMulBox').style.display = 'none'; renderFoodChips();
     $('fKcal').value = r.total.kcal; $('fP').value = r.total.protein; $('fF').value = r.total.fat; $('fC').value = r.total.carbs;
     f.items = r.items.map(function(it){ return it.line; }).join('\n'); f.note = '確からしさ：'+r.confidence+(r.note?'　'+r.note:'');
     var box = $('fEstBox'); box.style.display = '';
@@ -390,7 +407,8 @@ $('fEst').onclick = function(){
       + '<div class="conf">確からしさ：<b>'+esc(r.confidence)+'</b>'+(r.note?'　'+esc(r.note):'')+'　下の数値は直せます。</div>';
     toast('見積もりました。内容を確認して保存してください');
   }, function(e){
-    toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : e.message, true);
+    if (healStaleCache(e)) { toast('画面を更新します…'); return; }
+    toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : (/^不明な操作/.test(e.message) ? e.message+'（画面が古いようです。アプリを閉じて開き直してください）' : e.message), true);
   }).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
 };
 function num(i){ var s = $(i).value.trim(); return s === '' ? 0 : Number(s); }
@@ -402,12 +420,70 @@ $('fSave').onclick = function(){
   if (e.text && !e.kcal && !f.edit) { if (!confirm('カロリーが未入力です。AIで見積もらずに保存しますか？')) return; }
   var chk = [['kcal','カロリー',6000],['protein','たんぱく質',500],['fat','脂質',500],['carbs','炭水化物',1000]];
   for (var i = 0; i < chk.length; i++) { var x = e[chk[i][0]]; if (isNaN(x) || x < 0 || x > chk[i][2]) { toast(chk[i][1]+'は0〜'+chk[i][2]+'で入力してください', true); return; } }
-  KT.call('mealSave', e).then(function(r){ S.data = r; S.date = e.date; closeForm(); render(); toast('保存しました'); }, function(er){ toast(er.message, true); });
+  KT.call('mealSave', e).then(function(r){ S.data = r; S.date = e.date; closeForm(); render(); toast('保存しました'); }, function(er){ if (healStaleCache(er)) return; toast(er.message, true); });
 };
 $('fDel').onclick = function(){
   var f = S.form; if (!f || !confirm('この食事の記録を削除しますか？')) return;
   KT.call('mealDelete', f.id).then(function(r){ S.data = r; closeForm(); render(); toast('削除しました'); }, function(er){ toast(er.message, true); });
 };
+
+/* ---- 覚えた品目 ---- */
+function foods(){ return (S.data && S.data.foods) || []; }
+function renderFoodChips(){
+  var F = foods(), f = S.form, box = $('fFoodsBox');
+  box.style.display = F.length ? '' : 'none';
+  $('fFoods').innerHTML = F.map(function(x){ return '<button type="button" data-id="'+esc(x.id)+'"'+(f && f.foodId===x.id?' class="on"':'')+'>'+esc(x.name)+'</button>'; }).join('');
+}
+function applyFood(id){
+  var f = S.form, x = foods().filter(function(y){ return y.id === id; })[0]; if (!f || !x) return;
+  f.foodId = id; f.base = x;
+  $('fMulBox').style.display = ''; $('fMul').value = 1; $('fMulName').textContent = x.name+'：1回分 '+x.kcal+'kcal';
+  fillFromFood(1); $('fFoodName').value = x.name;
+  renderFoodChips();
+}
+function fillFromFood(mul){
+  var f = S.form, x = f && f.base; if (!x) return;
+  mul = mul > 0 ? mul : 1;
+  function r(v, d){ var k = Math.pow(10, d); return Math.round(v * mul * k) / k; }
+  $('fKcal').value = Math.round(x.kcal * mul); $('fP').value = r(x.protein,1); $('fF').value = r(x.fat,1); $('fC').value = r(x.carbs,1);
+  $('fText').value = x.name + (mul !== 1 ? '（×'+mul+'）' : '');
+  f.items = x.items || ''; f.note = '登録済みの品目「'+x.name+'」'+(mul !== 1 ? '×'+mul : '');
+  var box = $('fEstBox');
+  if (f.items) { box.style.display = ''; box.innerHTML = '<b>品目の内訳（1回分）</b><div style="white-space:pre-wrap">'+esc(f.items)+'</div>'+(x.text?'<div class="conf">'+esc(x.text)+'</div>':''); }
+  else if (x.text) { box.style.display = ''; box.innerHTML = '<b>内容</b><div style="white-space:pre-wrap">'+esc(x.text)+'</div>'; }
+  else { box.style.display = 'none'; }
+}
+$('fFoods').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) applyFood(b.getAttribute('data-id')); });
+$('fMul').addEventListener('input', function(){ fillFromFood(Number($('fMul').value)); });
+$('fFoodSave').onclick = function(){
+  var f = S.form; if (!f) return;
+  var name = $('fFoodName').value.trim();
+  if (!name) { toast('品目の名前を入力してください', true); return; }
+  var kcal = num('fKcal');
+  if (!kcal) { toast('先にAIで見積もるか、カロリーなどを入力してください', true); return; }
+  var mul = f.base && Number($('fMul').value) > 0 ? Number($('fMul').value) : 1;
+  // 倍率を掛けた状態の数値は「1回分」に戻して覚える
+  function back(v){ return Math.round(v / mul * 10) / 10; }
+  var same = foods().filter(function(x){ return x.name === name; })[0];
+  if (same && !confirm('「'+name+'」はすでに登録されています。上書きしますか？')) return;
+  var food = { id: same ? same.id : (f.base && f.base.name === name ? f.base.id : undefined), name: name, text: f.base && f.base.name === name ? (f.base.text || '') : $('fText').value.trim(),
+    kcal: Math.round(kcal / mul), protein: back(num('fP')), fat: back(num('fF')), carbs: back(num('fC')), items: f.items || '' };
+  KT.call('mealSaveFood', food).then(function(r){ S.data = r; renderFoodChips(); toast('「'+name+'」を覚えました'); }, function(er){ if (healStaleCache(er)) return; toast(er.message, true); });
+};
+function renderFoodMgr(){
+  var F = foods();
+  $('foList').innerHTML = F.length ? F.map(function(x){
+    return '<div class="li"><span class="t">'+esc(x.name)+'<small>'+x.kcal+'kcal・P'+x.protein+' F'+x.fat+' C'+x.carbs+(x.text?'　'+esc(x.text.slice(0,40)):'')+'</small></span><button class="btn small danger" data-fd="'+esc(x.id)+'">削除</button></div>';
+  }).join('') : '<div class="empty">まだ品目がありません。</div>';
+}
+$('foodsBtn').onclick = function(){ renderFoodMgr(); $('foodsModal').classList.add('open'); };
+$('foClose').onclick = function(){ $('foodsModal').classList.remove('open'); };
+$('foList').addEventListener('click', function(e){
+  var b = e.target.closest('[data-fd]'); if (!b) return;
+  var x = foods().filter(function(y){ return y.id === b.getAttribute('data-fd'); })[0];
+  if (!confirm('品目「'+(x?x.name:'')+'」を削除しますか？（過去の食事の記録は変わりません）')) return;
+  KT.call('mealDeleteFood', b.getAttribute('data-fd')).then(function(r){ S.data = r; renderFoodMgr(); toast('削除しました'); }, function(er){ toast(er.message, true); });
+});
 
 /* ---- 目標 ---- */
 $('goalBtn').onclick = function(){
@@ -461,8 +537,8 @@ function showSetup(msg){
     + '<p>先に筋トレ記録の画面で設定を済ませてください。</p><p><a class="navlink" href="index.html">筋トレ記録を開く</a></p></div>';
 }
 function healStaleCache(e){
-  if (!e || !/^不明な操作：meal(Init|Cached|Save|Delete|SetGoals|Estimate)$/.test(e.message)) return false;
-  try { if (sessionStorage.getItem('kt_heal')) return false; sessionStorage.setItem('kt_heal', '1'); } catch (x) { return false; }
+  if (!e || !/^不明な操作：meal(Init|Cached|Save|Delete|SetGoals|Estimate|SaveFood|DeleteFood)$/.test(e.message)) return false;
+  try { if (sessionStorage.getItem('kt_heal_meal')) return false; sessionStorage.setItem('kt_heal_meal', '1'); } catch (x) { return false; }
   var done = function(){ location.reload(); };
   if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(done, done);
   else done();

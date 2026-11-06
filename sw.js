@@ -2,7 +2,7 @@
  * 画面ファイルを端末に保存し、オフラインでも開けるようにする。
  * 通信（Google Apps Script への送信）は扱わない（api.js 側で送信待ちとして保存）。
  */
-var VERSION = 'kt-v21';
+var VERSION = 'kt-v23';
 var FILES = ['./', './index.html', './analytics.html', './cardio.html', './cardio-lib.js', './body.html', './body-lib.js', './meal.html', './meal-lib.js', './api.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -15,7 +15,8 @@ self.addEventListener('activate', function (e) {
   }).then(function () { return self.clients.claim(); }));
 });
 
-// 同じサイトのファイル：保存版をすぐ返し、裏で最新版を取りにいく（次回から反映）
+// 同じサイトのファイル：オンラインなら最新版を取りにいく（3秒待っても来なければ保存版）。オフラインは保存版。
+// ※以前は「保存版を先に返す」方式で、更新後も古い画面が出ることがあったため変更
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
@@ -23,11 +24,13 @@ self.addEventListener('fetch', function (e) {
   if (url.origin !== self.location.origin) return;
   e.respondWith(caches.open(VERSION).then(function (cache) {
     return cache.match(req, { ignoreSearch: true }).then(function (hit) {
-      var net = fetch(req).then(function (res) {
+      var net = fetch(req, { cache: 'no-cache' }).then(function (res) {
         if (res && res.ok) cache.put(req, res.clone());
         return res;
-      }).catch(function () { return hit; });
-      return hit || net;
+      });
+      if (!hit) return net;
+      var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(hit); }, 3000); });
+      return Promise.race([net.catch(function () { return hit; }), timeout]);
     });
   }));
 });
