@@ -147,7 +147,7 @@ header .sp{margin-left:auto}
 .toast.err{background:var(--danger);color:#fff}
 .setup{max-width:560px;margin:40px auto;padding:0 16px;line-height:1.8}
 
-#fTabs button{font-size:12px;padding:0 2px}
+#fTabs button,#mTabs button{font-size:12px;padding:0 2px}
 .chart{width:100%;height:auto;display:block}
 .chart text{fill:var(--ink-3);font-size:10px}
 .chart .ln{fill:none;stroke:var(--accent);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
@@ -163,6 +163,12 @@ header .sp{margin-left:auto}
 .tbl td{text-align:right;padding:8px 4px;border-top:1px solid var(--line)}
 .tbl th:first-child,.tbl td:first-child{text-align:left}
 .tbl tr.row{cursor:pointer}
+.mgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.mini{background:var(--surface-2);border-radius:12px;padding:8px 8px 4px;min-width:0}
+.mini .mh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px}
+.mini .mh b{font-size:17px}
+.mini .md{font-size:11px;margin-bottom:2px}
+.mini .chart{margin-top:2px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 </style>
 </head>
@@ -172,6 +178,7 @@ header .sp{margin-left:auto}
   <span class="date" id="dateLbl"></span>
   <span class="sp"></span>
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
+  <a class="navlink" href="meal.html">食事</a>
   <a class="navlink" href="index.html">← 筋トレ</a>
 </header>
 
@@ -180,6 +187,7 @@ header .sp{margin-left:auto}
   <section class="stats" id="stats"></section>
   <section class="actions"><button class="btn primary wide" id="addBtn">＋ 今日の数値を記録</button></section>
   <section class="card" id="chartCard"><div class="loading">読み込み中…</div></section>
+  <section class="card" id="cmpCard"></section>
   <section class="card" id="planCard"></section>
   <section class="card" id="histCard"></section>
 </div>
@@ -235,7 +243,7 @@ var FIELDS = [
   { k: 'bmr', label: '基礎代謝', unit: 'kcal', d: 0 },
   { k: 'visceral', label: '内臓脂肪', unit: '', d: 1, goalDown: true }
 ];
-var S = { data: null, field: 'weight', range: 90, form: null, loadErr: null };
+var S = { data: null, mode: 'single', field: 'weight', range: 90, form: null, loadErr: null };
 
 function latest(){ return S.data && S.data.logs.length ? S.data.logs[0] : null; }
 // 項目ごとに、記録がある最新の値
@@ -244,7 +252,7 @@ function lastOf(k){ var L = S.data.logs; for (var i = 0; i < L.length; i++) if (
 function render(){
   if (!S.data) return;
   $('dateLbl').textContent = S.data.today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(S.data.today)+'）';
-  renderMsg(); renderStats(); renderChart(); renderPlan(); renderHist();
+  renderMsg(); renderStats(); renderChart(); renderCmp(); renderPlan(); renderHist();
 }
 function renderMsg(){
   var h = '';
@@ -266,40 +274,115 @@ function renderStats(){
 }
 
 /* ---- 推移グラフ ---- */
+var COLORS = { weight: '#2a78d6', fat: '#d9534f', muscle: '#1a9e5c', bmi: '#8e6bd1', bmr: '#d98a1f', visceral: '#c2478f' };
 function renderChart(){
-  var d = S.data, F = FIELDS.filter(function(f){ return f.k === S.field; })[0];
-  var h = '<div class="tabs" id="fTabs">'+FIELDS.map(function(f){ return '<button data-k="'+f.k+'"'+(f.k===S.field?' class="on"':'')+'>'+f.label+'</button>'; }).join('')+'</div>';
+  var d = S.data;
+  var h = '<div class="tabs" id="mTabs">'+[['single','1項目'],['all','全項目を並べる'],['overlay','重ねて比較']].map(function(m){ return '<button data-m="'+m[0]+'"'+(m[0]===S.mode?' class="on"':'')+'>'+m[1]+'</button>'; }).join('')+'</div>';
+  if (S.mode === 'single') h += '<div class="tabs" id="fTabs">'+FIELDS.map(function(f){ return '<button data-k="'+f.k+'"'+(f.k===S.field?' class="on"':'')+'>'+f.label+'</button>'; }).join('')+'</div>';
   h += '<div class="tabs" id="rTabs">'+[[30,'30日'],[90,'90日'],[365,'1年'],[3650,'全期間']].map(function(r){ return '<button data-r="'+r[0]+'"'+(r[0]===S.range?' class="on"':'')+'>'+r[1]+'</button>'; }).join('')+'</div>';
-  var pts = BL.series(d.logs, F.k, d.today, S.range);
-  if (pts.length < 2) h += '<div class="empty">'+F.label+'の記録が2件以上たまると、推移が表示されます。</div>';
-  else h += lineSvg(pts, F);
+  if (S.mode === 'single') {
+    var F = FIELDS.filter(function(f){ return f.k === S.field; })[0], pts = BL.series(d.logs, F.k, d.today, S.range);
+    h += pts.length < 2 ? '<div class="empty">'+F.label+'の記録が2件以上たまると、推移が表示されます。</div>' : lineSvg(pts, F, false);
+  } else if (S.mode === 'all') {
+    h += '<div class="mgrid">';
+    FIELDS.forEach(function(f){
+      var pts = BL.series(d.logs, f.k, d.today, S.range), last = pts.length ? pts[pts.length-1].v : null;
+      var df = pts.length > 1 ? BL.r1(last - pts[0].v) : null;
+      var good = df == null || df === 0 ? null : (f.goalDown ? df < 0 : df > 0);
+      h += '<div class="mini"><div class="mh"><span>'+f.label+'</span><b class="num">'+(last == null ? '－' : last+(f.unit||''))+'</b></div>'
+        + '<div class="md num" style="color:'+(good == null ? 'var(--ink-3)' : (good ? 'var(--good)' : 'var(--danger)'))+'">'+(df == null ? '比べる記録なし' : '期間の変化 '+(df > 0 ? '+' : '')+df.toFixed(f.d)+(f.unit||''))+'</div>'
+        + (pts.length < 2 ? '<div class="empty" style="padding:22px 0">記録待ち</div>' : lineSvg(pts, f, true)) + '</div>';
+    });
+    h += '</div>';
+  } else {
+    h += overlaySvg(d);
+  }
   $('chartCard').innerHTML = h;
-  $('fTabs').onclick = function(e){ var b = e.target.closest('button'); if (b) { S.field = b.getAttribute('data-k'); renderChart(); } };
+  $('mTabs').onclick = function(e){ var b = e.target.closest('button'); if (b) { S.mode = b.getAttribute('data-m'); renderChart(); } };
+  if ($('fTabs')) $('fTabs').onclick = function(e){ var b = e.target.closest('button'); if (b) { S.field = b.getAttribute('data-k'); renderChart(); } };
   $('rTabs').onclick = function(e){ var b = e.target.closest('button'); if (b) { S.range = +b.getAttribute('data-r'); renderChart(); } };
 }
-function lineSvg(pts, F){
-  var W = 640, H = 220, pl = 40, pr = 12, pt = 14, pb = 26;
+function lineSvg(pts, F, small){
+  var W = small ? 300 : 640, H = small ? 110 : 220, pl = small ? 30 : 40, pr = 8, pt = small ? 8 : 14, pb = small ? 16 : 26;
   var vs = pts.map(function(p){ return p.v; }), lo = Math.min.apply(null, vs), hi = Math.max.apply(null, vs);
   if (hi - lo < 0.5) { hi += 0.5; lo -= 0.5; }
   var padv = (hi - lo) * 0.12; lo -= padv; hi += padv;
   var d0 = pts[0].day, d1 = pts[pts.length-1].day, span = Math.max(1, d1 - d0);
   function X(day){ return pl + (W - pl - pr) * (day - d0) / span; }
   function Y(val){ return pt + (H - pt - pb) * (1 - (val - lo) / (hi - lo)); }
+  var col = COLORS[F.k] || 'var(--accent)';
   var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="'+F.label+'の推移">';
-  for (var i = 0; i <= 3; i++) {
-    var gv = lo + (hi - lo) * i / 3, gy = Y(gv);
-    s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-6)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(F.d === 0 ? 0 : 1)+'</text>';
+  var gn = small ? 2 : 3;
+  for (var i = 0; i <= gn; i++) {
+    var gv = lo + (hi - lo) * i / gn, gy = Y(gv);
+    s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(F.d === 0 ? 0 : 1)+'</text>';
   }
   var path = pts.map(function(p, i){ return (i?'L':'M')+X(p.day).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ');
-  s += '<path class="ln" d="'+path+'"/>';
-  pts.forEach(function(p){ s += '<circle class="pt" cx="'+X(p.day).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="'+(pts.length>60?1.8:3)+'"><title>'+mdw(p.date)+' '+p.v+F.unit+'</title></circle>'; });
+  s += '<path class="ln" style="stroke:'+col+'" d="'+path+'"/>';
+  pts.forEach(function(p){ s += '<circle class="pt" style="fill:'+col+'" cx="'+X(p.day).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="'+(pts.length>60?1.6:(small?2.2:3))+'"><title>'+mdw(p.date)+' '+p.v+F.unit+'</title></circle>'; });
   if (F.k === 'fat' && S.data.goalFat && S.data.goalFat >= lo && S.data.goalFat <= hi) {
     var gy2 = Y(S.data.goalFat);
     s += '<line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy2+'" y2="'+gy2+'"/><text x="'+(W-pr)+'" y="'+(gy2-4)+'" text-anchor="end" style="fill:var(--good)">目標 '+S.data.goalFat+'%</text>';
   }
   var a = pts[0].date.split('/'), b = pts[pts.length-1].date.split('/');
-  s += '<text x="'+pl+'" y="'+(H-8)+'">'+(+a[1])+'/'+(+a[2])+'</text><text x="'+(W-pr)+'" y="'+(H-8)+'" text-anchor="end">'+(+b[1])+'/'+(+b[2])+'</text>';
+  s += '<text x="'+pl+'" y="'+(H-4)+'">'+(+a[1])+'/'+(+a[2])+'</text><text x="'+(W-pr)+'" y="'+(H-4)+'" text-anchor="end">'+(+b[1])+'/'+(+b[2])+'</text>';
   return s + '</svg>';
+}
+// 項目ごとに、期間の最初の値を100とした指数で重ねる（単位の違う項目の増減を同じ目盛りで比べる）
+function overlaySvg(d){
+  var W = 640, H = 240, pl = 44, pr = 12, pt = 14, pb = 26, lines = [], lo = 1e9, hi = -1e9, d0 = 1e12, d1 = -1e12;
+  FIELDS.forEach(function(f){
+    var pts = BL.series(d.logs, f.k, d.today, S.range);
+    if (pts.length < 2) return;
+    var base = pts[0].v; if (!base) return;
+    var idx = pts.map(function(p){ return { day: p.day, date: p.date, v: p.v / base * 100, raw: p.v }; });
+    idx.forEach(function(p){ lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); d0 = Math.min(d0, p.day); d1 = Math.max(d1, p.day); });
+    lines.push({ f: f, idx: idx });
+  });
+  if (!lines.length) return '<div class="empty">2件以上の記録がたまると、重ねて比較できます。</div>';
+  lo = Math.min(lo, 100); hi = Math.max(hi, 100);
+  if (hi - lo < 2) { hi += 1; lo -= 1; }
+  var pv = (hi - lo) * 0.1; lo -= pv; hi += pv;
+  var span = Math.max(1, d1 - d0);
+  function X(day){ return pl + (W - pl - pr) * (day - d0) / span; }
+  function Y(v){ return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); }
+  var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="全項目の重ね比較">';
+  for (var i = 0; i <= 4; i++) { var gv = lo + (hi - lo) * i / 4, gy = Y(gv); s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(1)+'</text>'; }
+  var y100 = Y(100); s += '<line class="goal" style="stroke:var(--ink-3)" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+y100+'" y2="'+y100+'"/>';
+  lines.forEach(function(L){
+    var c = COLORS[L.f.k];
+    s += '<path class="ln" style="stroke:'+c+'" d="'+L.idx.map(function(p, i){ return (i?'L':'M')+X(p.day).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
+    L.idx.forEach(function(p){ s += '<circle class="pt" style="fill:'+c+'" cx="'+X(p.day).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="2.4"><title>'+L.f.label+' '+mdw(p.date)+' '+p.raw+(L.f.unit||'')+'（'+p.v.toFixed(1)+'）</title></circle>'; });
+  });
+  s += '</svg><div class="legend">'+lines.map(function(L){ return '<span><i style="background:'+COLORS[L.f.k]+'"></i>'+L.f.label+'</span>'; }).join('')+'</div>'
+    + '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">期間の最初の値を100とした指数です（点線＝100）。単位の違う項目でも、増減の割合を同じ目盛りで比べられます。</div>';
+  return s;
+}
+
+/* ---- 過去との比較 ---- */
+var CMP = [[7,'1週間前'],[14,'2週間前'],[30,'1か月前'],[90,'3か月前'],[180,'半年前']];
+function renderCmp(){
+  var d = S.data;
+  if (!d.logs.length) { $('cmpCard').innerHTML = ''; return; }
+  var rows = BL.compare(d.logs, d.today, CMP.map(function(c){ return c[0]; }));
+  var h = '<h3>過去との比較（最新の値との差）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>比較</th>'
+    + FIELDS.map(function(f){ return '<th>'+f.label+'</th>'; }).join('') + '</tr></thead><tbody>';
+  var any = false;
+  rows.forEach(function(r, i){
+    var cells = FIELDS.map(function(f){
+      var c = r.fields[f.k];
+      if (!c) return '<td class="num" style="color:var(--ink-3)">－</td>';
+      any = true;
+      // 体重・体脂肪率・BMI・内臓脂肪は下がると良い（緑）、骨格筋率・基礎代謝は上がると良い
+      var good = f.goalDown ? c.diff < 0 : c.diff > 0, col = c.diff === 0 ? 'var(--ink-2)' : (good ? 'var(--good)' : 'var(--danger)');
+      return '<td class="num" title="'+mdw(c.from)+' '+c.then+(f.unit||'')+' → '+c.now+(f.unit||'')+'" style="color:'+col+';font-weight:700">'+(c.diff > 0 ? '+' : '')+c.diff.toFixed(f.d)+'</td>';
+    }).join('');
+    h += '<tr><td>'+CMP[i][1]+'</td>'+cells+'</tr>';
+  });
+  h += '</tbody></table></div>';
+  h += any ? '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">各行は、その日以前で最も新しい記録との差です。緑＝良い方向、赤＝逆方向（体重・体脂肪率・BMI・内臓脂肪は下がると良い、骨格筋率・基礎代謝は上がると良い）。日ごとの変動があるので、傾向で見てください。</div>'
+    : '<div class="empty">比べられる過去の記録がまだありません。記録がたまると表示されます。</div>';
+  $('cmpCard').innerHTML = h;
 }
 
 /* ---- 目標と試算 ---- */

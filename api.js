@@ -213,6 +213,11 @@ var KT = (function () {
           q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && CARDIO_OPS[op.type]) cardioApplyOp(cbase, op, false); });
           LS.set('kt_cardio', cbase);
         }
+        var mbase = LS.get('kt_meal', null);
+        if (mbase) {
+          q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && MEAL_OPS[op.type]) mealApplyOp(mbase, op); });
+          LS.set('kt_meal', mbase);
+        }
         var bbase = LS.get('kt_body', null);
         if (bbase) {
           q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && BODY_OPS[op.type]) bodyApplyOp(bbase, op); });
@@ -341,6 +346,28 @@ var KT = (function () {
     return Promise.resolve(bodyLocal());
   }
 
+  /* ---------- 食事：端末のデータ＋送信待ちの操作を重ねた表示用データ（ID単位で上書き） ---------- */
+  var MEAL_OPS = { mealSave: 1, mealDelete: 1, mealGoal: 1 };
+  function mealApplyOp(v, op, pending) {
+    if (op.type === 'mealSave') {
+      var e = clone(op.entry);
+      if (pending) e.pending = true;
+      upsertById(v.logs, e);
+    } else if (op.type === 'mealDelete') removeById(v.logs, op.id);
+    else if (op.type === 'mealGoal') v.goals = clone(op.goals);
+  }
+  function mealLocal() {
+    var v = clone(LS.get('kt_meal', null) || { today: today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0 }, suggest: null });
+    v.today = today();
+    queue().forEach(function (op) { if (MEAL_OPS[op.type]) mealApplyOp(v, op, true); });
+    v.logs.sort(function (a, b) { return a.date === b.date ? ((a.time || '') < (b.time || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });
+    return v;
+  }
+  function mealEnqueue(op) {
+    var q = queue(); q.push(op); setQueue(q); schedule(300);
+    return Promise.resolve(mealLocal());
+  }
+
   /* ---------- 画面から呼ぶ関数（GAS版の google.script.run と同じ名前） ---------- */
   var handlers = {
     /* 有酸素：端末にあるデータをすぐ返す（無ければ null） */
@@ -421,6 +448,38 @@ var KT = (function () {
       return bodyEnqueue({ qid: uuid(), type: 'bodyDelete', date: date });
     },
     bodySetGoal: function (goal) { return bodyEnqueue({ qid: uuid(), type: 'bodyGoal', goal: Number(goal) || 0 }); },
+
+    /* 食事 */
+    mealCached: function () {
+      return Promise.resolve(LS.get('kt_meal', null) || queue().some(function (o) { return MEAL_OPS[o.type]; }) ? mealLocal() : null);
+    },
+    mealInit: function () {
+      if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
+      if (navigator.onLine === false) return Promise.resolve(mealLocal());
+      var pre = queue().length ? sync().catch(function () {}) : Promise.resolve();
+      return pre.then(function () { return api('mealGet', [], 60000); }).then(function (d) {
+        LS.set('kt_meal', d);
+        return mealLocal();
+      }, function (e) {
+        if (e.offline) return mealLocal();
+        throw e;
+      });
+    },
+    // 食事内容 → 栄養の見積もり（AIを使うのでオンラインのみ）
+    mealEstimate: function (req) { return api('mealEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    mealSave: function (entry) {
+      entry = clone(entry); entry.id = entry.id || uuid();
+      if (!entry.date) return Promise.reject(new Error('日付が正しくありません'));
+      return mealEnqueue({ qid: uuid(), type: 'mealSave', entry: entry });
+    },
+    mealDelete: function (id) {
+      var q = queue().filter(function (op) { return !(op.type === 'mealSave' && op.entry.id === id); });
+      var onServer = (LS.get('kt_meal', null) || { logs: [] }).logs.some(function (l) { return l.id === id; });
+      if (q.length !== queue().length && !onServer) { setQueue(q); return Promise.resolve(mealLocal()); }
+      setQueue(q);
+      return mealEnqueue({ qid: uuid(), type: 'mealDelete', id: id });
+    },
+    mealSetGoals: function (goals) { return mealEnqueue({ qid: uuid(), type: 'mealGoal', goals: clone(goals) }); },
 
     getInitData: function () {
       var cached = LS.get('kt_init', null);

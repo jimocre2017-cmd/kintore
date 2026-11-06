@@ -293,6 +293,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
   <a class="navlink" href="cardio.html">有酸素 →</a>
   <a class="navlink" href="body.html">体組成 →</a>
+  <a class="navlink" href="meal.html">食事 →</a>
   <a class="navlink" href="analytics.html">分析 →</a>
 </header>
 
@@ -888,6 +889,7 @@ function plus(){
   call('recordSet', payload).then(function(r){
     if ((APP.memo[ex.id]||'') === sentMemo) APP.memo[ex.id] = '';
     applyResult(r);
+    Timer.chime();
     toast(ex.name+' '+(r.sets.length)+'セット目を記録');
   }).catch(function(e){
     toast('記録できませんでした：'+e.message, true);
@@ -1074,6 +1076,18 @@ var Timer = {
       g.gain.setValueAtTime(0.0001,c.currentTime); g.gain.exponentialRampToValueAtTime(0.35,c.currentTime+0.02); g.gain.exponentialRampToValueAtTime(0.0001,c.currentTime+len);
       o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime+len+0.05);
     } catch(e){}
+  },
+  // セットを記録できたときの短い2音（ピロン）。休憩終了のブザー（beep）とは別の音
+  chime: function(){
+    try {
+      var c=this.ctx; if (!c) return;
+      [[660,0],[990,0.11]].forEach(function(n){
+        var t=c.currentTime+n[1], o=c.createOscillator(), g=c.createGain(); o.frequency.value=n[0]; o.type='sine';
+        g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(0.3,t+0.015); g.gain.exponentialRampToValueAtTime(0.0001,t+0.16);
+        o.connect(g); g.connect(c.destination); o.start(t); o.stop(t+0.2);
+      });
+    } catch(e){}
+    if (navigator.vibrate) navigator.vibrate(40);
   },
   beep: function(){
     try {
@@ -1445,7 +1459,7 @@ function openFail(){
   $('failList').innerHTML = fl.map(function(op){
     var ex = exById(op.exerciseId);
     var what = op.type==='record' ? '記録：'+(ex?ex.name:op.exerciseId)+'（'+esc(op.date||'')+' '+esc((op.at||'').slice(11,16))+'）'
-      : op.type==='cancel' ? '取消' : op.type==='memo' ? '備考の変更' : /^cardio/.test(op.type) ? '有酸素の記録・設定の変更' : /^body/.test(op.type) ? '体組成の記録の変更' : 'インターバル設定';
+      : op.type==='cancel' ? '取消' : op.type==='memo' ? '備考の変更' : /^cardio/.test(op.type) ? '有酸素の記録・設定の変更' : /^body/.test(op.type) ? '体組成の記録の変更' : /^meal/.test(op.type) ? '食事の記録の変更' : 'インターバル設定';
     return '<div class="failitem">'+what+'<br><b>'+esc(op.error||'')+'</b></div>';
   }).join('') || '<div class="empty">ありません</div>';
   $('failModal').classList.add('open');

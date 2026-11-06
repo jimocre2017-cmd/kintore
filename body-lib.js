@@ -50,6 +50,22 @@ var BodyLib = (function () {
     return n;
   }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
+  // 最新の値と、n日前（その日以前で最も新しい記録）の値の比較。項目ごとに最新の記録を使う
+  var FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  function compare(logs, today, periods) {
+    return periods.map(function (n) {
+      var row = { days: n, fields: {} };
+      FIELDS.forEach(function (f) {
+        var withV = logs.filter(function (l) { return l[f] != null; }).sort(function (a, b) { return a.date < b.date ? 1 : -1; });
+        if (!withV.length) { row.fields[f] = null; return; }
+        var latest = withV[0], lim = toDays(today) - n, ref = null;
+        withV.forEach(function (l) { if (!ref && toDays(l.date) <= lim) ref = l; });
+        row.fields[f] = ref && ref !== latest ? { now: latest[f], then: ref[f], diff: r1(latest[f] - ref[f]), from: ref.date } : null;
+      });
+      return row;
+    });
+  }
+
+  return { compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = BodyLib;

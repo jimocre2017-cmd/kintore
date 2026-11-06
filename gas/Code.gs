@@ -714,6 +714,10 @@ function syncOps(ops) {
       else if (op.type === 'bodySave') bodySave(op.entry);
       else if (op.type === 'bodyDelete') bodyDelete(op.date);
       else if (op.type === 'bodyGoal') bodySetGoal(op.goal);
+      // 食事（Meal.gs）
+      else if (op.type === 'mealSave') mealSave(op.entry);
+      else if (op.type === 'mealDelete') mealDelete(op.id);
+      else if (op.type === 'mealGoal') mealSetGoals(op.goals);
       else throw new Error('不明な操作：' + op.type);
       results.push({ qid: op.qid, ok: true });
     } catch (err) {
@@ -745,6 +749,9 @@ function doPost(e) {
       cardioRoute: cardioRoute,
       // 体組成（Body.gs）
       bodyGet: bodyGet,
+      // 食事（Meal.gs）
+      mealGet: mealGet,
+      mealEstimate: mealEstimate,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,

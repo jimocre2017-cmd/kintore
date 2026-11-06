@@ -182,6 +182,28 @@ function bodyPlan_(latest, today) {
 }
 
 /**
+ * 1週間前・2週間前・1か月前・3か月前・半年前との比較（各項目の最新値 − その日以前で最も新しい記録）
+ * 値が無い項目は省く。AIはこの差をそのまま引用する
+ */
+function bodyCompare_(logs, today) {
+  var fields = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'], out = [];
+  [[7, '1週間前'], [14, '2週間前'], [30, '1か月前'], [90, '3か月前'], [180, '半年前']].forEach(function (p) {
+    var lim = addDays_(today, -p[0]), row = { label: p[1], diffs: {} }, any = false;
+    fields.forEach(function (f) {
+      var latest = null, ref = null;
+      logs.forEach(function (l) { // logs は新しい順
+        if (l[f] === null) return;
+        if (!latest) latest = l;
+        else if (!ref && l.date <= lim) ref = l;
+      });
+      if (latest && ref) { row.diffs[f] = { from: ref.date, then: ref[f], now: latest[f], diff: Math.round((latest[f] - ref[f]) * 10) / 10 }; any = true; }
+    });
+    if (any) out.push(row);
+  });
+  return out;
+}
+
+/**
  * AIトレーナー（AiTrainer.gs）に渡す体組成の要約。記録が無い・読めない場合は null
  * 最新値、約4週前との差、直近8週の週ごとの平均、目標体脂肪率に向けた試算（plan）
  */
@@ -207,6 +229,7 @@ function aiBody_(today) {
       latest: latest,
       changeSince4WeeksAgo: ref ? { from: ref.date, weight: diff('weight'), fat: diff('fat'), muscle: diff('muscle') } : null,
       last8Weeks: { weekStarts: weeks, weightAvg: avgBy('weight'), fatAvg: avgBy('fat'), muscleAvg: avgBy('muscle') },
+      comparisons: bodyCompare_(logs, today),
       plan: bodyPlan_(latest, today)
     };
   } catch (err) {
