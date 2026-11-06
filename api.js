@@ -347,7 +347,7 @@ var KT = (function () {
   }
 
   /* ---------- 食事：端末のデータ＋送信待ちの操作を重ねた表示用データ（ID単位で上書き） ---------- */
-  var MEAL_OPS = { mealSave: 1, mealDelete: 1, mealGoal: 1 };
+  var MEAL_OPS = { mealSave: 1, mealDelete: 1, mealGoal: 1, mealFood: 1, mealFoodDel: 1 };
   function mealApplyOp(v, op, pending) {
     if (op.type === 'mealSave') {
       var e = clone(op.entry);
@@ -355,10 +355,17 @@ var KT = (function () {
       upsertById(v.logs, e);
     } else if (op.type === 'mealDelete') removeById(v.logs, op.id);
     else if (op.type === 'mealGoal') v.goals = clone(op.goals);
+    else if (op.type === 'mealFood') {
+      v.foods = v.foods || [];
+      var f = clone(op.food);
+      for (var i = v.foods.length - 1; i >= 0; i--) if (v.foods[i].name === f.name && v.foods[i].id !== f.id) v.foods.splice(i, 1); // 同じ名前は上書き
+      upsertById(v.foods, f);
+      v.foods.sort(function (a, b) { return a.name < b.name ? -1 : (a.name > b.name ? 1 : 0); });
+    } else if (op.type === 'mealFoodDel') { v.foods = v.foods || []; removeById(v.foods, op.id); }
   }
   function mealLocal() {
-    var v = clone(LS.get('kt_meal', null) || { today: today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0 }, suggest: null });
-    v.today = today();
+    var v = clone(LS.get('kt_meal', null) || { today: today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0 }, suggest: null, foods: [] });
+    v.today = today(); v.foods = v.foods || [];
     queue().forEach(function (op) { if (MEAL_OPS[op.type]) mealApplyOp(v, op, true); });
     v.logs.sort(function (a, b) { return a.date === b.date ? ((a.time || '') < (b.time || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });
     return v;
@@ -478,6 +485,17 @@ var KT = (function () {
       if (q.length !== queue().length && !onServer) { setQueue(q); return Promise.resolve(mealLocal()); }
       setQueue(q);
       return mealEnqueue({ qid: uuid(), type: 'mealDelete', id: id });
+    },
+    mealSaveFood: function (food) {
+      food = clone(food); food.id = food.id || uuid();
+      return mealEnqueue({ qid: uuid(), type: 'mealFood', food: food });
+    },
+    mealDeleteFood: function (id) {
+      var q = queue().filter(function (op) { return !(op.type === 'mealFood' && op.food.id === id); });
+      var onServer = ((LS.get('kt_meal', null) || {}).foods || []).some(function (f) { return f.id === id; });
+      if (q.length !== queue().length && !onServer) { setQueue(q); return Promise.resolve(mealLocal()); }
+      setQueue(q);
+      return mealEnqueue({ qid: uuid(), type: 'mealFoodDel', id: id });
     },
     mealSetGoals: function (goals) { return mealEnqueue({ qid: uuid(), type: 'mealGoal', goals: clone(goals) }); },
 

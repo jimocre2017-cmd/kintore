@@ -718,6 +718,8 @@ function syncOps(ops) {
       else if (op.type === 'mealSave') mealSave(op.entry);
       else if (op.type === 'mealDelete') mealDelete(op.id);
       else if (op.type === 'mealGoal') mealSetGoals(op.goals);
+      else if (op.type === 'mealFood') mealFoodSave(op.food);
+      else if (op.type === 'mealFoodDel') mealFoodDelete(op.id);
       else throw new Error('不明な操作：' + op.type);
       results.push({ qid: op.qid, ok: true });
     } catch (err) {
