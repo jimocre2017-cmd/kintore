@@ -142,23 +142,27 @@ function bodyPlan_(latest, today) {
     targetWeightKg: r1_(target), fatToLoseKg: r1_(toLose), energyNeededKcal: Math.round(toLose * 7200),
     method: '除脂肪体重を維持して脂肪のみ減らす前提。脂肪1kg=7200kcal'
   };
+  out.proteinGramsPerDay = Math.round(w * 1.6) + '〜' + Math.round(w * 2.0);
+  out.maxSafeLossKgPerWeek = r1_(w * 0.01);
+  out.latestRecordDate = latest.date;
   if (latest.height) out.healthyWeightBmi22Kg = r1_(22 * Math.pow(latest.height / 100, 2));
   if (toLose <= 0) { out.note = '現在の体脂肪率は目標以下'; return out; }
 
   // 直近28日の有酸素による1日あたりの純消費kcal（実績）
-  var perDay = 0, sessions = 0;
+  var perDay = 0, sessions = 0, km28 = 0;
   try {
     var from = addDays_(today, -27);
     cardioGet().logs.forEach(function (l) {
       if (l.date >= from && l.date <= today && l.km) {
         perDay += l.km * w * (l.type === 'ランニング' ? 1.0 : 0.63);
-        sessions++;
+        sessions++; km28 += l.km;
       }
     });
     perDay = perDay / 28;
   } catch (e) { perDay = 0; }
   out.cardioKcalPerDayLast28Days = Math.round(perDay);
   out.cardioSessionsLast28Days = sessions;
+  out.cardioKmLast28Days = r1_(km28); // 着地負荷（足首・股関節）の目安
 
   function months(daily) { return daily > 0 ? r1_(toLose * 7200 / daily / 30) : null; }
   function lossPerMonth(daily) { return r1_(daily * 30 / 7200); }
@@ -168,7 +172,8 @@ function bodyPlan_(latest, today) {
     if (daily <= 0) return;
     sc.push({
       name: diet === 0 ? '有酸素のみ（食事は今のまま）' : '有酸素＋食事で-' + diet + 'kcal/日',
-      deficitKcalPerDay: daily, lossKgPerMonth: lossPerMonth(daily), monthsToGoal: months(daily)
+      deficitKcalPerDay: daily, lossKgPerMonth: lossPerMonth(daily), monthsToGoal: months(daily),
+      lossKgPerWeek: r1_(daily * 7 / 7200), withinSafeRate: daily * 7 / 7200 <= w * 0.01
     });
   });
   out.scenarios = sc;
