@@ -752,6 +752,15 @@ function showSetup(msg){
   $('app').innerHTML = '<div class="setup card"><h3 style="margin-top:0">アプリ版の設定が必要です</h3>'+(msg?'<p style="color:var(--danger)">'+esc(msg)+'</p>':'')
     + '<p>先に筋トレ記録の画面で設定を済ませてください。</p><p><a class="navlink" href="index.html">筋トレ記録を開く</a></p></div>';
 }
+// 古い api.js が端末に残っていると「不明な操作：cardioInit」になる。保存済みの画面ファイルを消して1回だけ読み込み直す
+function healStaleCache(e){
+  if (!e || !/^不明な操作：cardio(Init|Cached|Save|Delete|Route|SavePlace|DeletePlace|SaveCourse|DeleteCourse)$/.test(e.message)) return false;
+  try { if (sessionStorage.getItem('kt_heal')) return false; sessionStorage.setItem('kt_heal', '1'); } catch (x) { return false; }
+  var done = function(){ location.reload(); };
+  if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(done, done);
+  else done();
+  return true;
+}
 function init(){
   if (!KT.configured()) { showSetup(); return; }
   var saved = Rec.load();
@@ -766,10 +775,11 @@ function init(){
     if (!S.rec) setTimeout(function(){ Rec.openSave(Rec.build(saved, saved.endAt || Date.now())); }, 400);
   }
   renderRec();
-  KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } });
+  KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } }, function(e){ healStaleCache(e); });
   KT.call('cardioInit').then(function(v){ S.data = v; S.loadErr = null; render(); }, function(e){
+    if (healStaleCache(e)) return;
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
-    var hint = /不明な操作/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「有酸素の導入手順」を実行してください）' : '';
+    var hint = /^不明な操作：cardio(Get|Route)$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「有酸素の導入手順」を実行してください）' : (/^不明な操作/.test(e.message) ? '（アプリの画面ファイルが古いままです。アプリを閉じて開き直してください）' : '');
     S.loadErr = '読み込みに失敗しました：' + e.message + hint;
     if (!S.data) S.data = { today: KT.today(), logs: [], courses: [], places: [] };
     render();
