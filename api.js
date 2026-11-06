@@ -213,6 +213,11 @@ var KT = (function () {
           q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && CARDIO_OPS[op.type]) cardioApplyOp(cbase, op, false); });
           LS.set('kt_cardio', cbase);
         }
+        var bbase = LS.get('kt_body', null);
+        if (bbase) {
+          q.forEach(function (op) { var r = done[op.qid]; if (r && r.ok && BODY_OPS[op.type]) bodyApplyOp(bbase, op); });
+          LS.set('kt_body', bbase);
+        }
         LS.set('kt_queue', queue().filter(function (op) { return !done[op.qid]; }));
       }
       LS.set('kt_init', init);
@@ -312,6 +317,30 @@ var KT = (function () {
     return Promise.resolve(cardioLocal());
   }
 
+  /* ---------- 体組成：端末のデータ＋送信待ちの操作を重ねた表示用データ（日付が1日1件のID） ---------- */
+  var BODY_OPS = { bodySave: 1, bodyDelete: 1, bodyGoal: 1 };
+  function bodyApplyOp(v, op, pending) {
+    if (op.type === 'bodySave') {
+      var e = clone(op.entry);
+      if (pending) e.pending = true;
+      for (var i = v.logs.length - 1; i >= 0; i--) if (v.logs[i].date === e.date) v.logs.splice(i, 1);
+      v.logs.push(e);
+    } else if (op.type === 'bodyDelete') {
+      for (var j = v.logs.length - 1; j >= 0; j--) if (v.logs[j].date === op.date) v.logs.splice(j, 1);
+    } else if (op.type === 'bodyGoal') v.goalFat = Number(op.goal) || 0;
+  }
+  function bodyLocal() {
+    var v = clone(LS.get('kt_body', null) || { today: today(), logs: [], goalFat: 0 });
+    v.today = today();
+    queue().forEach(function (op) { if (BODY_OPS[op.type]) bodyApplyOp(v, op, true); });
+    v.logs.sort(function (a, b) { return a.date < b.date ? 1 : (a.date > b.date ? -1 : 0); });
+    return v;
+  }
+  function bodyEnqueue(op) {
+    var q = queue(); q.push(op); setQueue(q); schedule(300);
+    return Promise.resolve(bodyLocal());
+  }
+
   /* ---------- 画面から呼ぶ関数（GAS版の google.script.run と同じ名前） ---------- */
   var handlers = {
     /* 有酸素：端末にあるデータをすぐ返す（無ければ null） */
@@ -361,6 +390,37 @@ var KT = (function () {
       return cardioEnqueue({ qid: uuid(), type: 'cardioCourse', course: course });
     },
     cardioDeleteCourse: function (id) { return cardioEnqueue({ qid: uuid(), type: 'cardioCourseDel', id: id }); },
+
+    /* 体組成 */
+    bodyCached: function () {
+      return Promise.resolve(LS.get('kt_body', null) || queue().some(function (o) { return BODY_OPS[o.type]; }) ? bodyLocal() : null);
+    },
+    bodyInit: function () {
+      if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
+      if (navigator.onLine === false) return Promise.resolve(bodyLocal());
+      var pre = queue().length ? sync().catch(function () {}) : Promise.resolve();
+      return pre.then(function () { return api('bodyGet', [], 60000); }).then(function (d) {
+        LS.set('kt_body', d);
+        return bodyLocal();
+      }, function (e) {
+        if (e.offline) return bodyLocal();
+        throw e;
+      });
+    },
+    bodySave: function (entry) {
+      entry = clone(entry);
+      if (!entry.date) return Promise.reject(new Error('日付が正しくありません'));
+      return bodyEnqueue({ qid: uuid(), type: 'bodySave', entry: entry });
+    },
+    bodyDelete: function (date) {
+      // まだ送っていない新規記録なら取り消すだけでよい
+      var q = queue().filter(function (op) { return !(op.type === 'bodySave' && op.entry.date === date); });
+      var onServer = (LS.get('kt_body', null) || { logs: [] }).logs.some(function (l) { return l.date === date; });
+      if (q.length !== queue().length && !onServer) { setQueue(q); return Promise.resolve(bodyLocal()); }
+      setQueue(q);
+      return bodyEnqueue({ qid: uuid(), type: 'bodyDelete', date: date });
+    },
+    bodySetGoal: function (goal) { return bodyEnqueue({ qid: uuid(), type: 'bodyGoal', goal: Number(goal) || 0 }); },
 
     getInitData: function () {
       var cached = LS.get('kt_init', null);
