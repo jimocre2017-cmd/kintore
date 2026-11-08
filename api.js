@@ -597,6 +597,22 @@ var KT = (function () {
     },
     mealSetGoals: function (goals) { return mealEnqueue({ qid: uuid(), type: 'mealGoal', goals: clone(goals) }); },
 
+    /* 減量計画：設定・AIの提案・採用はオンラインのみ。表示用の設定と履歴は端末にも控える（表示は体組成・食事の控えと合わせて計算） */
+    planCached: function () { return Promise.resolve(LS.get('kt_plan', null)); },
+    planInit: function () {
+      if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
+      return api('planGet', [], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, function (e) {
+        if (e.offline) {
+          var c = LS.get('kt_plan', null);
+          if (c) { c = clone(c); c.offline = true; return c; }
+        }
+        throw e;
+      });
+    },
+    planSet: function (p) { return api('planSet', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
+    planAdvise: function () { return api('planAdvise', [], 120000).then(function (r) { return r; }, onlineOnly); },
+    planApply: function (p) { return api('planApply', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
+
     getInitData: function () {
       var cached = LS.get('kt_init', null);
       if (cached) {
