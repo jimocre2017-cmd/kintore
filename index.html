@@ -277,6 +277,43 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .failitem b{color:var(--danger)}
 .setup{max-width:560px;margin:40px auto;padding:0 16px}
 .setup .card{line-height:1.8}
+
+/* YKトレーニング（山本KID化計画）カード */
+.ykcard{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px;margin-bottom:14px}
+.ykhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.ykhead b{font-size:16px}
+.ykhead small{font-size:12px;color:var(--ink-3)}
+.ykphase{margin-left:auto;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;color:var(--ink-2)}
+.ykphase.bulk{background:var(--accent-soft);border-color:var(--accent);color:var(--accent)}
+.ykalert{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px}
+.ykalert span{font-size:12px;font-weight:700;color:var(--warn);background:var(--surface-2);border-radius:8px;padding:3px 8px}
+.ykgauges{display:grid;gap:6px;margin-bottom:10px}
+.ykg{display:grid;grid-template-columns:78px 1fr 64px;align-items:center;gap:8px;font-size:13px}
+.ykg .lb{font-weight:700;color:var(--ink-2);white-space:nowrap}
+.ykg .bar{height:10px;background:var(--surface-2);border-radius:6px;overflow:hidden}
+.ykg .bar i{display:block;height:100%;background:var(--accent);border-radius:6px}
+.ykg.full .bar i{background:var(--good)}
+.ykg.low .bar i{background:var(--warn)}
+.ykg .nm{text-align:right;color:var(--ink-3);font-size:12px}
+.ykshoulder{display:flex;align-items:center;gap:6px;margin-bottom:10px;font-size:12px;color:var(--ink-3)}
+.ykshoulder button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:6px 10px;font-size:12px;font-weight:700;color:var(--ink-2)}
+.ykshoulder button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.ykshoulder button.on.warn{background:var(--warn);border-color:var(--warn)}
+.ykshoulder button.on.bad{background:var(--danger);border-color:var(--danger)}
+.ykgo{width:100%;border:0;border-radius:12px;background:var(--accent);color:var(--accent-ink);padding:13px 12px;font-size:15px;font-weight:800}
+.ykgo small{display:block;font-weight:600;opacity:.85;font-size:12px;margin-top:2px}
+.ykgo:disabled{opacity:.5}
+.ykplan{margin-top:8px;font-size:13px}
+.ykplan summary{cursor:pointer;color:var(--ink-2);font-weight:700}
+.ykplan ol{margin:8px 0 0;padding-left:20px;color:var(--ink-2);line-height:1.7}
+.ykplan li small{color:var(--ink-3)}
+.ykwarn{font-size:12px;color:var(--warn);margin-top:6px;line-height:1.6}
+.ykai{margin-top:10px;border-top:1px dashed var(--line);padding-top:10px;font-size:13px;line-height:1.7}
+.ykai h4{margin:0 0 4px;font-size:14px}
+.ykai ul{margin:4px 0 8px;padding-left:18px;color:var(--ink-2)}
+.ykai .ph{background:var(--surface-2);border-radius:10px;padding:8px 10px;margin-top:6px}
+.ykai button{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px;font-weight:700;color:var(--ink-2)}
+.ykai button.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
 </style>
 </head>
 <body>
@@ -395,6 +432,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <div class="toast" id="toast"></div>
 
 <script src="api.js"></script>
+<script src="yk-lib.js"></script>
 <script>
 var APP = { navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
@@ -516,6 +554,7 @@ function init(){
   if (!KT.configured()) { showSetup(); return; }
   call('getInitData').then(function(d){
     APP.data = d;
+    ykReinject();
     var dt = d.today.split('/');
     $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+'日月火水木金土'.charAt(new Date(+dt[0],+dt[1]-1,+dt[2]).getDay())+'）';
     Timer.base = Number(d.settings['インターバル秒'])||90;
@@ -569,7 +608,7 @@ function renderList(){
         + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
     });
     h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-    $('exList').innerHTML = h;
+    $('exList').innerHTML = ykCardHtml() + h;
     bindListCommon();
     renderTodayParts();
     return;
@@ -609,7 +648,7 @@ function renderList(){
   });
   h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-  $('exList').innerHTML = h;
+  $('exList').innerHTML = ykCardHtml() + h;
   bindListCommon();
   $('openAdd').addEventListener('click', openAdd);
   renderTodayParts();
@@ -686,6 +725,7 @@ function bindListCommon(){
   Array.prototype.forEach.call(document.querySelectorAll('[data-tag]'), function(b){
     b.addEventListener('click', function(){ toggleTag(b.getAttribute('data-tag')); });
   });
+  ykBind();
 }
 
 function renderTodayParts(){
@@ -1288,6 +1328,7 @@ function applyView(view){
   var dayChanged = view.today !== APP.data.today;
   if (dayChanged) APP.vals = {};
   APP.data = view;
+  ykReinject();
   setDateLabel();
   Timer.base = Number(view.settings['インターバル秒'])||Timer.base;
   if (!Timer.iv) Timer.renderIdle();
@@ -1296,6 +1337,151 @@ function applyView(view){
   if (!APP.sel && view.exercises[0]) select(view.exercises[0].id); else renderPanel();
 }
 KT.onUpdate(applyView);
+
+/* ===== YKトレーニング（山本KID化計画） =====
+ * 今日のメニューはルール（yk-lib.js）が端末で決める＝オフラインOK。AIは解説とフェーズ助言だけ（gas/Yk.gs） */
+var YK = { plan:null, ready:null, session:null, aiBusy:false, ai:null, msg:'' };
+function ykLS(k, d){ try { var v = localStorage.getItem(k); return v===null ? d : JSON.parse(v); } catch(e){ return d; } }
+function ykPut(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
+function ykShoulder(){ var s = ykLS('kt_yk_shoulder', null); return s && APP.data && s.d===APP.data.today ? s.s : 'ok'; }
+function ykSession(){ var s = ykLS('kt_yk_session', null); return s && APP.data && s.date===APP.data.today ? s : null; }
+function ykInput(){
+  var d = APP.data;
+  return { today:d.today, exercises:d.exercises, parts:d.parts, hist:d.ykHist||[], todaySets:d.todaySets, prev:d.prev, settings:d.settings, shoulder:ykShoulder(), state:ykLS('kt_yk_state', {}) };
+}
+function ykCompute(){
+  if (!APP.data || !window.YkLib) return null;
+  try {
+    var inp = ykInput();
+    YK.D = YkLib.deficits(inp);
+    YK.ready = YkLib.readiness(inp);
+    var sess = ykSession();
+    YK.session = sess;
+    // セッションを始めたら、その日のメニューは固定（記録で不足度が変わっても途中で入れ替えない）
+    YK.plan = sess ? sess.plan : YkLib.build(inp);
+    return YK.plan;
+  } catch(e){ YK.plan = null; YK.err = e; return null; }
+}
+/* 今日のメニューを、既存のタグ・プログラムの仕組み（STEP表示）に渡す。端末の中だけの一時タグ */
+function ykInject(plan){
+  var d = APP.data, T = YkLib.TAG_TODAY, ids = {};
+  d.programs = (d.programs||[]).filter(function(p){ return p.name!==T; });
+  d.programs.push(YkLib.toProgram(plan));
+  plan.items.forEach(function(it){ ids[it.exId] = 1; });
+  d.exercises.forEach(function(e){
+    var t = (e.tags||[]).filter(function(x){ return x!==T; });
+    if (ids[e.id]) t.push(T);
+    e.tags = t;
+  });
+}
+function ykReinject(){ var s = ykSession(); if (s && window.YkLib) ykInject(s.plan); }
+function ykPhase(){ return Number((APP.data.settings||{})['YK_フェーズ'])===1 ? 'bulk' : 'cut'; }
+
+function ykCardHtml(){
+  if (!APP.data || !window.YkLib) return '';
+  var plan = ykCompute();
+  if (!plan) return '';
+  var D = YK.D, sh = ykShoulder(), phase = ykPhase(), h = '';
+  h += '<div class="ykcard" id="ykCard"><div class="ykhead"><b>YKトレーニング</b><small>山本KID化計画</small>'
+    + '<button class="ykphase'+(phase==='bulk'?' bulk':'')+'" data-ykphase="'+(phase==='bulk'?0:1)+'" title="タップで切り替え">'+(phase==='bulk'?'増量期':'絞り期')+'</button></div>';
+  var late = D.areas.filter(function(a){ return a.daysSince===null || a.daysSince>=4; });
+  if (late.length) h += '<div class="ykalert">'+late.map(function(a){ return '<span>'+esc(a.label)+'：'+(a.daysSince===null?'直近の記録なし':a.daysSince+'日ぶり')+'</span>'; }).join('')+'</div>';
+  h += '<div class="ykgauges">'+D.areas.map(function(a){
+    var pct = Math.min(100, Math.round(a.done / a.target * 100));
+    return '<div class="ykg'+(a.done>=a.target?' full':(a.ratio>0.7?' low':''))+'"><span class="lb">'+esc(a.label)+'</span>'
+      + '<span class="bar"><i style="width:'+pct+'%"></i></span><span class="nm num">'+fmt(a.done)+' / '+fmt(a.target)+'</span></div>';
+  }).join('')+'</div>';
+  h += '<div class="ykshoulder"><span>右肩</span>'
+    + [['ok','問題なし',''],['uneasy','違和感','warn'],['pain','痛い','bad']].map(function(x){ return '<button data-ykshoulder="'+x[0]+'" class="'+(sh===x[0]?'on '+x[2]:'')+'">'+x[1]+'</button>'; }).join('')+'</div>';
+  var started = !!YK.session, undone = plan.items.filter(function(it){ return !(APP.data.todaySets[it.exId]||[]).length; }).length;
+  h += '<button class="ykgo" id="ykGo"'+(plan.items.length?'':' disabled')+'>'
+    + (started ? '今日のYKセッションを続ける（残り '+undone+' 種目）' : '今日のYK推奨セッション'+(plan.mode==='reboot'?'（YKリブート）':''))
+    + '<small>'+plan.items.length+'種目・約'+plan.estMinutes+'分'+(started?'':'　タップで開始')+'</small></button>';
+  if (plan.items.length){
+    h += '<details class="ykplan"><summary>内容を見る</summary><ol>'+plan.items.map(function(it){
+      return '<li><b>'+esc(it.name)+'</b>　'+it.sets+'セット・'+(it.measure==='秒' ? it.secs+'秒' : (it.load?fmtKg(it.load)+'kg×':'')+it.reps+'回')+'<br><small>'+esc(it.note)+'</small></li>';
+    }).join('')+'</ol>'+(plan.reasons.length?'<div class="ykwarn" style="color:var(--ink-2)">'+plan.reasons.map(esc).join('<br>')+'</div>':'')+'</details>';
+  }
+  if (plan.warnings.length) h += '<div class="ykwarn">'+plan.warnings.map(esc).join('<br>')+'</div>';
+  if (plan.missing && plan.missing.length) h += '<div class="ykwarn">種目マスタに無いID：'+plan.missing.map(esc).join('・')+'（YKの候補から自動で除外しています）</div>';
+  if (!APP.data.ykHist) h += '<div class="ykwarn">履歴が届いていません。Apps Script を最新版にして新しいバージョンでデプロイしてください</div>';
+  h += ykAiHtml(plan);
+  return h + '</div>';
+}
+
+function ykAiKey(plan){ return plan.date+'|'+plan.mode+'|'+plan.shoulder+'|'+plan.items.map(function(i){ return i.exId+i.sets; }).join(','); }
+function ykAiHtml(plan){
+  var c = YK.ai || ykLS('kt_yk_ai', null), r = c && c.date===plan.date && c.key===ykAiKey(plan) ? c.res : null;
+  var h = '<div class="ykai">';
+  if (YK.aiBusy) return h+'AIが解説を書いています…</div>';
+  if (!r) return h+'<button id="ykAsk">AIに解説・フェーズ助言をもらう</button>'+(YK.msg?'<span class="ykwarn"> '+esc(YK.msg)+'</span>':'')+'</div>';
+  h += '<h4>'+esc(r.headline)+'</h4>';
+  if (r.why.length) h += '<ul>'+r.why.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+  if (r.coaching.length) h += '<ul>'+r.coaching.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+  if (r.shoulder) h += '<div>🛡 '+esc(r.shoulder)+'</div>';
+  var v = r.phase.verdict, lab = v==='consider_bulk' ? '増量期への移行を検討できる時期' : v==='in_bulk' ? '増量期の経過' : '絞り期を続ける';
+  h += '<div class="ph"><b>'+lab+'</b>（直近4週で胸・脚が目標の9割以上：'+YK.ready.metWeeks+' / '+YK.ready.of+'週）<br>'+esc(r.phase.reason);
+  if (v==='consider_bulk' && ykPhase()==='cut') h += '<br><button class="go" data-ykphase="1" style="margin-top:6px">増量期に切り替える</button>';
+  h += '</div><div style="margin-top:6px"><button id="ykAsk">書き直す</button></div></div>';
+  return h;
+}
+
+function ykBind(){
+  var go = $('ykGo'); if (go) go.addEventListener('click', ykStart);
+  var ask = $('ykAsk'); if (ask) ask.addEventListener('click', ykAdvise);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ykshoulder]'), function(b){
+    b.addEventListener('click', function(){
+      if (YK.session){ toast('今日のセッションは開始済みです。肩が痛む時は無理せず中止してください', true); }
+      ykPut('kt_yk_shoulder', { d:APP.data.today, s:b.getAttribute('data-ykshoulder') });
+      renderList();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ykphase]'), function(b){
+    b.addEventListener('click', function(){ ykSetPhase(Number(b.getAttribute('data-ykphase'))); });
+  });
+}
+
+function ykStart(){
+  var plan = YK.plan; if (!plan || !plan.items.length) return;
+  var first = !YK.session;
+  if (first){
+    YK.session = { date:APP.data.today, plan:plan };
+    ykPut('kt_yk_session', YK.session);
+    if (plan.mode==='reboot') ykPut('kt_yk_state', { lastReboot:APP.data.today });
+    plan.items.forEach(function(it){
+      var ex = exById(it.exId); if (!ex) return;
+      var v = initialVals(ex);
+      if (ex.measure==='秒') v.secs = it.secs; else v.reps = it.reps;
+      if (hasLoad(ex)) v.load = it.load;
+      if (isTube(ex) && TUBE_OPTS.indexOf(it.intensity)>=0) v.intensity = it.intensity;
+      APP.vals[it.exId] = v;
+    });
+  }
+  ykInject(YK.session.plan);
+  APP.grp = ''; saveGrp(); APP.tags = []; saveTags();
+  toggleTag(YkLib.TAG_TODAY);
+  var el = $('exList'); if (el) el.scrollTop = 0;
+}
+
+function ykAdvise(){
+  var plan = YK.plan; if (!plan || YK.aiBusy) return;
+  YK.aiBusy = true; YK.msg = ''; renderList();
+  var req = { key:ykAiKey(plan), plan:{ mode:plan.mode, phase:plan.phase, shoulder:plan.shoulder, estMinutes:plan.estMinutes, areas:plan.areas, items:plan.items, reasons:plan.reasons, warnings:plan.warnings }, readiness:YK.ready };
+  KT.call('ykAdvise', req).then(function(r){
+    YK.aiBusy = false; YK.ai = { date:plan.date, key:req.key, res:r }; renderList();
+  }).catch(function(e){
+    YK.aiBusy = false; YK.msg = e.message || 'AIの解説に失敗しました'; renderList();
+  });
+}
+
+function ykSetPhase(p){
+  var to = p===1 ? '増量期' : '絞り期';
+  if (!confirm(to+'に切り替えますか？（'+(p===1?'週の目標セット数が増量期倍率で増えます':'週の目標セット数が元に戻ります')+'）')) return;
+  KT.call('ykSetPhase', p).then(function(){
+    APP.data.settings['YK_フェーズ'] = p;
+    toast(to+'に切り替えました'); renderList();
+  }).catch(function(e){ toast(e.message || '切り替えに失敗しました', true); });
+}
 
 /* ===== AIトレーナー（Gemini） ===== */
 var AI = { view:'form', busy:false, res:null, mode:'review', focus:[], days:3, minutes:45, note:'' };
