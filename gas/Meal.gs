@@ -112,6 +112,12 @@ function mealObj_(r) {
 
 function mealGoals_() {
   var p = PropertiesService.getScriptProperties();
+  // 減量計画で「来週から」採用した目標カロリーは、その日になったら反映する
+  var nx = p.getProperty('MEAL_GOAL_KCAL_NEXT');
+  if (nx) {
+    try { var o = JSON.parse(nx); if (o.from <= today_()) { p.setProperty('MEAL_GOAL_KCAL', String(o.kcal)); p.deleteProperty('MEAL_GOAL_KCAL_NEXT'); } }
+    catch (e) { p.deleteProperty('MEAL_GOAL_KCAL_NEXT'); }
+  }
   function g(k) { var v = Number(p.getProperty(k)); return v > 0 ? v : 0; }
   return { kcal: g('MEAL_GOAL_KCAL'), protein: g('MEAL_GOAL_P'), fat: g('MEAL_GOAL_F') };
 }
@@ -201,6 +207,7 @@ function mealDelete(id) {
 function mealSetGoals(g) {
   g = g || {};
   var pr = PropertiesService.getScriptProperties();
+  pr.deleteProperty('MEAL_GOAL_KCAL_NEXT'); // 手で目標を直した時は、予約中の変更を取り消す
   [['kcal', 'MEAL_GOAL_KCAL', 6000], ['protein', 'MEAL_GOAL_P', 500], ['fat', 'MEAL_GOAL_F', 500]].forEach(function (d) {
     var v = g[d[0]] === '' || g[d[0]] === null || g[d[0]] === undefined ? 0 : Number(g[d[0]]);
     if (isNaN(v) || v < 0 || v > d[2]) throw new Error('目標は0〜' + d[2] + 'で入力してください（0＝設定なし）');

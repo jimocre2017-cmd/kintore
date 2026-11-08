@@ -760,6 +760,11 @@ function doPost(e) {
       // 食事（Meal.gs）
       mealGet: mealGet,
       mealEstimate: mealEstimate,
+      // 減量計画（Plan.gs）
+      planGet: planGet,
+      planSet: planSet,
+      planAdvise: planAdvise,
+      planApply: planApply,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,
