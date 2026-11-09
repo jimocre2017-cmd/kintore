@@ -713,6 +713,15 @@ var KT = (function () {
       return api('aiDeleteProgram', [tag], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
     },
 
+    // YKトレーニング：メニューはルールで端末が決める。AIの解説とフェーズ保存はオンラインの時だけ
+    ykAdvise: function (req) {
+      return api('ykAdvise', [req], 120000).then(function (r) { LS.set('kt_yk_ai', { date: today(), key: req && req.key || '', res: r }); return r; }, onlineOnly);
+    },
+    ykAiCached: function () { return Promise.resolve(LS.get('kt_yk_ai', null)); },
+    ykSetPhase: function (phase) {
+      return api('ykSetPhase', [phase], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
+    },
+
     getAnalytics: function (type, anchor) {
       return api('getAnalytics', [type, anchor], 60000).then(function (d) {
         saveAnalytics(type, anchor, d);

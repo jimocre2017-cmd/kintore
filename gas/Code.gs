@@ -36,7 +36,17 @@ var SETTING_DEFAULTS = [
   ['部位色_週_普通', 6, '部位マップ（週・月・四半期・年）：1週あたりのセット数がこの値以上で黄色（普通）'],
   ['部位色_週_追い込み', 12, '部位マップ（週・月・四半期・年）：1週あたりのセット数がこの値以上で赤（追い込み）'],
   ['秒種目_準備秒', 3, '秒種目のストップウォッチを始める前のカウントダウン（秒）。0にするとすぐ計測開始'],
-  ['秒種目_持ち替え秒', 4, '左右で行う秒種目（パワーボール等）で、片側のカウントが終わってから反対側を始めるまでの持ち替え時間（秒）']
+  ['秒種目_持ち替え秒', 4, '左右で行う秒種目（パワーボール等）で、片側のカウントが終わってから反対側を始めるまでの持ち替え時間（秒）'],
+  // YKトレーニング（山本KID化計画）：直近7日の目標セット数と動作の設定
+  ['YK_目標_胸', 9, 'YKトレーニング：胸の週の目標セット数（直近7日）'],
+  ['YK_目標_脚', 7, 'YKトレーニング：脚の週の目標セット数'],
+  ['YK_目標_背中', 10, 'YKトレーニング：背中の週の目標セット数'],
+  ['YK_目標_肩・僧帽筋', 7, 'YKトレーニング：肩・僧帽筋の週の目標セット数'],
+  ['YK_目標_腹', 5, 'YKトレーニング：腹の週の目標セット数'],
+  ['YK_ブランク日数', 3, 'YKトレーニング：この日数以上空いたら、1段階軽い全身メニュー（YKリブート）にする'],
+  ['YK_最大分', 30, 'YKトレーニング：今日の推奨セッションの上限時間（分）'],
+  ['YK_フェーズ', 0, 'YKトレーニング：0＝絞り期（体脂肪を落としながら維持）／1＝増量期（目標セット数を増量期倍率で増やす）'],
+  ['YK_増量期倍率', 1.15, 'YKトレーニング：増量期に目標セット数へかける倍率']
 ];
 
 // 器具ごとの既定値（種目追加時に使う）
@@ -485,6 +495,7 @@ function getInitData() {
     prev: prev,
     todaySets: todaySets,
     programs: getPrograms_(),
+    ykHist: typeof ykHistFrom_ === 'function' ? ykHistFrom_(logs, today) : undefined, // Yk.gs 未導入でも他の機能を止めない
     todaySummary: summarizeDay_(logs.filter(function (l) { return l.date === today; }))
   };
 }
@@ -760,6 +771,9 @@ function doPost(e) {
       // 食事（Meal.gs）
       mealGet: mealGet,
       mealEstimate: mealEstimate,
+      // YKトレーニング（Yk.gs）
+      ykAdvise: typeof ykAdvise === 'function' ? ykAdvise : undefined,
+      ykSetPhase: typeof ykSetPhase === 'function' ? ykSetPhase : undefined,
       // 減量計画（Plan.gs）
       planGet: planGet,
       planSet: planSet,
