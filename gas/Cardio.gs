@@ -121,6 +121,63 @@ function cHm_(v) {
 }
 function cMin_(hm) { var p = hm.split(':'); return +p[0] * 60 + +p[1]; }
 
+/* ============================================================
+ * 消費カロリー（METs法）：kcal ＝ MET × 体重(kg) × 時間(h)
+ * MET は平均時速から決める（運動強度表 Compendium of Physical Activities の代表値を、時速の間は線形補間）。
+ * 距離か時間が欠けた記録は、設定の既定時速で補う（時間なし→距離÷既定時速、距離なし→既定時速）。
+ * 体重は筋トレと同じ kcalWeight_()（体組成の最新値、無ければ既定体重）。1回ごとに四捨五入して合計する。
+ * クライアント（cardio-lib.js の kcalOf）と同じ式・同じ表なので、直す時は両方そろえる（test/cardio-kcal.test.js が一致を確認）。
+ * ============================================================ */
+var CARDIO_MET = {
+  walk: [[2.4, 2.3], [3.2, 2.8], [4.0, 3.0], [4.8, 3.5], [5.6, 4.3], [6.4, 5.0], [7.2, 7.0], [8.0, 8.3]],
+  run: [[6.4, 6.0], [8.0, 8.3], [9.7, 9.8], [11.3, 11.0], [12.9, 11.8], [14.5, 12.8], [16.1, 14.5], [17.7, 16.0], [19.3, 19.0]]
+};
+
+function cardioMetOf_(type, kmh) {
+  var t = type === 'ランニング' ? CARDIO_MET.run : CARDIO_MET.walk;
+  if (kmh <= t[0][0]) return t[0][1];
+  for (var i = 1; i < t.length; i++) {
+    if (kmh <= t[i][0]) return t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (kmh - t[i - 1][0]) / (t[i][0] - t[i - 1][0]);
+  }
+  return t[t.length - 1][1];
+}
+
+/** 1回の有酸素の推定消費カロリー（整数kcal）。l = {type, km, mins} */
+function cardioKcalOf_(l, st, weight) {
+  var run = l.type === 'ランニング';
+  var def = Number(st && st[run ? 'kcal_ランニング既定時速' : 'kcal_ウォーキング既定時速']) || (run ? 8 : 4.8);
+  var km = Number(l.km) || 0, mins = Number(l.mins) || 0;
+  if (mins <= 0 && km > 0) mins = km / def * 60;
+  if (mins <= 0) return 0;
+  var speed = km > 0 ? km / (mins / 60) : def;
+  return Math.round(cardioMetOf_(l.type, speed) * weight * mins / 60);
+}
+
+/** 期間内の有酸素ログ（ルート抜き）に kcal を付けて返す。有酸素シートが読めなくても筋トレ側を止めないよう、失敗時は空 */
+function cardioLogsWithKcal_(from, to, st, weight) {
+  try {
+    ensureCardio_();
+    var out = [];
+    rows_(CSH.LOG).forEach(function (r) {
+      if (String(r[0]).trim() === '') return;
+      var l = cLogObj_(r, false);
+      if (!l.date || (from && l.date < from) || (to && l.date > to)) return;
+      l.kcal = cardioKcalOf_(l, st, weight);
+      out.push(l);
+    });
+    return out;
+  } catch (err) {
+    return [];
+  }
+}
+
+/** その日の有酸素の消費カロリー合計 */
+function cardioKcalOnDate_(date, st, weight) {
+  var s = 0;
+  cardioLogsWithKcal_(date, date, st, weight).forEach(function (l) { s += l.kcal; });
+  return s;
+}
+
 function cardioSave(p) {
   ensureCardio_();
   p = p || {};
