@@ -44,6 +44,39 @@ var CardioLib = (function () {
     return (h ? h + ':' + p2(m) : m) + ':' + p2(s);
   }
 
+  /* ---------- 消費カロリー（METs法）：kcal ＝ MET × 体重(kg) × 時間(h) ----------
+   * サーバー（gas/Cardio.gs の cardioKcalOf_）と同じ式・同じ表。直す時は両方そろえる。
+   * MET は平均時速から決める（Compendium of Physical Activities の代表値を時速の間で線形補間）。
+   * 距離か時間が欠けた記録は、設定の既定時速で補う。1回ごとに四捨五入して合計する。 */
+  var MET = {
+    walk: [[2.4, 2.3], [3.2, 2.8], [4.0, 3.0], [4.8, 3.5], [5.6, 4.3], [6.4, 5.0], [7.2, 7.0], [8.0, 8.3]],
+    run: [[6.4, 6.0], [8.0, 8.3], [9.7, 9.8], [11.3, 11.0], [12.9, 11.8], [14.5, 12.8], [16.1, 14.5], [17.7, 16.0], [19.3, 19.0]]
+  };
+  function metOf(type, kmh) {
+    var t = type === 'ランニング' ? MET.run : MET.walk;
+    if (kmh <= t[0][0]) return t[0][1];
+    for (var i = 1; i < t.length; i++) {
+      if (kmh <= t[i][0]) return t[i - 1][1] + (t[i][1] - t[i - 1][1]) * (kmh - t[i - 1][0]) / (t[i][0] - t[i - 1][0]);
+    }
+    return t[t.length - 1][1];
+  }
+  // l = {type, km, mins}、weight = 体重kg、st = 設定（無ければ既定値）。整数kcal
+  function kcalOf(l, weight, st) {
+    var run = l.type === 'ランニング';
+    var def = Number(st && st[run ? 'kcal_ランニング既定時速' : 'kcal_ウォーキング既定時速']) || (run ? 8 : 4.8);
+    var km = Number(l.km) || 0, mins = Number(l.mins) || 0;
+    if (mins <= 0 && km > 0) mins = km / def * 60;
+    if (mins <= 0) return 0;
+    var speed = km > 0 ? km / (mins / 60) : def;
+    return Math.round(metOf(l.type, speed) * (Number(weight) || 65) * mins / 60);
+  }
+  // 期間(from〜to)の合計
+  function kcalSum(logs, from, to, weight, st) {
+    var s = 0;
+    (logs || []).forEach(function (l) { if (l.date && l.date >= from && l.date <= to) s += kcalOf(l, weight, st); });
+    return s;
+  }
+
   /* ---------- 継続日数・空き日数 ---------- */
   // logs: [{date:'yyyy/MM/dd'}]。今日まだ記録がなければ昨日までの連続を数える（今日はまだ間に合うため）
   function streakInfo(logs, today) {
@@ -180,6 +213,7 @@ var CardioLib = (function () {
     toDays: toDays, fromDays: fromDays, addDays: addDays, dow: dow, daysInMonth: daysInMonth,
     validHm: validHm, minsBetween: minsBetween, avgSpeed: avgSpeed, fmtDur: fmtDur, fmtClock: fmtClock,
     streakInfo: streakInfo, monthMap: monthMap, periodRange: periodRange, aggregate: aggregate,
+    metOf: metOf, kcalOf: kcalOf, kcalSum: kcalSum,
     encodePolyline: encodePolyline, decodePolyline: decodePolyline, haversine: haversine, routeKm: routeKm, thinRoute: thinRoute,
     r1: r1, r2: r2, p2: p2
   };

@@ -53,7 +53,10 @@ var SETTING_DEFAULTS = [
   ['kcal_動作MET', 6, '推定消費カロリー：筋トレ動作中のMET（運動強度）。軽め3.5〜きつめ6〜8が目安'],
   ['kcal_休憩MET', 2, '推定消費カロリー：セット間の休憩中のMET'],
   ['kcal_1レップ秒', 4, '推定消費カロリー：1レップにかかる秒数（集計レップ×この秒数を動作時間とする）'],
-  ['kcal_既定体重kg', 65, '推定消費カロリー：体組成の記録が無いときに使う体重（kg）']
+  ['kcal_既定体重kg', 65, '推定消費カロリー：体組成の記録が無いときに使う体重（kg）'],
+  // 有酸素（Cardio.gs）の消費カロリー：平均時速からMETを決めて MET×体重×時間。距離か時間が欠けた記録だけ、この時速で補う
+  ['kcal_ウォーキング既定時速', 4.8, '有酸素の推定消費カロリー：ウォーキングで距離か時間が欠けた記録を補う時速（km/h）'],
+  ['kcal_ランニング既定時速', 8, '有酸素の推定消費カロリー：ランニングで距離か時間が欠けた記録を補う時速（km/h）']
 ];
 
 // 器具ごとの既定値（種目追加時に使う）
@@ -534,7 +537,7 @@ function getInitData() {
     programs: getPrograms_(),
     ykHist: typeof ykHistFrom_ === 'function' ? ykHistFrom_(logs, today) : undefined, // Yk.gs 未導入でも他の機能を止めない
     kcalWeight: kcalWeight_(),
-    todaySummary: summarizeDay_(logs.filter(function (l) { return l.date === today; }))
+    todaySummary: summarizeDay_(logs.filter(function (l) { return l.date === today; }), today)
   };
 }
 
@@ -548,7 +551,8 @@ function memo_(v) {
   return /^[=+\-@]/.test(s) ? "'" + s : s;
 }
 
-function summarizeDay_(logs) {
+/** 1日分の集計。date を渡すと有酸素の消費カロリーも合算する（kcal＝筋トレ分、kcalCardio＝有酸素分、kcalTotal＝合計） */
+function summarizeDay_(logs, date) {
   var byPart = {}, tot = { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0 };
   var gmap = partGroupMap_();
   var st = getSettings_(), kw = kcalWeight_();
@@ -566,6 +570,9 @@ function summarizeDay_(logs) {
   var parts = Object.keys(byPart).map(function (k) { var p = byPart[k]; p.vol = r1_(p.vol); p.sets = r1_(p.sets); p.reps = r1_(p.reps); p.secs = r1_(p.secs); return p; })
     .sort(function (a, b) { return (order[a.part] === undefined ? 999 : order[a.part]) - (order[b.part] === undefined ? 999 : order[b.part]); });
   tot.vol = r1_(tot.vol); tot.kcal = Math.round(tot.kcal);
+  tot.kcalStrength = tot.kcal;
+  tot.kcalCardio = date && typeof cardioKcalOnDate_ === 'function' ? cardioKcalOnDate_(date, st, kw) : 0; // Cardio.gs 未導入でも筋トレ側は止めない
+  tot.kcalTotal = tot.kcalStrength + tot.kcalCardio;
   return { total: tot, parts: parts };
 }
 
@@ -638,7 +645,7 @@ function afterWrite_(exId, today, recordedId) {
     today: today,
     exerciseId: exId,
     sets: logs.filter(function (l) { return l.exId === exId; }).map(setView_),
-    todaySummary: summarizeDay_(logs)
+    todaySummary: summarizeDay_(logs, today)
   };
 }
 
@@ -986,7 +993,7 @@ function updateExerciseSecondary(exId, list) {
         invalidate_(SH.EX);
         rebuildAllDaily();
         var today = today_();
-        return { exercises: getExercises_(false), todaySummary: summarizeDay_(getLogs_(today, today)) };
+        return { exercises: getExercises_(false), todaySummary: summarizeDay_(getLogs_(today, today), today) };
       }
     }
     throw new Error('種目が見つかりません：' + exId);
@@ -1241,6 +1248,21 @@ function getAnalytics(type, anchor) {
   var curLogs = all.filter(function (l) { return l.date >= cur.start && l.date <= cur.end; });
   var prvLogs = all.filter(function (l) { return l.date >= prv.start && l.date <= prv.end; });
 
+  // 有酸素（Cardio.gs）の消費カロリー：筋トレと同じ体重・同じ設定で計算して合算する
+  var cardioAll = typeof cardioLogsWithKcal_ === 'function' ? cardioLogsWithKcal_(prv.start, cur.end, AGG_KCAL_.st, AGG_KCAL_.kw) : [];
+  var cardioSum = function (from, to) {
+    var s = { kcal: 0, km: 0, mins: 0, count: 0 };
+    cardioAll.forEach(function (l) { if (l.date >= from && l.date <= to) { s.kcal += l.kcal; s.km += l.km; s.mins += l.mins; s.count++; } });
+    s.km = Math.round(s.km * 100) / 100;
+    return s;
+  };
+  // kcal＝筋トレ分（従来どおり）。kcalStrength / kcalCardio / kcalTotal で内訳と合計を足す
+  var withKcal = function (a, c) {
+    a.kcalStrength = a.kcal; a.kcalCardio = c.kcal; a.kcalTotal = a.kcal + c.kcal;
+    a.cardioCount = c.count; a.cardioKm = c.km; a.cardioMins = c.mins;
+    return a;
+  };
+
   // 部位別
   var parts = getParts_();
   var order = {}; parts.forEach(function (p, i) { order[p.part] = i; });
@@ -1282,18 +1304,22 @@ function getAnalytics(type, anchor) {
   // 推移
   var trend = trendBuckets_(cur).map(function (bk) {
     var a = agg_(curLogs.filter(function (l) { return l.date >= bk.from && l.date <= bk.to; }));
-    return { label: bk.label, from: bk.from, to: bk.to, sets: a.sets, reps: a.reps, secs: a.secs, vol: a.vol, days: a.days };
+    var c = cardioSum(bk.from, bk.to);
+    return { label: bk.label, from: bk.from, to: bk.to, sets: a.sets, reps: a.reps, secs: a.secs, vol: a.vol, days: a.days, kcalS: a.kcal, kcalC: c.kcal, kcal: a.kcal + c.kcal };
   });
 
   // 日計
   var cd = groupBy_(curLogs, function (l) { return l.date; });
-  var daily = Object.keys(cd).sort().reverse().map(function (d) {
-    var ls = cd[d];
-    var partsOfDay = {};
+  var dayKeys = Object.keys(cd);
+  cardioAll.forEach(function (l) { if (l.date >= cur.start && l.date <= cur.end && dayKeys.indexOf(l.date) < 0) dayKeys.push(l.date); }); // 有酸素だけの日も日計に出す
+  var daily = dayKeys.sort().reverse().map(function (d) {
+    var ls = cd[d] || [];
+    var partsOfDay = {}, dc = cardioSum(d, d);
     ls.forEach(function (l) { partsOfDay[l.part] = 1; });
     var a = agg_(ls);
     return {
       date: d, dow: '日月火水木金土'.charAt(dow_(d)), sets: a.sets, reps: a.reps, secs: a.secs, vol: a.vol,
+      kcalS: a.kcal, kcalC: dc.kcal, kcal: a.kcal + dc.kcal, cardio: { count: dc.count, km: dc.km, mins: dc.mins },
       parts: Object.keys(partsOfDay).sort(function (x, y) { return (order[x] === undefined ? 999 : order[x]) - (order[y] === undefined ? 999 : order[y]); })
     };
   });
@@ -1311,8 +1337,12 @@ function getAnalytics(type, anchor) {
   return {
     type: cur.type, anchor: anchor, today: today_(),
     range: cur, prevRange: prv,
-    total: { cur: agg_(curLogs), prev: agg_(prvLogs) },
+    total: { cur: withKcal(agg_(curLogs), cardioSum(cur.start, cur.end)), prev: withKcal(agg_(prvLogs), cardioSum(prv.start, prv.end)) },
     byPart: byPart, byExercise: byExercise, trend: trend, daily: daily, sets: sets, memos: memos,
+    // 日表示のときだけ、その日の有酸素（1回ごとの消費カロリー付き）
+    cardio: cur.type !== 'day' ? [] : cardioAll.filter(function (l) { return l.date === cur.start; })
+      .sort(function (a, b) { return a.start < b.start ? -1 : a.start > b.start ? 1 : 0; })
+      .map(function (l) { return { start: l.start, end: l.end, type: l.type, km: l.km, mins: l.mins, avg: l.avg, kcal: l.kcal, memo: l.memo }; }),
     periodDays: toDays_(cur.end) - toDays_(cur.start) + 1,
     heat: heatmap_(cur, byPart)
   };

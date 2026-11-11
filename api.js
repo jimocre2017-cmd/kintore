@@ -133,6 +133,8 @@ var KT = (function () {
       var p = byPart[k]; p.sets = r1(p.sets); p.reps = r1(p.reps); p.secs = r1(p.secs); p.vol = r1(p.vol); return p;
     }).sort(function (a, b) { return (order[a.part] === undefined ? 999 : order[a.part]) - (order[b.part] === undefined ? 999 : order[b.part]); });
     tot.vol = r1(tot.vol); tot.kcal = Math.round(tot.kcal);
+    // 有酸素の消費カロリーも合算（サーバーの summarizeDay_ と同じ分け方：kcal＝筋トレ分、kcalCardio＝有酸素分、kcalTotal＝合計）
+    tot.kcalStrength = tot.kcal; tot.kcalCardio = cardioKcalOn(view, kst, kw); tot.kcalTotal = tot.kcalStrength + tot.kcalCardio;
     return { total: tot, parts: parts };
   }
 
@@ -146,7 +148,10 @@ var KT = (function () {
     });
     view.todaySets = {};
     view.today = t;
-    view.todaySummary = { total: { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0 }, parts: [] };
+    view.todaySummary = { total: { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0, kcalStrength: 0, kcalCardio: 0, kcalTotal: 0 }, parts: [] };
+    // 日付が変わった直後でも、端末にある今日の有酸素は拾う
+    view.todaySummary.total.kcalCardio = cardioKcalOn(view, view.settings || {}, Number(view.kcalWeight) || 65);
+    view.todaySummary.total.kcalTotal = view.todaySummary.total.kcalCardio;
     return true;
   }
 
@@ -317,6 +322,16 @@ var KT = (function () {
     queue().forEach(function (op) { if (CARDIO_OPS[op.type]) cardioApplyOp(v, op, true); });
     v.logs.sort(function (a, b) { return a.date === b.date ? ((a.start || '') < (b.start || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });
     return v;
+  }
+  // 今日の有酸素の消費カロリー（端末にある有酸素ログ＋送信待ち）。端末に有酸素のデータが無い時（有酸素画面をまだ開いていない）は、サーバーが数えた値をそのまま使う
+  function cardioKcalOn(view, st, weight) {
+    var held = view.todaySummary && view.todaySummary.total && view.todaySummary.total.kcalCardio || 0;
+    var hasLocal = !!LS.get('kt_cardio', null) || queue().some(function (o) { return CARDIO_OPS[o.type]; });
+    var CL = window.CardioLib;
+    if (!hasLocal || !CL || !CL.kcalOf) return held;
+    var s = 0;
+    cardioLocal().logs.forEach(function (l) { if (l.date === view.today) s += CL.kcalOf(l, weight, st); });
+    return s;
   }
   // ルートは長いので一覧とは別に、記録IDごとに端末へ保存（最大40件）
   function routeCache() { return LS.get('kt_croutes', {}); }
