@@ -95,23 +95,32 @@ var KT = (function () {
   function exMap(view) { var m = {}; (view.exercises || []).forEach(function (e) { m[e.id] = e; }); return m; }
 
   function calcLocal(ex, load, reps, secs) {
-    var aReps = 0, aSecs = 0, vol = 0;
+    var aReps = 0, aSecs = 0, vol = 0, m = ex.mult || 1; // m＝1.5法タグの倍率（サーバーが種目ごとに配る）
     if (ex.measure === '秒') aSecs = secs * ex.rMult;
     else {
-      aReps = reps * ex.rMult;
-      if ((ex.loadType === 'kg' || ex.loadType === '加重') && ex.inVol !== false) vol = load * ex.wMult * reps * ex.rMult;
+      aReps = reps * ex.rMult * m;
+      if ((ex.loadType === 'kg' || ex.loadType === '加重') && ex.inVol !== false) vol = load * ex.wMult * reps * ex.rMult * m;
     }
     return { aReps: aReps, aSecs: aSecs, vol: r1(vol) };
+  }
+
+  // 推定消費カロリー（サーバーの kcalOfSet_ と同じ式）
+  function kcalOf(aReps, aSecs, st, weight) {
+    var work = aReps * (Number(st['kcal_1レップ秒']) || 4) + aSecs;
+    var rest = Number(st['インターバル秒']) || 0;
+    return ((Number(st['kcal_動作MET']) || 0) * work + (Number(st['kcal_休憩MET']) || 0) * rest) / 3600 * weight;
   }
 
   function summarizeLocal(view) {
     var em = exMap(view), gmap = {}, order = {};
     (view.parts || []).forEach(function (p, i) { gmap[p.part] = p.group; order[p.part] = i; });
-    var byPart = {}, tot = { sets: 0, reps: 0, secs: 0, vol: 0 };
+    var byPart = {}, tot = { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0 };
+    var kw = Number(view.kcalWeight) || 65, kst = view.settings || {};
     Object.keys(view.todaySets || {}).forEach(function (exId) {
       var ex = em[exId];
       (view.todaySets[exId] || []).forEach(function (s) {
         tot.sets++; tot.reps += s.aReps || 0; tot.secs += s.aSecs || 0; tot.vol += s.vol || 0;
+        tot.kcal += kcalOf(s.aReps || 0, s.aSecs || 0, kst, kw);
         if (!ex) return;
         var shares = [{ part: ex.part, w: 1 }].concat((ex.secondary || []).map(function (p) { return { part: p, w: 0.5 }; }));
         shares.forEach(function (sh) {
@@ -123,7 +132,7 @@ var KT = (function () {
     var parts = Object.keys(byPart).map(function (k) {
       var p = byPart[k]; p.sets = r1(p.sets); p.reps = r1(p.reps); p.secs = r1(p.secs); p.vol = r1(p.vol); return p;
     }).sort(function (a, b) { return (order[a.part] === undefined ? 999 : order[a.part]) - (order[b.part] === undefined ? 999 : order[b.part]); });
-    tot.vol = r1(tot.vol);
+    tot.vol = r1(tot.vol); tot.kcal = Math.round(tot.kcal);
     return { total: tot, parts: parts };
   }
 
@@ -137,7 +146,7 @@ var KT = (function () {
     });
     view.todaySets = {};
     view.today = t;
-    view.todaySummary = { total: { sets: 0, reps: 0, secs: 0, vol: 0 }, parts: [] };
+    view.todaySummary = { total: { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0 }, parts: [] };
     return true;
   }
 

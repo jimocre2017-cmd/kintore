@@ -279,8 +279,13 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .setup .card{line-height:1.8}
 
 /* YKトレーニング（山本KID化計画）カード */
-.ykcard{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px;margin-bottom:14px}
-.ykhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;margin-bottom:8px}
+.ykcard{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:var(--radius);padding:12px;margin-top:16px}
+.ykcard>summary{list-style:none;cursor:pointer}
+.ykcard>summary::-webkit-details-marker{display:none}
+.ykchev{color:var(--ink-3);font-size:14px;transition:transform .15s}
+.ykcard[open] .ykchev{transform:rotate(180deg)}
+.ykcard[open]>.ykhead{margin-bottom:8px}
+.ykhead{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .ykhead b{font-size:16px}
 .ykhead small{font-size:12px;color:var(--ink-3)}
 .ykphase{margin-left:auto;border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:4px 10px;font-size:12px;font-weight:700;color:var(--ink-2)}
@@ -325,6 +330,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
     <div class="kpi"><b class="num" id="kReps">0</b><span>レップ</span></div>
     <div class="kpi"><b class="num" id="kVol">0</b><span>総負荷量 kg</span></div>
     <div class="kpi"><b class="num" id="kSecs">0</b><span>秒</span></div>
+    <div class="kpi"><b class="num" id="kKcal">0</b><span>推定 kcal</span></div>
   </div>
   <button class="aibtn" id="aiOpen" aria-label="AIトレーナー"><span class="spark">✦</span>AIトレーナー</button>
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
@@ -575,6 +581,7 @@ function renderSummary(){
   $('kReps').textContent = fmt(t.reps);
   $('kVol').textContent = fmt(t.vol);
   $('kSecs').textContent = fmt(t.secs);
+  $('kKcal').textContent = fmt(t.kcal||0);
 }
 
 function renderList(){
@@ -608,7 +615,7 @@ function renderList(){
         + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
     });
     h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-    $('exList').innerHTML = ykCardHtml() + h;
+    $('exList').innerHTML = h + ykCardHtml();
     bindListCommon();
     renderTodayParts();
     return;
@@ -648,7 +655,7 @@ function renderList(){
   });
   h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-  $('exList').innerHTML = ykCardHtml() + h;
+  $('exList').innerHTML = h + ykCardHtml();
   bindListCommon();
   $('openAdd').addEventListener('click', openAdd);
   renderTodayParts();
@@ -908,8 +915,9 @@ function updatePreview(){
   var v = APP.vals[ex.id], parts=[];
   if (ex.measure==='秒') parts.push('集計 '+fmt(v.secs*ex.rMult)+'秒');
   else {
-    parts.push('集計 '+fmt(v.reps*ex.rMult)+'回');
-    if (hasLoad(ex) && ex.inVol!==false) parts.push('総負荷量 +'+fmt(v.load*ex.wMult*v.reps*ex.rMult)+'kg');
+    var m = ex.mult||1;
+    parts.push('集計 '+fmt(v.reps*ex.rMult*m)+'回'+(m!==1 ? '（1.5法×'+m+'）' : ''));
+    if (hasLoad(ex) && ex.inVol!==false) parts.push('総負荷量 +'+fmt(v.load*ex.wMult*v.reps*ex.rMult*m)+'kg');
   }
   el.textContent = 'このセット：'+parts.join('・');
 }
@@ -1382,8 +1390,9 @@ function ykCardHtml(){
   var plan = ykCompute();
   if (!plan) return '';
   var D = YK.D, sh = ykShoulder(), phase = ykPhase(), h = '';
-  h += '<div class="ykcard" id="ykCard"><div class="ykhead"><b>YKトレーニング</b><small>山本KID化計画</small>'
-    + '<button class="ykphase'+(phase==='bulk'?' bulk':'')+'" data-ykphase="'+(phase==='bulk'?0:1)+'" title="タップで切り替え">'+(phase==='bulk'?'増量期':'絞り期')+'</button></div>';
+  h += '<details class="ykcard" id="ykCard"'+(ykLS('kt_yk_open', false)?' open':'')+'><summary class="ykhead"><b>YKトレーニング</b><small>山本KID化計画</small>'
+    + '<button class="ykphase'+(phase==='bulk'?' bulk':'')+'" data-ykphase="'+(phase==='bulk'?0:1)+'" title="タップで切り替え">'+(phase==='bulk'?'増量期':'絞り期')+'</button>'
+    + '<span class="ykchev" aria-hidden="true">▾</span></summary>';
   var late = D.areas.filter(function(a){ return a.daysSince===null || a.daysSince>=4; });
   if (late.length) h += '<div class="ykalert">'+late.map(function(a){ return '<span>'+esc(a.label)+'：'+(a.daysSince===null?'直近の記録なし':a.daysSince+'日ぶり')+'</span>'; }).join('')+'</div>';
   h += '<div class="ykgauges">'+D.areas.map(function(a){
@@ -1406,7 +1415,7 @@ function ykCardHtml(){
   if (plan.missing && plan.missing.length) h += '<div class="ykwarn">種目マスタに無いID：'+plan.missing.map(esc).join('・')+'（YKの候補から自動で除外しています）</div>';
   if (!APP.data.ykHist) h += '<div class="ykwarn">履歴が届いていません。Apps Script を最新版にして新しいバージョンでデプロイしてください</div>';
   h += ykAiHtml(plan);
-  return h + '</div>';
+  return h + '</details>';
 }
 
 function ykAiKey(plan){ return plan.date+'|'+plan.mode+'|'+plan.shoulder+'|'+plan.items.map(function(i){ return i.exId+i.sets; }).join(','); }
@@ -1427,6 +1436,8 @@ function ykAiHtml(plan){
 }
 
 function ykBind(){
+  var card = $('ykCard');
+  if (card) card.addEventListener('toggle', function(){ ykPut('kt_yk_open', card.open); });
   var go = $('ykGo'); if (go) go.addEventListener('click', ykStart);
   var ask = $('ykAsk'); if (ask) ask.addEventListener('click', ykAdvise);
   Array.prototype.forEach.call(document.querySelectorAll('[data-ykshoulder]'), function(b){

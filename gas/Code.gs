@@ -46,7 +46,14 @@ var SETTING_DEFAULTS = [
   ['YK_ブランク日数', 3, 'YKトレーニング：この日数以上空いたら、1段階軽い全身メニュー（YKリブート）にする'],
   ['YK_最大分', 30, 'YKトレーニング：今日の推奨セッションの上限時間（分）'],
   ['YK_フェーズ', 0, 'YKトレーニング：0＝絞り期（体脂肪を落としながら維持）／1＝増量期（目標セット数を増量期倍率で増やす）'],
-  ['YK_増量期倍率', 1.15, 'YKトレーニング：増量期に目標セット数へかける倍率']
+  ['YK_増量期倍率', 1.15, 'YKトレーニング：増量期に目標セット数へかける倍率'],
+  // 1.5法：種目マスタのタグに「1.5法」が付いた種目は、1レップを1.5レップ分（フル＋ハーフ）の仕事量として集計する
+  ['1.5法_倍率', 1.5, '種目のタグに「1.5法」がある種目のレップ・総負荷量にかける倍率（1.5レップ法＝フル＋ハーフで1回）'],
+  // 消費カロリーの推定（METs法）：(動作MET×動作秒＋休憩MET×休憩秒)÷3600×体重。体重は体組成の最新値（無ければ既定体重）
+  ['kcal_動作MET', 6, '推定消費カロリー：筋トレ動作中のMET（運動強度）。軽め3.5〜きつめ6〜8が目安'],
+  ['kcal_休憩MET', 2, '推定消費カロリー：セット間の休憩中のMET'],
+  ['kcal_1レップ秒', 4, '推定消費カロリー：1レップにかかる秒数（集計レップ×この秒数を動作時間とする）'],
+  ['kcal_既定体重kg', 65, '推定消費カロリー：体組成の記録が無いときに使う体重（kg）']
 ];
 
 // 器具ごとの既定値（種目追加時に使う）
@@ -321,7 +328,15 @@ function getParts_() {
   }).sort(function (a, b) { return a.order - b.order; });
 }
 
+/** 1.5法のタグが付いた種目の倍率（付いていなければ1）。1回の実行内で設定を使い回す */
+var M15_TAG = '1.5法';
+function method15Mult_() {
+  var v = Number(getSettings_()['1.5法_倍率']);
+  return v > 0 ? v : 1.5;
+}
+
 function exFromRow_(r) {
+  var tagList = splitTags_(r[19]);
   return {
     id: String(r[0]).trim(),
     name: String(r[1]).trim(),
@@ -342,7 +357,8 @@ function exFromRow_(r) {
     secondary: splitParts_(r[16], String(r[2]).trim()), // 付随部位（カンマ区切り。集計は0.5換算）
     link: /^https?:\/\//.test(String(r[17] || '').trim()) ? String(r[17]).trim() : '', // 参考リンク（やり方の解説ページ）
     progOnly: r[18] === true || String(r[18]).trim().toUpperCase() === 'TRUE', // プログラム専用（種目一覧には出さず、プログラムからだけ選ぶ）
-    tags: splitTags_(r[19]) // タグ（カンマ区切り。例：肩リハ,チューブ）
+    tags: tagList, // タグ（カンマ区切り。例：肩リハ,チューブ）
+    mult: tagList.indexOf(M15_TAG) >= 0 ? method15Mult_() : 1 // 1.5法タグの種目は集計レップ・総負荷量にかける倍率
   };
 }
 
@@ -447,16 +463,36 @@ function getLogs_(from, to) {
  * ============================================================ */
 
 function calcSet_(ex, load, reps, secs) {
-  var aReps = 0, aSecs = 0, vol = 0;
+  var aReps = 0, aSecs = 0, vol = 0, m = ex.mult || 1; // m＝1.5法の倍率
   if (ex.measure === '秒') {
     aSecs = secs * ex.rMult;
   } else {
-    aReps = reps * ex.rMult;
+    aReps = reps * ex.rMult * m;
     if ((ex.loadType === 'kg' || ex.loadType === '加重') && ex.inVol !== false) {
-      vol = load * ex.wMult * reps * ex.rMult;
+      vol = load * ex.wMult * reps * ex.rMult * m;
     }
   }
   return { aReps: aReps, aSecs: aSecs, vol: r1_(vol) };
+}
+
+/** 推定消費カロリー（kcal）：動作（集計レップ×1レップ秒＋集計秒）と休憩（インターバル秒）のMETsから。
+ *  クライアント（api.js の kcalOf）と同じ式。 */
+function kcalOfSet_(aReps, aSecs, st, weight) {
+  var work = aReps * (st['kcal_1レップ秒'] || 4) + aSecs;
+  var rest = st['インターバル秒'] || 0;
+  return ((st['kcal_動作MET'] || 0) * work + (st['kcal_休憩MET'] || 0) * rest) / 3600 * weight;
+}
+
+/** 推定消費カロリー用の体重：体組成の最新の体重。無ければ設定の既定体重 */
+function kcalWeight_() {
+  var def = getSettings_()['kcal_既定体重kg'] || 65;
+  try {
+    if (typeof bodyEntries_ === 'function' && ss_().getSheetByName(BSH)) {
+      var es = bodyEntries_();
+      for (var i = 0; i < es.length; i++) if (es[i].weight) return es[i].weight;
+    }
+  } catch (err) {}
+  return def;
 }
 
 /* ============================================================
@@ -496,6 +532,7 @@ function getInitData() {
     todaySets: todaySets,
     programs: getPrograms_(),
     ykHist: typeof ykHistFrom_ === 'function' ? ykHistFrom_(logs, today) : undefined, // Yk.gs 未導入でも他の機能を止めない
+    kcalWeight: kcalWeight_(),
     todaySummary: summarizeDay_(logs.filter(function (l) { return l.date === today; }))
   };
 }
@@ -511,8 +548,9 @@ function memo_(v) {
 }
 
 function summarizeDay_(logs) {
-  var byPart = {}, tot = { sets: 0, reps: 0, secs: 0, vol: 0 };
+  var byPart = {}, tot = { sets: 0, reps: 0, secs: 0, vol: 0, kcal: 0 };
   var gmap = partGroupMap_();
+  var st = getSettings_(), kw = kcalWeight_();
   logs.forEach(function (l) {
     partShares_(l).forEach(function (s) {
       var k = s.part;
@@ -520,12 +558,13 @@ function summarizeDay_(logs) {
       p.sets += s.w; p.reps += l.aReps * s.w; p.secs += l.aSecs * s.w; p.vol += l.vol * s.w;
     });
     tot.sets++; tot.reps += l.aReps; tot.secs += l.aSecs; tot.vol += l.vol;
+    tot.kcal += kcalOfSet_(l.aReps, l.aSecs, st, kw);
   });
   var order = {};
   getParts_().forEach(function (p, i) { order[p.part] = i; });
   var parts = Object.keys(byPart).map(function (k) { var p = byPart[k]; p.vol = r1_(p.vol); p.sets = r1_(p.sets); p.reps = r1_(p.reps); p.secs = r1_(p.secs); return p; })
     .sort(function (a, b) { return (order[a.part] === undefined ? 999 : order[a.part]) - (order[b.part] === undefined ? 999 : order[b.part]); });
-  tot.vol = r1_(tot.vol);
+  tot.vol = r1_(tot.vol); tot.kcal = Math.round(tot.kcal);
   return { total: tot, parts: parts };
 }
 
