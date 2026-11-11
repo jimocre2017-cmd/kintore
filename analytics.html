@@ -51,7 +51,7 @@ header h1{font-size:18px;margin:0}
 .card-head .seg{margin-left:auto}
 .card-head .seg button{padding:7px 12px;font-size:13px;min-width:0}
 
-.tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.tiles{display:grid;grid-template-columns:repeat(6,1fr);gap:12px}
 @media (max-width:900px){ .tiles{grid-template-columns:repeat(2,1fr)} .tiles .tile:first-child{grid-column:span 2} }
 .tile{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
 .tile .t{font-size:12px;color:var(--ink-3);font-weight:600}
@@ -222,7 +222,7 @@ function fmt(n){ n=Number(n)||0; return (Math.round(n*10)/10).toLocaleString('ja
 function fmtKg(n){ n=Number(n)||0; return (Math.round(n*100)/100).toString(); }
 function fmtSecs(s){ s=Math.round(Number(s)||0); if (s<60) return s+'秒'; var m=Math.floor(s/60), r=s%60; if (m<60) return m+'分'+(r?r+'秒':''); return Math.floor(m/60)+'時間'+(m%60)+'分'; }
 function mval(o, k){ return Number(o[k])||0; }
-function mfmt(k, v){ return k==='secs' ? fmtSecs(v) : fmt(v)+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':k==='days'?'日':''); }
+function mfmt(k, v){ return k==='secs' ? fmtSecs(v) : fmt(v)+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':k==='kcal'?'kcal':k==='days'?'日':''); }
 
 function delta(cur, prev){
   if (!prev && !cur) return '<span class="delta flat">—</span>';
@@ -287,10 +287,10 @@ function render(){
 
   var c = d.total.cur, p = d.total.prev;
   var h = '<div class="tiles">';
-  [['vol','総負荷量'],['reps','レップ'],['sets','セット'],['secs','秒種目の合計'],['days','トレーニング日数']].forEach(function(m){
+  [['vol','総負荷量'],['reps','レップ'],['sets','セット'],['secs','秒種目の合計'],['kcal','推定消費kcal'],['days','トレーニング日数']].forEach(function(m){
     var k=m[0], v=mval(c,k), pv=mval(p,k), val;
     if (k==='secs') val = '<span class="num">'+fmtSecs(v)+'</span>';
-    else val = '<span class="num">'+fmt(v)+'</span><small>'+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':'日')+'</small>';
+    else val = '<span class="num">'+fmt(v)+'</span><small>'+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':k==='kcal'?'kcal':'日')+'</small>';
     if (k==='days' && d.type!=='day') val += '<small> / '+d.periodDays+'日</small>';
     h += '<div class="tile"><div class="t">'+m[1]+'</div><div class="v">'+val+'</div><div class="c">'+pn+' '+mfmt(k,pv)+'　'+delta(v,pv)+'</div></div>';
   });

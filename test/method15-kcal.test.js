@@ -54,4 +54,28 @@ ok('日の集計に推定kcalが入る（体組成が無ければ既定体重65k
   assert.strictEqual(s.total.kcal, want);
   assert.strictEqual(s.total.sets, 2);
 });
+ok('分析の集計(agg_)に推定kcalが入る', function () {
+  ctx.AGG_KCAL_ = { st: ctx.getSettings_(), kw: 65 };
+  var t = ctx.agg_([{ date: '2026-11-11', aReps: 15, aSecs: 0, vol: 300 }]);
+  assert.strictEqual(t.kcal, Math.round(ctx.kcalOfSet_(15, 0, ctx.getSettings_(), 65)));
+  ctx.AGG_KCAL_ = null;
+});
+ok('既存記録の再計算：1.5法タグの種目だけ変わり、dryRunは書き込まない', function () {
+  var exRows = [row('1.5法'), ['E200', '別種目', '広背筋', 'ダンベル', '回数', 'kg', 1, 1, '', 5, 2.5, 20, 2.5, 2, true, '', '', '', '', '']];
+  ctx.getExercises_ = function () { return exRows.map(function (r) { return ctx.exFromRow_(r); }); };
+  var L = ctx.L, logs = [];
+  function lr(exId, load, reps, aReps, vol) { var r = []; r[L.EXID] = exId; r[L.DATE] = '2026-11-01'; r[L.LOAD] = load; r[L.REPS] = reps; r[L.SECS] = ''; r[L.AREPS] = aReps; r[L.ASECS] = 0; r[L.VOL] = vol; return r; }
+  logs.push(lr('E100', 10, 10, 10, 200), lr('E200', 10, 10, 10, 100), lr('E999', 1, 1, 7, 7));
+  rowsByName[ctx.SH.LOG] = logs;
+  var written = 0;
+  ctx.LockService = { getScriptLock: function () { return { waitLock: function () {}, releaseLock: function () {} }; } };
+  ctx.sheet_ = function () { return { getRange: function () { return { setValues: function (v) { written = v; } }; } }; };
+  ctx.invalidate_ = function () {}; ctx.rebuildAllDaily = function () {};
+  var d = ctx.recalcLogs(true);
+  assert.strictEqual(d.changed, 1); assert.strictEqual(d.skipped, 1); assert.strictEqual(written, 0);
+  var r = ctx.recalcLogs(false);
+  assert.strictEqual(r.changed, 1);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(written[0])), [15, 0, 300]);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(written[2])), [7, 0, 7]); // 種目が見つからない行は触らない
+});
 console.log('\n' + n + ' 件すべて成功');
