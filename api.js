@@ -718,6 +718,11 @@ var KT = (function () {
       }, onlineOnly);
     },
 
+    // カウンセリングシート（初回の聞き取り＋3か月ごとの見直し）。保存はオンラインの時だけ。状態は端末に控える
+    counselGet: function () { return api('counselGet', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, function () { return LS.get('kt_counsel', null); }); },
+    counselSave: function (p) { return api('counselSave', [p], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
+    counselSkip: function () { return api('counselSkip', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
+
     // 種目の表示オン／オフ（種目マスタの「有効」列）。オンラインの時だけ
     exerciseListAll: function () { return api('exerciseListAll', [], 30000).then(function (r) { return r; }, onlineOnly); },
     setExercisesActive: function (ids, active) {

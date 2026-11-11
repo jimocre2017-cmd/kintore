@@ -160,6 +160,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .actions .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .adv{font-size:13px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:12px}
 
+.csprog{font-size:12px;color:var(--ink-3);margin-bottom:6px}.csq{margin:14px 0}.csq>label.ql{display:block;font-size:14px;font-weight:700;margin-bottom:6px}.csq input[type=text]{width:100%}.csprev{background:var(--surface-2);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--ink-2);margin:8px 0}.csflags .warn{margin-top:10px;padding:10px 12px;border-radius:10px;background:#fdecea;color:#8a1f11;font-size:13px}.csbanner{display:block;width:100%;text-align:left;padding:12px 14px;margin:0 0 10px;border:1px solid var(--accent);background:var(--accent-soft);border-radius:12px;font-size:14px;cursor:pointer}.csbanner small{display:block;color:var(--ink-3);margin-top:2px}.csrow2{display:flex;gap:8px;margin-top:6px}
 .visq{display:flex;gap:8px;margin-top:8px}.visrow{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px}.visrow input{width:20px;height:20px;margin:0}.visrow small{color:var(--ink-3);margin-left:auto}.visgrp{font-size:12px;color:var(--ink-3);margin:12px 0 2px;font-weight:700}
 .pick{display:flex;flex-wrap:wrap;gap:8px}
 .pick label{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);font-size:14px;cursor:pointer}
@@ -404,6 +405,22 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 </div>
 </div>
 
+<div class="modal" id="csModal">
+<div class="box" style="max-width:640px">
+<div class="csprog" id="csProg"></div>
+<h3 id="csTitle">カウンセリングシート</h3>
+<div class="adv" id="csIntro"></div>
+<div id="csBody"></div>
+<div class="csflags" id="csFlags"></div>
+<div class="actions">
+<button id="csLater">あとで</button>
+<button id="csBack">戻る</button>
+<button class="primary" id="csNext">次へ</button>
+</div>
+<div style="text-align:right;margin-top:8px"><button class="secbtn" id="csSkip" style="margin:0">このアプリでは不要（自分用など）</button></div>
+</div>
+</div>
+
 <div class="modal" id="visModal">
 <div class="box">
 <h3>種目の表示設定</h3>
@@ -458,6 +475,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <script src="api.js"></script>
 <script src="coach.js"></script>
 <script src="yk-lib.js"></script>
+<script src="counsel-lib.js"></script>
 <script>
 var APP = { navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
@@ -675,12 +693,14 @@ function renderList(){
     });
     h += '</div>';
   });
-  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button><button class="addbtn" id="openVis" style="margin-top:8px">種目の表示設定（オン／オフ）</button>';
+  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button><button class="addbtn" id="openVis" style="margin-top:8px">種目の表示設定（オン／オフ）</button><button class="addbtn" id="openCs" style="margin-top:8px">カウンセリングシート（回答・見直し）</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-  $('exList').innerHTML = h + ykCardHtml();
+  $('exList').innerHTML = counselBannerHtml() + h + ykCardHtml();
   bindListCommon();
   $('openAdd').addEventListener('click', openAdd);
   $('openVis').addEventListener('click', openVis);
+  $('openCs').addEventListener('click', function(){ openCounsel(); });
+  var cb = $('csBanner'); if (cb) cb.addEventListener('click', function(){ openCounsel(); });
   renderTodayParts();
 }
 // ===== 部位イラスト（ローポリ風） =====
@@ -1327,6 +1347,130 @@ $('visModal').addEventListener('click', function(e){ if (e.target===$('visModal'
 $('visSave').addEventListener('click', visSave);
 $('visAllOn').addEventListener('click', function(){ VIS.all.forEach(function(e){ e.on = true; }); visRender(); });
 $('visAllOff').addEventListener('click', function(){ VIS.all.forEach(function(e){ e.on = false; }); visRender(); });
+/* カウンセリングシート（初回＋3か月ごとの見直し） */
+var CS = { secs: [], step: 0, ans: {}, prev: null, mode: 'first', eqAll: [], all: [], review: {}, applyGear: true };
+function counselState(){ try { return JSON.parse(localStorage.getItem('kt_counsel') || 'null'); } catch(e){ return null; } }
+function counselBannerHtml(){
+  var c = counselState(); if (!c || (c.state !== 'first' && c.state !== 'due')) return '';
+  var first = c.state === 'first';
+  return '<button class="csbanner" id="csBanner"><b>'+(first ? 'はじめに：カウンセリングシート（5分）' : '3か月ぶりの見直し（変わったところだけ）')+'</b><small>'+(first ? '目的・使える器具・痛みなどを答えると、AIと種目の表示があなたに合わせて安全になります。' : '前回から変わっていないか、はい／いいえで確認します。')+'</small></button>';
+}
+function csEquipment(){
+  var seen = {}, out = [];
+  (CS.all.length ? CS.all : (APP.data && APP.data.exercises) || []).forEach(function(e){ var q = (e.equipment||'').trim(); if (q && !seen[q]) { seen[q] = 1; out.push(q); } });
+  return out;
+}
+function openCounsel(){
+  var c = counselState() || {};
+  CS.mode = c.answers ? 'update' : 'first';
+  CS.prev = c.answers || null; CS.ans = JSON.parse(JSON.stringify(c.answers || {})); CS.step = 0; CS.review = {}; CS.applyGear = true;
+  $('csModal').classList.add('open');
+  call('exerciseListAll').then(function(r){ CS.all = r.all; }, function(){ CS.all = []; }).then(function(){
+    CS.eqAll = csEquipment(); CS.secs = CounselLib.sections(CS.eqAll); csRender();
+  });
+}
+function csQ(it){
+  var a = CS.ans, v = a[it.id], h = '<div class="csq"><label class="ql">'+esc(it.label)+'</label>';
+  if (it.type === 'single') h += '<div class="pick" data-q="'+esc(it.id)+'">'+it.options.map(function(o){ return '<label class="'+(v===o?'on':'')+'"><input type="radio" name="'+esc(it.id)+'" value="'+esc(o)+'"'+(v===o?' checked':'')+'>'+esc(o)+'</label>'; }).join('')+'</div>';
+  else if (it.type === 'multi') h += '<div class="pick" data-q="'+esc(it.id)+'">'+it.options.map(function(o){ var on = Array.isArray(v) && v.indexOf(o)>=0; return '<label class="'+(on?'on':'')+'"><input type="checkbox" value="'+esc(o)+'"'+(on?' checked':'')+'>'+esc(o)+'</label>'; }).join('')+'</div>'+(it.none ? '<div class="adv" style="margin-top:4px">何もチェックしないと '+esc(it.none)+' として扱います</div>' : '');
+  else if (it.type === 'yno') { v = v || {}; h += '<div class="pick" data-q="'+esc(it.id)+'" data-yn="1">'+[['yes','はい'],['no','いいえ'],['other','その他']].map(function(o){ return '<label class="'+(v.v===o[0]?'on':'')+'"><input type="radio" name="'+esc(it.id)+'" value="'+o[0]+'"'+(v.v===o[0]?' checked':'')+'>'+o[1]+'</label>'; }).join('')+'</div>'+(v.v==='other' ? '<input type="text" data-t="'+esc(it.id)+'" maxlength="120" placeholder="どんな状況か" value="'+esc(v.t||'')+'" style="margin-top:6px">' : ''); }
+  else h += '<input type="text" data-q="'+esc(it.id)+'" maxlength="160" value="'+esc(v||'')+'">';
+  return h + '</div>';
+}
+function csRender(){
+  var sec = CS.secs[CS.step], last = CS.step === CS.secs.length - 1, total = CS.secs.length;
+  $('csProg').textContent = (CS.mode === 'first' ? '初回の聞き取り　' : '3か月ごとの見直し　') + (CS.step + 1) + ' / ' + total;
+  $('csTitle').textContent = sec.title;
+  $('csIntro').textContent = CS.mode === 'first' ? '答えにくいものは飛ばして構いません。答えた内容だけがAIに伝わり、書かれていないことは推測しません。診断ではありません。' : '前回の回答を表示しています。変わっていなければ「変わりなし」でOKです。';
+  var h = '', prevSum = CS.prev ? CounselLib.sectionSummary(sec, CS.prev) : '';
+  var editing = CS.mode === 'first' || CS.review[sec.id] === 'change' || sec.id === 'memo';
+  if (CS.mode === 'update' && sec.id !== 'memo') {
+    h += '<div class="csprev"><b>前回：</b>'+(prevSum ? esc(prevSum) : '（回答なし）')+'</div><div class="csrow2"><div class="pick" id="csRev"><label class="'+(CS.review[sec.id]==='same'?'on':'')+'"><input type="radio" name="rev" value="same"'+(CS.review[sec.id]==='same'?' checked':'')+'>変わりなし</label><label class="'+(CS.review[sec.id]==='change'?'on':'')+'"><input type="radio" name="rev" value="change"'+(CS.review[sec.id]==='change'?' checked':'')+'>変わった・その他</label></div></div>';
+  }
+  if (editing) sec.items.forEach(function(it){ if (CounselLib.isShown(it, CS.ans)) h += csQ(it); });
+  if (last) h += '<div class="csq"><label class="ql" style="font-weight:400"><input type="checkbox" id="csGear" '+(CS.applyGear?'checked':'')+' style="width:18px;height:18px;vertical-align:middle"> 持っていない器具の種目は、表示をオフにする（あとで「種目の表示設定」から戻せます）</label></div>';
+  $('csBody').innerHTML = h;
+  $('csFlags').innerHTML = CounselLib.redFlags(CS.ans).map(function(f){ return '<div class="warn">⚠ '+esc(f)+'</div>'; }).join('');
+  $('csBack').style.display = CS.step ? '' : 'none';
+  $('csNext').textContent = last ? '保存する' : '次へ';
+  $('csSkip').style.display = CS.mode === 'first' ? '' : 'none';
+  csBind();
+}
+function csBind(){
+  var root = $('csBody');
+  Array.prototype.forEach.call(root.querySelectorAll('.pick'), function(box){
+    var id = box.getAttribute('data-q');
+    Array.prototype.forEach.call(box.querySelectorAll('input'), function(i){
+      i.addEventListener('change', function(){
+        if (box.id === 'csRev') { CS.review[CS.secs[CS.step].id] = i.value; csRender(); return; }
+        if (box.getAttribute('data-yn')) { var cur = CS.ans[id] || {}; CS.ans[id] = { v: i.value, t: i.value === 'other' ? (cur.t || '') : '' }; csRender(); return; }
+        if (i.type === 'radio') { CS.ans[id] = i.value; csRender(); return; }
+        CS.ans[id] = Array.prototype.filter.call(box.querySelectorAll('input'), function(x){ return x.checked; }).map(function(x){ return x.value; });
+        i.parentNode.classList.toggle('on', i.checked);
+      });
+    });
+  });
+  Array.prototype.forEach.call(root.querySelectorAll('input[type=text]'), function(t){
+    t.addEventListener('input', function(){
+      var yid = t.getAttribute('data-t');
+      if (yid) { CS.ans[yid] = { v: 'other', t: t.value }; } else { CS.ans[t.getAttribute('data-q')] = t.value; }
+    });
+  });
+  var g = $('csGear'); if (g) g.addEventListener('change', function(){ CS.applyGear = g.checked; });
+}
+function csGearChanges(){
+  var have = CS.ans.equipment; if (!Array.isArray(have) || !CS.all.length) return { on: [], off: [] };
+  var prevHave = CS.prev && Array.isArray(CS.prev.equipment) ? CS.prev.equipment : null;
+  var off = [], on = [];
+  CS.all.forEach(function(e){
+    var q = (e.equipment||'').trim(); if (!q) return;
+    var owned = have.indexOf(q) >= 0;
+    if (!owned && e.active && (!prevHave || prevHave.indexOf(q) >= 0)) off.push(e.id);
+    if (owned && !e.active && prevHave && prevHave.indexOf(q) < 0) on.push(e.id);
+  });
+  return { on: on, off: off };
+}
+function csNext(){
+  var sec = CS.secs[CS.step];
+  if (CS.mode === 'update' && sec.id !== 'memo' && !CS.review[sec.id]) { toast('「変わりなし」か「変わった」を選んでください', true); return; }
+  if (CS.step < CS.secs.length - 1) { CS.step++; csRender(); var b = document.querySelector('#csModal .box'); if (b) b.scrollTop = 0; return; }
+  csSave();
+}
+function csSave(){
+  var btn = $('csNext'); btn.disabled = true; btn.textContent = '保存中…';
+  var chart = CounselLib.compile(CS.ans, CS.eqAll, KT.today());
+  var ch = CS.applyGear ? csGearChanges() : { on: [], off: [] };
+  call('counselSave', { answers: CS.ans, chart: chart }).then(function(){
+    var p = Promise.resolve(null);
+    if (ch.on.length) p = p.then(function(){ return call('setExercisesActive', ch.on, true); });
+    if (ch.off.length) p = p.then(function(){ return call('setExercisesActive', ch.off, false); });
+    return p;
+  }).then(function(r){
+    if (r && r.exercises) APP.data.exercises = r.exercises;
+    if (APP.sel && !exById(APP.sel)) APP.sel = null;
+    $('csModal').classList.remove('open');
+    renderList(); renderPanel();
+    var fl = CounselLib.redFlags(CS.ans);
+    toast(fl.length ? '保存しました。注意：'+fl[0] : '保存しました'+(ch.off.length ? '（使わない器具の種目 '+ch.off.length+' 件をオフにしました）' : ''), !!fl.length);
+  }).catch(function(e){ toast('保存できませんでした（オンラインで）：'+e.message, true); })
+  .then(function(){ btn.disabled = false; btn.textContent = '保存する'; });
+}
+$('csNext').addEventListener('click', csNext);
+$('csBack').addEventListener('click', function(){ if (CS.step) { CS.step--; csRender(); } });
+$('csLater').addEventListener('click', function(){ try { sessionStorage.setItem('kt_cs_later', '1'); } catch(e){} $('csModal').classList.remove('open'); });
+$('csSkip').addEventListener('click', function(){
+  call('counselSkip').then(function(){ $('csModal').classList.remove('open'); renderList(); toast('不要にしました。必要になったら一覧の下の「カウンセリングシート」から答えられます'); }).catch(function(e){ toast(e.message, true); });
+});
+function counselBoot(){
+  call('counselGet').then(function(c){
+    if (!c) return;
+    if (APP.data) renderList();
+    var later = false; try { later = sessionStorage.getItem('kt_cs_later') === '1'; } catch(e){}
+    if ((c.state === 'first' || c.state === 'due') && !later && !$('csModal').classList.contains('open')) openCounsel();
+  }, function(){});
+}
+setTimeout(counselBoot, 1500);
+
 $('tagCancel').addEventListener('click', function(){ $('tagModal').classList.remove('open'); });
 $('tagModal').addEventListener('click', function(e){ if (e.target===$('tagModal')) $('tagModal').classList.remove('open'); });
 $('tagSave').addEventListener('click', saveTagEdit);

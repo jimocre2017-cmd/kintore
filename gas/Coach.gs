@@ -88,8 +88,13 @@ function coachDeadline_(v, today, userDeadline) {
 }
 
 /** カルテ：本人が書く、痛み・既往・避けたい動作・リハビリの経過のメモ（スクリプトのプロパティに保存、最大2000字） */
-function coachChart_() { return String(PropertiesService.getScriptProperties().getProperty('COACH_CHART') || ''); }
-function coachChartGet() { return { text: coachChart_() }; }
+function coachManualChart_() { return String(PropertiesService.getScriptProperties().getProperty('COACH_CHART') || ''); }
+/** AIに渡すカルテ＝手書きのカルテ＋カウンセリングシートの前提メモ（Counsel.gs） */
+function coachChart_() {
+  var manual = coachManualChart_(), cs = typeof counselChart_ === 'function' ? counselChart_() : '';
+  return [manual, cs ? '＜カウンセリングシートの回答＞\n' + cs : ''].filter(Boolean).join('\n\n');
+}
+function coachChartGet() { return { text: coachManualChart_() }; }
 function coachChartSet(text) {
   var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim();
   if (t.length > 2000) throw new Error('カルテは2000字以内にしてください（現在' + t.length + '字）');
