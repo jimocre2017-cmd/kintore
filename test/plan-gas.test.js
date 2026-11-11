@@ -84,6 +84,17 @@ t('planApply：採用すると履歴と食事の目標に反映される（開�
   assert.strictEqual(r.latest.adoptedKcal, 1900);
 });
 
+t('シートの日付セルが Date で返っても、日付文字列にそろえて読む', function () {
+  var rows = sheets['減量調整履歴'].rows;
+  rows[rows.length - 1][1] = new Date('2026-11-22T15:00:00Z'); // 11/23(JST)
+  var r = run('planGet()');
+  assert.strictEqual(r.targets[0].from, '2026/11/23');
+  assert.strictEqual(r.latest.effectiveFrom, '2026/11/23');
+  var r2 = run('planApply({kcal: 1880, from: "2026/11/23"})'); // 同じ週は新しい行を足さず上書き
+  assert.strictEqual(r2.targets.length, 1);
+  assert.strictEqual(r2.targets[0].kcal, 1880);
+});
+
 t('記録不足の時はGeminiを呼ばず、固定の案内を返す', function () {
   meals.length = 0; calls.length = 0;
   var r = run('planAdvise()');

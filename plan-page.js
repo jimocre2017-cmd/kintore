@@ -110,7 +110,7 @@ function renderAdjust(){
     h += '<div class="note">採用すると、'+mdw(from)+'からの目標として履歴に残り、食事画面の目標カロリーにも反映されます。数値は手で直しても構いません。</div>';
   }
   h += '<div class="rowbtns"><button class="btn small" id="aAdvise"'+(S.busy?' disabled':'')+'>'+(S.busy ? '処理中…' : (adv ? 'AIに出し直してもらう' : 'AIに来週の方針を出してもらう'))+'</button></div>';
-  if (ai && ai.createdAt) h += '<div class="note">'+esc(ai.createdAt)+' に作成'+(ai.model ? '（'+esc(ai.model)+'）' : '')+'。数値はアプリが計算し、AIは文章にしています。</div>';
+  if (ai && ai.createdAt) h += '<div class="note">'+esc(ai.createdAt)+' に作成'+(ai.model ? '（'+esc(ai.model)+'）' : '')+'。数値はアプリが計算し、AIは文章にしています。いまの総合診断（期限に間に合うか）は「総合コーチ」、見た目の変化は「体つき写真」で。</div>';
   el.innerHTML = h;
   $('aAdvise').onclick = advise;
   if ($('aApply')) $('aApply').onclick = function(){ apply(from, ad); };

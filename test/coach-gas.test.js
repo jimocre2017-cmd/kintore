@@ -54,8 +54,10 @@ for (i = 0; i < 14; i++) {
 }
 sandbox.bodyGet = function () { return { logs: B.daily(entries) }; };
 sandbox.mealGet = function () { return { logs: meals, goals: { kcal: Number(props.MEAL_GOAL_KCAL) || 0 } }; };
+var geminiStub = sandbox.gemini_;
 vm.createContext(sandbox);
-vm.runInContext(load('PlanLib.gs') + '\n' + load('Plan.gs') + '\n' + load('Coach.gs'), sandbox);
+vm.runInContext(load('PlanLib.gs') + '\n' + load('Plan.gs') + '\n' + load('Coach.gs') + '\n' + load('AiTrainer.gs'), sandbox);
+sandbox.gemini_ = geminiStub; sandbox.aiModelUsed_ = 'fake-model'; // AiTrainer.gs の本物を読み込んだので、偽物に戻す
 var run = function (code) { return vm.runInContext(code, sandbox); };
 
 var n = 0;
@@ -94,6 +96,16 @@ t('2回目は前回の「今日やること」を渡す', function () {
   var d = JSON.parse(calls[1].user.split('\n')[1]);
   assert.strictEqual(d.previous.headline, '見出し');
   assert.strictEqual(d.previous.todayActions.length, 3);
+});
+
+t('AIトレーナーに、筋トレ＋有酸素の消費kcal（合計と内訳）を渡す', function () {
+  var e = run('aiEnergy_("2026/11/22")');
+  assert.strictEqual(e.last7Days.cardioKcal, 450);
+  assert.strictEqual(e.last7Days.strengthKcal, 20);
+  assert.strictEqual(e.last7Days.totalKcal, 470);
+  assert.strictEqual(e.today.totalKcal, 300);
+  assert.ok(run('aiSystemPrompt_()').indexOf('energy') >= 0);
+  assert.strictEqual(run('typeof aiContext_'), 'function');
 });
 
 t('判定が想定外の値なら unknown にする', function () {

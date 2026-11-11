@@ -76,7 +76,8 @@
     }
     if (r.blunt) h += '<div class="blunt">' + esc(r.blunt) + '</div>';
     if ((r.dataGaps || []).length) h += '<div class="gaps">記録を足すと精度が上がります<ul>' + r.dataGaps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
-    h += '<div class="warn">記録をもとにした目安で、医療的な診断ではありません。痛みや強い疲労があるときは無理をせず、続く場合は専門家に相談してください。</div>';
+    h += '<div class="warn">記録をもとにした目安で、医療的な診断ではありません。痛みや強い疲労があるときは無理をせず、続く場合は専門家に相談してください。</div>' +
+      '<div class="warn">使い分け：いまどうか＝総合コーチ／毎週のカロリー調整＝減量計画の画面／見た目の変化＝体つき写真。</div>';
     return h;
   }
 
@@ -114,7 +115,7 @@
 
   function init() {
     css();
-    var fab = document.createElement('button'), host = $('aiOpen'); // 記録画面：下にタイマー帯があるので、ヘッダーのAIトレーナーの隣に置く
+    var fab = document.createElement('button'), host = $('aiOpen') ? $('syncChip') : null; // 記録画面：下にタイマー帯があるので、ヘッダー（同期ボタンの前）に置く
     fab.type = 'button'; fab.setAttribute('aria-label', '総合コーチ');
     if (host && host.parentNode) { fab.className = 'aibtn'; fab.innerHTML = '<span class="spark">🧭</span>総合コーチ'; host.parentNode.insertBefore(fab, host); }
     else { fab.className = 'coachfab'; fab.innerHTML = '<span>🧭</span>総合コーチ'; document.body.appendChild(fab); }
