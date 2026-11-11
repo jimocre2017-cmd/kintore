@@ -84,6 +84,16 @@ function coachDeadline_(v, today, userDeadline) {
   } catch (e) { return null; }
 }
 
+/** カルテ：本人が書く、痛み・既往・避けたい動作・リハビリの経過のメモ（スクリプトのプロパティに保存、最大2000字） */
+function coachChart_() { return String(PropertiesService.getScriptProperties().getProperty('COACH_CHART') || ''); }
+function coachChartGet() { return { text: coachChart_() }; }
+function coachChartSet(text) {
+  var t = String(text == null ? '' : text).replace(/\r\n?/g, '\n').trim();
+  if (t.length > 2000) throw new Error('カルテは2000字以内にしてください（現在' + t.length + '字）');
+  PropertiesService.getScriptProperties().setProperty('COACH_CHART', t);
+  return { text: t };
+}
+
 function coachData_() {
   var today = today_(), now = Utilities.formatDate(new Date(), TZ, 'HH:mm');
   var pl = planSettings_(), v = null;
@@ -119,6 +129,7 @@ function coachData_() {
     goal: { goalFatPct: pl.goalFat || null, deadline: pl.deadline || null },
     plan: plan, deadlineCheck: coachDeadline_(v, today, pl.deadline),
     body: body, meal: meal, mealsLast3Days: meals, training: train,
+    chart: coachChart_() || null,
     previous: last && last.advice ? { at: last.at, headline: last.advice.headline, todayActions: (last.advice.todayActions || []).map(function (a) { return a.title; }) } : null,
     dataGaps: gaps
   };
@@ -141,6 +152,7 @@ function coachSystem_() {
     '- previous があれば、前回の todayActions が実績（食事・運動の記録）から守れていそうかを一言触れる。守れた/守れていないを決めつけず、記録から言える範囲で。',
     '- dataGaps があれば、最後にそれを埋めるよう具体的に促す（判断の精度に直結するため）。',
     '- 役割の分担：あなたの担当は「いま全体としてどうか・期限に間に合うか・今日やること」。来週の1日の目標カロリーを決める（変更を提案する）のは減量計画画面、写真の見た目の評価は「体つき写真」の担当なので、それらは判断しない。必要なら「来週のカロリー調整は計画画面で」「見た目の変化は写真で」と一言だけ促す。',
+    '- カルテ（chart）がある場合は、そこに書かれた痛み・既往・避けたい動作を最優先で守る。該当する部位に負担のかかる運動・強度を勧めず、勧める運動は負担の少ない代替にする。カルテに無い痛みを推測しない。痛みが悪化・長引いている記述があれば、無理をさせず専門家への相談を促す。',
     '- 診断・医療的断定をしない。強い疲労・痛み・体調不良の記録があれば無理をさせない。',
     '- 日本語。1文は短く。専門用語は避ける。',
     '',
@@ -205,4 +217,115 @@ function coachTest() {
   var d = coachData_();
   Logger.log(JSON.stringify(d).slice(0, 6000));
   return d;
+}
+
+/* ============================================================
+ * 相談（データに基づく質問・テーマ相談）
+ * 診断（coachJudge）と同じ確定データを渡し、質問に答える。履歴シート「相談履歴」に残す。
+ * ============================================================ */
+
+var ASK_SHEET = '相談履歴';
+var ASK_HEAD = ['日時', 'テーマ', '質問', '回答（JSON）'];
+
+// テーマ：キー → [表示名, 質問が空のときの既定の質問, AIへの指示]
+var ASK_TOPICS = {
+  meal: ['食事の見直し', '直近の食事の記録を見て、目標に向けて見直すポイントを教えて',
+    '摂取カロリー・たんぱく質・脂質の比率・記録の抜けを meal と mealsLast3Days から読み、足りない栄養と、身近な食品・コンビニ・外食での具体的な置き換えを出す。食べる量を極端に減らす提案はしない。'],
+  plan: ['減量・バルクアップのプラン', '今の状態から、目標に向けたプランを相談したい',
+    '本人の目標（goal・plan・deadlineCheck）に沿ってプランを組む。減量なら必要ペースと安全上限、1日の赤字の目安、たんぱく質、運動の配分。バルクアップ（増量）を相談された場合は、一般的な目安（週に体重の0.25〜0.5%程度の増加、+200〜300kcal/日、たんぱく質は体重×1.6〜2.2g）を「一般的な目安」と明記して示し、今の体脂肪率・筋トレ頻度から、いつ減量から切り替えるかの考え方を述べる。切り替え時期は断定せず、条件で示す。'],
+  stall: ['体重・体脂肪が動かない（停滞）', '最近、体重や体脂肪率が思うように動かない。原因の候補を教えて',
+    'body の週平均の動き、meal の記録日数と平均、training の消費、期間の長さから、停滞の原因の候補を可能性の高い順に2〜4個挙げる。体重は日々±1kg前後ぶれるので、1〜2週間は判断しない。記録の抜けが疑わしい場合はそれを最初に挙げる。'],
+  eatout: ['外食・飲み会・旅行の乗り切り方', '外食や飲み会が続く週の、減量を崩さない考え方を教えて',
+    'plan.adjust の週予算（weeklyBudget）や週の残り（weeks の remainingKcal）があれば使い、「その日だけで取り返さず、週で調整する」考え方を具体的な数字で示す。飲酒は meal の記録があれば踏まえる。極端な絶食・まとめ食い後の制限は勧めない。'],
+  training: ['トレーニング量と回復', '筋トレと有酸素のバランスは今のままでいい？回復は足りてる？',
+    'training の筋トレ日数・有酸素日数・消費kcal（合計と内訳）と body の筋肉量の動きから、量が多すぎ／少なすぎ・回復の余裕を読む。減量中は高強度の筋トレを維持しつつ、有酸素は足首・股関節の負担に注意して増やしすぎない。痛みの訴えがあれば無理をさせない。'],
+  body: ['体組成の数字の読み方', '体重・体脂肪率・筋肉量の最近の動きを、どう読めばいい？',
+    'body の latest・changeSince4WeeksAgo・last8Weeks・comparisons・conditionSummary から、脂肪が減っているか筋肉が保てているかを読む。測定条件（起床後など）が揃っていないときはそれを指摘し、揃えて測る方法を勧める。日内変動を踏まえ、1回の値で断定しない。'],
+  condition: ['痛み・コンディション・リハビリ', '今の痛みやコンディションを踏まえて、今日の運動と過ごし方を相談したい',
+    'chart（カルテ）と質問に書かれた痛み・違和感を最優先にし、今日の筋トレ・有酸素の可否と強度の目安（避ける動作・代わりの動作）、セルフケアの方向性を、training の直近の量と合わせて示す。診断はしない。鋭い痛み・しびれ・夜間痛・数日続く悪化があれば、運動を控えて整形外科などの受診を勧める。カルテが空で質問にも痛みの記述が無ければ、どこがどう痛むか（いつから・動作・強さ）を最初に聞き返す。'],
+  protein: ['たんぱく質の摂り方', 'たんぱく質は足りてる？どう摂ればいい？',
+    'meal.averagePerLoggedDay.protein と plan.adjust.protein（または body.plan.proteinGramsPerDay）の目安を比べ、不足なら1日の中でどこで足すか（朝・間食・夕食）を、身近な食品とグラム数で具体的に示す。サプリは記録に無いので推測しない。'],
+  free: ['自由相談', '', '質問に直接答える。データで答えられる部分は数値を引用し、データに無いことは「記録に無いので分からない」と言う。']
+};
+var ASK_ORDER = ['meal', 'plan', 'stall', 'eatout', 'training', 'condition', 'body', 'protein', 'free'];
+
+function askSystem_(topic) {
+  return [
+    'あなたは、目標の体脂肪率と期限に向けて取り組んでいる本人の相談に、記録データを根拠に答える専属コーチです。率直に、でも責めずに、事実（数値）と次の一手で答える。',
+    '',
+    '## 守るルール',
+    '- 数値は渡されたJSONからそのまま引用する。再計算・推測値の追加をしない。データに無いことを断定しない。一般的な目安を使う場合は「一般的な目安」と明記し、本人のデータの数値と区別する。',
+    '- 食事の記録は概算で、記録の抜けは摂取を少なく見せる。meal.daysLogged が少ないときは、判断が不確かだと言う。nowTime が昼なら、今日の夕食が未記録でも責めない。',
+    '- 運動のkcalは概算。体脂肪率は日々±1%程度ぶれるので、週平均の傾向で語る。',
+    '- カルテ（chart）がある場合は、そこに書かれた痛み・既往・避けたい動作を最優先で守り、該当部位に負担のかかる運動・強度を勧めない（代替を示す）。カルテに無い痛みを推測しない。',
+    '- 極端な食事制限・絶食・過度な運動で間に合わせる提案はしない。減量ペースは体重の約1%/週以内。診断・医療的断定をしない。強い疲労・痛み・体調不良があれば無理をさせず、続く場合は専門家への相談を勧める。',
+    '- 役割の分担：総合診断は「診断」ボタン、毎週のカロリー調整は減量計画画面、見た目の変化は写真。質問がそれに当たる場合は答えたうえで、そちらも案内する。',
+    '- 会話の続きの場合は、history の内容を踏まえて、同じことを繰り返さない。',
+    '- 日本語。1文は短く、専門用語は避ける。',
+    '',
+    '## このテーマの指示（' + ASK_TOPICS[topic][0] + '）',
+    ASK_TOPICS[topic][2],
+    '',
+    '## 出力',
+    '- answer：質問への答え。結論を先に、4〜8文。',
+    '- points：要点を2〜4個（短く）。',
+    '- nextSteps：今日〜今週にやることを最大3つ（具体的に）。',
+    '- followups：次に聞くと役に立つ質問を最大3つ（本人の言葉で、1文）。',
+    '- dataNote：根拠にしたデータと、足りない記録（無ければ空文字）。'
+  ].join('\n');
+}
+
+function askSchema_() {
+  return {
+    type: 'OBJECT',
+    properties: {
+      answer: { type: 'STRING' },
+      points: { type: 'ARRAY', items: { type: 'STRING' } },
+      nextSteps: { type: 'ARRAY', items: { type: 'STRING' } },
+      followups: { type: 'ARRAY', items: { type: 'STRING' } },
+      dataNote: { type: 'STRING' }
+    },
+    required: ['answer', 'points', 'nextSteps', 'followups', 'dataNote']
+  };
+}
+
+/** テーマ一覧（画面のボタン用） */
+function coachTopics() {
+  return ASK_ORDER.map(function (k) { return { key: k, label: ASK_TOPICS[k][0], defaultQuestion: ASK_TOPICS[k][1] }; });
+}
+
+/**
+ * 相談する
+ * @param {Object} req { topic:テーマのキー, question:質問（テーマ指定で空なら既定の質問）, history:[{q, a}]（直近の会話、最大3件） }
+ */
+function coachAsk(req) {
+  req = req || {};
+  var topic = ASK_TOPICS[req.topic] ? req.topic : 'free';
+  var q = planStr_(req.question, 500) || ASK_TOPICS[topic][1];
+  if (q.length < 2) throw new Error('相談したいことを入力するか、テーマを選んでください');
+  var hist = (req.history || []).slice(-3).map(function (h) { return { question: planStr_(h && h.q, 300), answer: planStr_(h && h.a, 500) }; });
+  var data = coachData_();
+  if (!data.body && !data.meal && !(data.training && (data.training.last28Days.strengthDays || data.training.last28Days.cardioDays))) {
+    // 記録が無くても、一般的な質問には答える（その旨を dataNote に出させる）
+    data.noRecords = true;
+  }
+  var user = '# 相談\nテーマ：' + ASK_TOPICS[topic][0] + '\n質問：' + q + '\n\n# 会話の履歴（古い順）\n' + JSON.stringify(hist) + '\n\n# 記録データ（JSON）\n' + JSON.stringify(data);
+  var res = gemini_(askSystem_(topic), user, askSchema_());
+  var out = {
+    topic: topic, topicLabel: ASK_TOPICS[topic][0], question: q,
+    answer: planStr_(res.answer, 1500), points: planArr_(res.points, 4, 200), nextSteps: planArr_(res.nextSteps, 3, 250),
+    followups: planArr_(res.followups, 3, 120), dataNote: planStr_(res.dataNote, 300)
+  };
+  var at = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm');
+  try {
+    var ss = ss_(), sh = ss.getSheetByName(ASK_SHEET);
+    if (!sh) {
+      sh = ss.insertSheet(ASK_SHEET);
+      sh.getRange(1, 1, 1, ASK_HEAD.length).setValues([ASK_HEAD]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+      sh.setFrozenRows(1); sh.setColumnWidth(4, 520);
+    }
+    sh.appendRow([new Date(), ASK_TOPICS[topic][0], q, JSON.stringify(out).slice(0, 45000)]);
+  } catch (e) { /* 履歴の保存に失敗しても回答は返す */ }
+  out.createdAt = at; out.model = aiModelUsed_;
+  return out;
 }

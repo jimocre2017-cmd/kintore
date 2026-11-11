@@ -108,6 +108,35 @@ t('AIトレーナーに、筋トレ＋有酸素の消費kcal（合計と内訳�
   assert.strictEqual(run('typeof aiContext_'), 'function');
 });
 
+t('coachAsk：テーマの指示・質問・会話履歴・確定データをGeminiに渡し、履歴に残す', function () {
+  sandbox.gemini_ = function (system, user) { calls.push({ system: system, user: user }); return { answer: '結論', points: ['p1', 'p2'], nextSteps: ['n1'], followups: ['f1', 'f2', 'f3', 'f4'], dataNote: '食事6日分' }; };
+  var r = run('coachAsk({topic: "plan", question: "増量に切り替えるべき？", history: [{q: "前の質問", a: "前の答え"}]})');
+  var c = calls[calls.length - 1];
+  assert.ok(c.system.indexOf('バルクアップ') >= 0 && c.system.indexOf('一般的な目安') >= 0);
+  assert.ok(c.user.indexOf('増量に切り替えるべき？') >= 0 && c.user.indexOf('前の答え') >= 0 && c.user.indexOf('deadlineCheck') >= 0);
+  assert.strictEqual(r.topic, 'plan'); assert.strictEqual(r.topicLabel, '減量・バルクアップのプラン');
+  assert.strictEqual(r.followups.length, 3); // 最大3つ
+  assert.strictEqual(sheets['相談履歴'].rows.length, 2);
+});
+
+t('coachAsk：テーマだけ選んだら既定の質問になる。不明なテーマは自由相談。空の自由相談はエラー', function () {
+  var r = run('coachAsk({topic: "meal"})');
+  assert.ok(r.question.indexOf('食事') >= 0);
+  assert.strictEqual(run('coachAsk({topic: "zzz", question: "こんにちは、質問です"})').topic, 'free');
+  assert.throws(function () { run('coachAsk({topic: "free", question: ""})'); }, /入力/);
+});
+
+t('カルテ：保存して、診断・相談・AIトレーナーに渡す。2000字を超えたらエラー', function () {
+  assert.strictEqual(run('coachChartGet().text'), '');
+  assert.strictEqual(run('coachChartSet("  右肩にインピンジメント。オーバーヘッドは避ける  ").text'), '右肩にインピンジメント。オーバーヘッドは避ける');
+  assert.strictEqual(run('coachData_().chart'), '右肩にインピンジメント。オーバーヘッドは避ける');
+  assert.ok(run('coachSystem_()').indexOf('カルテ') >= 0 && run('askSystem_("condition")').indexOf('痛み') >= 0);
+  assert.ok(run('aiSystemPrompt_()').indexOf('chart') >= 0);
+  assert.throws(function () { run('coachChartSet(new Array(2002).join("あ"))'); }, /2000字/);
+  run('coachChartSet("")');
+  assert.strictEqual(run('coachData_().chart'), null);
+});
+
 t('判定が想定外の値なら unknown にする', function () {
   sandbox.gemini_ = function () { return { verdict: 'great', headline: 'h', goalCheck: '', meal: '', exercise: '', body: '', todayActions: [], blunt: '', dataGaps: [] }; };
   assert.strictEqual(run('coachJudge()').verdict, 'unknown');
