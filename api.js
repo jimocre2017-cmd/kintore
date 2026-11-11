@@ -636,6 +636,7 @@ var KT = (function () {
     planSet: function (p) { return api('planSet', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
     planAdvise: function () { return api('planAdvise', [], 120000).then(function (r) { return r; }, onlineOnly); },
     planApply: function (p) { return api('planApply', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
+    planPauseApply: function (p) { return api('planPauseApply', [p], 30000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
 
     getInitData: function () {
       var cached = LS.get('kt_init', null);
@@ -712,6 +713,16 @@ var KT = (function () {
     updateExerciseSecondary: function (id, list) {
       return api('updateExerciseSecondary', [id, list]).then(function (r) {
         var view = cur(); view.exercises = r.exercises; r.todaySummary = summarizeLocal(view);
+        schedule(500);
+        return r;
+      }, onlineOnly);
+    },
+
+    // 種目の表示オン／オフ（種目マスタの「有効」列）。オンラインの時だけ
+    exerciseListAll: function () { return api('exerciseListAll', [], 30000).then(function (r) { return r; }, onlineOnly); },
+    setExercisesActive: function (ids, active) {
+      return api('setExercisesActive', [ids, active], 60000).then(function (r) {
+        var view = cur(); if (view) view.exercises = r.exercises;
         schedule(500);
         return r;
       }, onlineOnly);

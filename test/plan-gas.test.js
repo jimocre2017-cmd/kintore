@@ -108,4 +108,32 @@ t('目標未設定ならエラー', function () {
   assert.throws(function () { run('planAdvise()'); }, /計画の設定/);
 });
 
+t('planSet：曲線・維持期・最低体脂肪率の検証と保存（既定は緩やかな曲線）', function () {
+  assert.strictEqual(run('planSettings_()').shape, 'ease');
+  assert.throws(function () { run('planSet({goalFat: 12, startDate: "2026/11/09", weeklyLossKg: 0.5, activity: 1.55, phase: "maintain"})'); }, /最低体脂肪率/);
+  assert.throws(function () { run('planSet({goalFat: 12, startDate: "2026/11/09", weeklyLossKg: 0.5, activity: 1.55, floorFat: 15})'); }, /目標の体脂肪率以下/);
+  var r = run('planSet({goalFat: 12, startDate: "2026/11/09", deadline: "2027/04/30", weeklyLossKg: 0.5, activity: 1.55, shape: "linear", floorFat: 10})');
+  assert.strictEqual(r.plan.shape, 'linear'); assert.strictEqual(r.plan.floorFat, 10); assert.strictEqual(r.plan.phase, 'cut');
+  r = run('planSet({goalFat: 12, startDate: "2026/11/09", deadline: "2027/04/30", weeklyLossKg: 0.5, activity: 1.55, shape: "ease", phase: "maintain", floorFat: 12})');
+  assert.strictEqual(r.plan.phase, 'maintain');
+  r = run('planSet({goalFat: 12, startDate: "2026/11/09", deadline: "2027/04/30", weeklyLossKg: 0.5, activity: 1.55, shape: "ease", floorFat: ""})');
+  assert.strictEqual(r.plan.phase, 'cut'); assert.strictEqual(r.plan.floorFat, 0);
+});
+
+t('planPauseApply：サーバー側で検証し、休止期間を追加・取消できる', function () {
+  var bad = function (c, re) { assert.throws(function () { sandbox.__c = c; run('planPauseApply(__c)'); }, re); };
+  bad({ action: 'add_pause', from: '2026/11/01', to: '2026/11/05' }, /今日以降/);
+  bad({ action: 'add_pause', from: '2026/12/28', to: '2026/12/20' }, /終了日/);
+  bad({ action: 'add_pause', from: '2026/12/01', to: '2026/12/30' }, /21日/);
+  bad({ action: 'add_pause', from: '2027/05/10', to: '2027/05/12' }, /期限/);
+  bad({ action: 'drop', from: '2026/12/01', to: '2026/12/03' }, /種類/);
+  sandbox.__c = { action: 'add_pause', from: '2026/12/28', to: '2027/01/05', reason: '年末年始' };
+  var r = run('planPauseApply(__c)');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(r.plan.pauses)), [{ from: '2026/12/28', to: '2027/01/05', reason: '年末年始' }]);
+  bad({ action: 'add_pause', from: '2027/01/03', to: '2027/01/08' }, /重なって/);
+  sandbox.__c = { action: 'remove_pause', from: '2026/12/28', to: '2027/01/05' };
+  r = run('planPauseApply(__c)');
+  assert.strictEqual(r.plan.pauses.length, 0);
+});
+
 console.log('\n' + n + ' 件すべて成功');

@@ -160,6 +160,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .actions .primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .adv{font-size:13px;color:var(--ink-2);background:var(--surface-2);border-radius:10px;padding:10px 12px;margin-bottom:12px}
 
+.visq{display:flex;gap:8px;margin-top:8px}.visrow{display:flex;align-items:center;gap:10px;padding:8px 4px;border-bottom:1px solid var(--line);font-size:14px}.visrow input{width:20px;height:20px;margin:0}.visrow small{color:var(--ink-3);margin-left:auto}.visgrp{font-size:12px;color:var(--ink-3);margin:12px 0 2px;font-weight:700}
 .pick{display:flex;flex-wrap:wrap;gap:8px}
 .pick label{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2);font-size:14px;cursor:pointer}
 .pick label.on{background:var(--accent-soft);border-color:var(--accent)}
@@ -399,6 +400,21 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <div class="actions">
 <button id="secCancel">キャンセル</button>
 <button class="primary" id="secSave">保存</button>
+</div>
+</div>
+</div>
+
+<div class="modal" id="visModal">
+<div class="box">
+<h3>種目の表示設定</h3>
+<div class="adv">使わない種目をオフにすると、一覧・おすすめ・プログラムの候補から外れます。過去の記録と集計はそのまま残り、いつでもオンに戻せます。持っていない器具をまとめてオフにすることもできます。</div>
+<div class="visq"><button type="button" id="visAllOn" class="secbtn">すべてオン</button><button type="button" id="visAllOff" class="secbtn">すべてオフ</button></div>
+<div class="adv" style="margin:10px 0 4px">器具でまとめて切り替え（タップで、その器具の種目を全部オン／オフ）</div>
+<div class="pick" id="visEq"></div>
+<div id="visList" style="margin-top:12px"></div>
+<div class="actions">
+<button id="visCancel">キャンセル</button>
+<button class="primary" id="visSave">保存</button>
 </div>
 </div>
 </div>
@@ -659,11 +675,12 @@ function renderList(){
     });
     h += '</div>';
   });
-  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
+  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button><button class="addbtn" id="openVis" style="margin-top:8px">種目の表示設定（オン／オフ）</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
   $('exList').innerHTML = h + ykCardHtml();
   bindListCommon();
   $('openAdd').addEventListener('click', openAdd);
+  $('openVis').addEventListener('click', openVis);
   renderTodayParts();
 }
 // ===== 部位イラスト（ローポリ風） =====
@@ -1254,6 +1271,62 @@ function saveTagEdit(){
   }).catch(function(e){ toast('保存できませんでした：'+e.message, true); })
   .then(function(){ b.disabled = false; b.textContent = '保存'; });
 }
+/* 種目の表示オン／オフ */
+var VIS = { all: [], orig: {} };
+function visRender(){
+  var byPart = {}, eqs = {};
+  VIS.all.forEach(function(e){ (byPart[e.part] = byPart[e.part] || []).push(e); eqs[e.equipment || '（器具なし）'] = 1; });
+  var h = '';
+  Object.keys(byPart).forEach(function(pt){
+    h += '<div class="visgrp">'+esc(pt)+'</div>' + byPart[pt].map(function(e){
+      return '<label class="visrow"><input type="checkbox" data-id="'+esc(e.id)+'" data-eq="'+esc(e.equipment || '（器具なし）')+'"'+(e.on?' checked':'')+'>'+esc(e.name)+'<small>'+esc(e.equipment || '')+(e.progOnly ? '・プログラム専用' : '')+'</small></label>';
+    }).join('');
+  });
+  $('visList').innerHTML = h;
+  $('visEq').innerHTML = Object.keys(eqs).map(function(q){ return '<label data-eqbtn="'+esc(q)+'">'+esc(q)+'</label>'; }).join('');
+  Array.prototype.forEach.call($('visList').querySelectorAll('input'), function(i){ i.addEventListener('change', function(){ VIS.all.forEach(function(e){ if (e.id === i.getAttribute('data-id')) e.on = i.checked; }); }); });
+  Array.prototype.forEach.call($('visEq').querySelectorAll('[data-eqbtn]'), function(b){
+    b.addEventListener('click', function(ev){
+      ev.preventDefault();
+      var q = b.getAttribute('data-eqbtn'), list = VIS.all.filter(function(e){ return (e.equipment || '（器具なし）') === q; });
+      var turnOn = !list.every(function(e){ return e.on; });
+      list.forEach(function(e){ e.on = turnOn; });
+      visRender();
+    });
+  });
+}
+function openVis(){
+  $('visList').innerHTML = '<div class="empty">読み込み中…</div>'; $('visEq').innerHTML = '';
+  $('visModal').classList.add('open');
+  call('exerciseListAll').then(function(r){
+    VIS.all = r.all.map(function(e){ return { id: e.id, name: e.name, part: e.part, equipment: e.equipment, progOnly: e.progOnly, on: !!e.active }; });
+    VIS.orig = {}; VIS.all.forEach(function(e){ VIS.orig[e.id] = e.on; });
+    visRender();
+  }).catch(function(e){ $('visModal').classList.remove('open'); toast('読み込めません（オンラインで開いてください）：'+e.message, true); });
+}
+function visSave(){
+  var on = VIS.all.filter(function(e){ return e.on && !VIS.orig[e.id]; }).map(function(e){ return e.id; });
+  var off = VIS.all.filter(function(e){ return !e.on && VIS.orig[e.id]; }).map(function(e){ return e.id; });
+  if (!on.length && !off.length) { $('visModal').classList.remove('open'); return; }
+  if (VIS.all.every(function(e){ return !e.on; })) { toast('すべてオフにはできません（1つは表示してください）', true); return; }
+  var b = $('visSave'); b.disabled = true; b.textContent = '保存中…';
+  var p = Promise.resolve(null);
+  if (on.length) p = p.then(function(){ return call('setExercisesActive', on, true); }); // 先にオン→オフの順（途中で全部オフにならないように）
+  if (off.length) p = p.then(function(){ return call('setExercisesActive', off, false); });
+  p.then(function(r){
+    if (r && r.exercises) APP.data.exercises = r.exercises;
+    if (APP.sel && !exById(APP.sel)) APP.sel = null;
+    $('visModal').classList.remove('open');
+    renderList(); renderPanel();
+    toast('表示を更新しました（オン '+on.length+'・オフ '+off.length+'）');
+  }).catch(function(e){ toast('保存できませんでした：'+e.message, true); })
+  .then(function(){ b.disabled = false; b.textContent = '保存'; });
+}
+$('visCancel').addEventListener('click', function(){ $('visModal').classList.remove('open'); });
+$('visModal').addEventListener('click', function(e){ if (e.target===$('visModal')) $('visModal').classList.remove('open'); });
+$('visSave').addEventListener('click', visSave);
+$('visAllOn').addEventListener('click', function(){ VIS.all.forEach(function(e){ e.on = true; }); visRender(); });
+$('visAllOff').addEventListener('click', function(){ VIS.all.forEach(function(e){ e.on = false; }); visRender(); });
 $('tagCancel').addEventListener('click', function(){ $('tagModal').classList.remove('open'); });
 $('tagModal').addEventListener('click', function(e){ if (e.target===$('tagModal')) $('tagModal').classList.remove('open'); });
 $('tagSave').addEventListener('click', saveTagEdit);

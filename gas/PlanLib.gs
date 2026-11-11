@@ -8,6 +8,10 @@ var PlanLib = (function () {
   var DEFAULTS = { goalFat: 12, weeklyLossKg: 0.5, activity: 1.55 };
   var MIN_BODY_SPAN = 10;   // 実測の消費カロリーを出すのに必要な体組成の期間（日）
   var STEP_LIMIT = 200;     // 1週間で動かす目標カロリーの上限（kcal）
+  var EASE_RATIO = 0.6;     // 緩やかな計画：終盤の減量ペースは、前半の何割か
+  var EASE_DAYS = 60;       // 終盤とみなす日数（期間が短いときは全体の3割）
+  var MAINT_BAND = 1.5;     // 維持期：最低体脂肪率の上にこの幅(%)までを許容帯とする
+  var BAND_KG = 0.3;        // 計画との差が±この脂肪量(kg)以内なら「ほぼ計画どおり」
   var HOLD_BAND = 50;       // この差未満なら目標を変えない（kcal）
 
   function r1(n) { return Math.round(n * 10) / 10; }
@@ -47,6 +51,36 @@ var PlanLib = (function () {
     });
     return out;
   }
+  /* ---- 休止期間（旅行・年末年始・ダイエットブレイク）：この間は減量せず維持カロリーで過ごす ---- */
+  function normDate(s) {
+    var m = String(s || '').match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    return m ? m[1] + '/' + p2(+m[2]) + '/' + p2(+m[3]) : '';
+  }
+  function cleanPauses(list) {
+    var out = [];
+    (list || []).forEach(function (x) {
+      var f = normDate(x && x.from), t = normDate(x && x.to);
+      if (!f || !t || toDays(t) < toDays(f)) return;
+      out.push({ from: f, to: t, reason: String((x && x.reason) || '').slice(0, 60) });
+    });
+    out.sort(function (a, b) { return toDays(a.from) - toDays(b.from); });
+    return out;
+  }
+  // 開始日の翌日〜dateまでに含まれる休止日の数
+  function pauseDaysUntil(pauses, startDate, date) {
+    var st = toDays(startDate) + 1, e = toDays(date), n = 0;
+    (pauses || []).forEach(function (x) {
+      var a = Math.max(toDays(x.from), st), z = Math.min(toDays(x.to), e);
+      if (z >= a) n += z - a + 1;
+    });
+    return n;
+  }
+  function pausedOn(pauses, date) {
+    var d = toDays(date), hit = null;
+    (pauses || []).forEach(function (x) { if (d >= toDays(x.from) && d <= toDays(x.to)) hit = x; });
+    return hit;
+  }
+
   function normalizePlan(plan, today) {
     plan = plan || {};
     var p = {
@@ -54,7 +88,11 @@ var PlanLib = (function () {
       startDate: plan.startDate || '',
       weeklyLossKg: Number(plan.weeklyLossKg) > 0 ? Number(plan.weeklyLossKg) : DEFAULTS.weeklyLossKg,
       deadline: plan.deadline || '',
-      activity: Number(plan.activity) > 0 ? Number(plan.activity) : DEFAULTS.activity
+      activity: Number(plan.activity) > 0 ? Number(plan.activity) : DEFAULTS.activity,
+      shape: plan.shape === 'ease' ? 'ease' : 'linear',
+      pauses: cleanPauses(plan.pauses),
+      phase: plan.phase === 'maintain' ? 'maintain' : 'cut',
+      floorFat: Number(plan.floorFat) > 0 ? Number(plan.floorFat) : 0
     };
     p.configured = !!(p.goalFat && p.startDate);
     return p;
@@ -90,29 +128,53 @@ var PlanLib = (function () {
   /* ---- 計画ライン：基準の脂肪量から目標の脂肪量まで、一定のペースで減らす ---- */
   function build(plan, base) {
     if (!plan.configured || !base) return null;
-    var g = plan.goalFat, lean = base.lean;
+    var g = plan.goalFat, lean = base.lean, pauses = plan.pauses || [];
     var targetFatMass = lean * g / (100 - g), toLose = Math.max(0, base.fatMass - targetFatMass);
-    var weekly = plan.weeklyLossKg, days, deadline = plan.deadline;
-    if (deadline && toDays(deadline) > toDays(plan.startDate)) {
+    var weekly = plan.weeklyLossKg, days, deadline = plan.deadline, activeDays;
+    var hasDeadline = !!(deadline && toDays(deadline) > toDays(plan.startDate));
+    if (hasDeadline) {
       days = toDays(deadline) - toDays(plan.startDate);
-      weekly = toLose / (days / 7);
+      activeDays = Math.max(1, days - pauseDaysUntil(pauses, plan.startDate, deadline));
     } else {
-      days = toLose > 0 ? Math.round(toLose / weekly * 7) : 0;
+      activeDays = toLose > 0 ? Math.max(1, Math.round(toLose / weekly * 7)) : 0;
+      days = activeDays;
+      for (var i = 0; i < 6; i++) { var nd = activeDays + pauseDaysUntil(pauses, plan.startDate, addDays(plan.startDate, days)); if (nd === days) break; days = nd; }
       deadline = addDays(plan.startDate, days);
     }
+    // 減量する日（休止を除く）の中で、一定ペース（linear）か、終盤を緩めるペース（ease）で脂肪を落とす
+    var phase2 = 0, r1, r2;
+    if (plan.shape === 'ease' && activeDays > 0) {
+      phase2 = Math.min(EASE_DAYS, Math.round(activeDays * 0.3));
+      r1 = toLose / ((activeDays - phase2) + EASE_RATIO * phase2); r2 = r1 * EASE_RATIO;
+    } else { r1 = activeDays > 0 ? (hasDeadline ? toLose / activeDays : weekly / 7) : 0; r2 = r1; }
+    var peakWeekly = r1 * 7;
     return {
       goalFat: g, startDate: plan.startDate, deadline: deadline, totalDays: days,
+      shape: plan.shape, pauses: pauses, activeDays: activeDays, phase1Days: activeDays - phase2, phase2Days: phase2,
+      ratePerDay1: r1, ratePerDay2: r2, weeklyLossKg1: peakWeekly, weeklyLossKg2: r2 * 7,
       leanKg: lean, baseWeight: base.weight, baseFat: base.fat, baseFatMass: base.fatMass,
       targetFatMass: targetFatMass, targetWeight: lean + targetFatMass, toLoseKg: toLose,
-      weeklyLossKg: weekly, weeklyLossPct: base.weight ? weekly / base.weight * 100 : null,
-      deficitKcalPerDay: Math.round(weekly * KCAL_PER_KG / 7),
-      aggressive: !!(base.weight && weekly > base.weight * 0.01) // 体重の1%/週を超える
+      weeklyLossKg: peakWeekly, weeklyLossPct: base.weight ? peakWeekly / base.weight * 100 : null, // 前半（最も速い時期）の週あたり
+      deficitKcalPerDay: Math.round(peakWeekly * KCAL_PER_KG / 7),
+      aggressive: !!(base.weight && peakWeekly > base.weight * 0.01) // 体重の1%/週を超える
     };
   }
-  function plannedFatMass(b, date) {
-    var t = Math.max(0, toDays(date) - toDays(b.startDate));
-    return Math.max(b.targetFatMass, b.baseFatMass - b.weeklyLossKg * t / 7);
+  // dateまでに経過した「減量する日」の数（休止日を除く）
+  function activeElapsed(b, date) {
+    var t = Math.max(0, Math.min(toDays(date), toDays(b.startDate) + b.totalDays) - toDays(b.startDate));
+    return Math.max(0, t - pauseDaysUntil(b.pauses, b.startDate, date));
   }
+  // その日の計画上の減量ペース（kg/週）。休止中は0
+  function rateAt(b, date) {
+    if (pausedOn(b.pauses, date)) return 0;
+    return (activeElapsed(b, date) < b.phase1Days ? b.ratePerDay1 : b.ratePerDay2) * 7;
+  }
+  function plannedFatMass(b, date) {
+    var a = activeElapsed(b, date), loss = a <= b.phase1Days ? b.ratePerDay1 * a : b.ratePerDay1 * b.phase1Days + b.ratePerDay2 * (a - b.phase1Days);
+    return Math.max(b.targetFatMass, b.baseFatMass - loss);
+  }
+  // dateから期限までに残っている「減量する日」の数
+  function activeDaysLeft(b, date) { return Math.max(0, b.activeDays - activeElapsed(b, date)); }
   function plannedFatPct(b, date) { var fm = plannedFatMass(b, date); return fm / (b.leanKg + fm) * 100; }
 
   /* ---- 傾き（最小二乗法）：脂肪量kg/日 ---- */
@@ -255,11 +317,14 @@ var PlanLib = (function () {
     var weight = weights.length ? mean(weights) : b.baseWeight;
     var est = estimatedTdee(bodyMap, plan, today, ctx.base), obs = observedTdee(bodyMap, mealMap, today, 28);
     var floor = Math.round(Math.max(est ? est.bmr : 1200, 1200));
-    var deficit = b.deficitKcalPerDay;
+    var pauseNow = pausedOn(b.pauses, today), rateNow = rateAt(b, today);
+    var maintain = plan.phase === 'maintain';
+    if (maintain) rateNow = 0; // 維持期：赤字なし（維持カロリー）
+    var deficit = Math.round(rateNow * KCAL_PER_KG / 7); // 休止中は0（維持カロリー）
     var out = {
       today: today, coverage: cov, weightKg: r1(weight),
       protein: { minG: Math.round(weight * 1.6), targetG: Math.round(weight * 2.0) },
-      planned: { weeklyLossKg: r2(b.weeklyLossKg), deficitKcalPerDay: deficit, aggressive: b.aggressive },
+      planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain ? false : b.aggressive, shape: b.shape, paused: !!pauseNow, phase: plan.phase },
       floorKcal: floor, previousTarget: prev || null,
       avgIntake7: meals7.length ? Math.round(mean(meals7.map(function (x) { return x.kcal; }))) : null
     };
@@ -285,7 +350,7 @@ var PlanLib = (function () {
       target = prev || raw;
       reasons.push('体組成の記録がまだ' + MIN_BODY_SPAN + '日分に届いていないため、計画値（基礎代謝×' + plan.activity + '−計画の赤字）を使います');
     } else {
-      var actual = -obs.fatPerWeek, plan_ = b.weeklyLossKg;
+      var actual = -obs.fatPerWeek, plan_ = rateNow;
       out.actual = { weeklyLossKg: r2(actual), spanDays: obs.span, bodyPoints: obs.bodyPoints, avgIntake: obs.intake, mealDays: obs.mealDays };
       if (actual < plan_ - 0.2) status = 'behind'; else if (actual > plan_ + 0.3) status = 'ahead'; else status = 'on_track';
       if (prev) {
@@ -299,6 +364,27 @@ var PlanLib = (function () {
       if (leanTr && leanTr.span >= MIN_BODY_SPAN && leanTr.perWeek < -0.3) { out.leanWarning = '除脂肪量が週' + r2(-leanTr.perWeek) + 'kgのペースで減っています（体組成計の推定値。筋トレの重さ・回数と合わせて確認）'; }
       if (actual > weight * 0.01) reasons.push('減量ペースが体重の1%/週を超えています。筋肉が落ちやすいので緩めます');
       if (out.avgIntake7 != null && prev && out.avgIntake7 - prev > 150) reasons.push('直近7日の摂取は目標より' + (out.avgIntake7 - prev) + 'kcal多い。計画とのずれの主因は摂取量です');
+    }
+    // 最低体脂肪率（フロア）：維持期は許容帯に収める。減量期でも到達したら維持への切替を促す
+    var fats = [];
+    for (d = toDays(from7); d <= toDays(today); d++) { var bdd = bodyMap[fromDays(d)]; if (bdd && bdd.fat != null) fats.push(bdd.fat); }
+    var fat7 = fats.length >= 2 ? mean(fats) : null;
+    if (plan.floorFat > 0 && fat7 != null) {
+      var upper = plan.floorFat + MAINT_BAND;
+      out.floor = { floorFat: plan.floorFat, upperFat: r1(upper), currentFat: r1(fat7), marginPct: r1(fat7 - plan.floorFat) };
+      if (maintain && status !== 'insufficient') {
+        if (fat7 < plan.floorFat) { status = 'below_floor'; target = Math.round((tdee + STEP_LIMIT) / 10) * 10; reasons.unshift('体脂肪率が最低ライン' + plan.floorFat + '%を下回っています。維持カロリーより' + STEP_LIMIT + 'kcal多く食べて、筋トレは維持します'); }
+        else if (fat7 > upper) { status = 'above_band'; target = Math.max(floor, Math.round((tdee - STEP_LIMIT) / 10) * 10); reasons.unshift('体脂肪率が許容帯の上限' + r1(upper) + '%を超えています。維持カロリーより' + STEP_LIMIT + 'kcal控えめにします'); }
+        else { status = 'maintaining'; target = Math.max(floor, Math.round(tdee / 10) * 10); reasons.unshift('体脂肪率は許容帯（' + plan.floorFat + '〜' + r1(upper) + '%）の中。維持カロリーで過ごします'); }
+      } else if (!maintain && fat7 <= plan.floorFat) {
+        status = 'floor_reached'; target = Math.max(floor, Math.round(tdee / 10) * 10); out.floorReached = true;
+        reasons.unshift('体脂肪率が最低ライン' + plan.floorFat + '%に届きました。これ以上は減らさず、維持期へ切り替えるのがおすすめです');
+      }
+    }
+    if (pauseNow) { // 休止期間：維持カロリーで運用し、計画との比較は行わない
+      status = 'paused'; target = raw;
+      reasons.unshift('休止期間（' + pauseNow.from + '〜' + pauseNow.to + (pauseNow.reason ? '：' + pauseNow.reason : '') + '）のため、維持カロリーで過ごします');
+      out.pause = { from: pauseNow.from, to: pauseNow.to, reason: pauseNow.reason || '' };
     }
     out.status = status; out.reasons = reasons; out.target = target;
     out.deltaFromPrevious = prev ? target - prev : null;
@@ -337,7 +423,7 @@ var PlanLib = (function () {
 
   return {
     KCAL_PER_KG: KCAL_PER_KG, DEFAULTS: DEFAULTS, r1: r1, r2: r2, toDays: toDays, fromDays: fromDays, addDays: addDays, weekStart: weekStart, nextMonday: nextMonday, monthOf: monthOf,
-    bodyDays: bodyDays, mealDays: mealDays, normalizePlan: normalizePlan, baseline: baseline, build: build, plannedFatMass: plannedFatMass, plannedFatPct: plannedFatPct,
+    bodyDays: bodyDays, mealDays: mealDays, normalizePlan: normalizePlan, baseline: baseline, build: build, plannedFatMass: plannedFatMass, rateAt: rateAt, activeElapsed: activeElapsed, activeDaysLeft: activeDaysLeft, cleanPauses: cleanPauses, pausedOn: pausedOn, pauseDaysUntil: pauseDaysUntil, BAND_KG: BAND_KG, MAINT_BAND: MAINT_BAND, plannedFatPct: plannedFatPct,
     slope: slope, trendOf: trendOf, targetFor: targetFor, daysView: daysView, weeksView: weeksView, monthsView: monthsView,
     estimatedTdee: estimatedTdee, observedTdee: observedTdee, adjust: adjust, view: view
   };

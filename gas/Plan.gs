@@ -1,7 +1,8 @@
 /**
  * 減量計画（目標体脂肪率に対する日・週・月のずれ、次週のカロリー調整）- バックエンド
  * 計算はすべて PlanLib（plan-lib.js のコピー＝PlanLib.gs）で確定し、AI（Gemini）は文章にするだけ。
- * 設定はスクリプトのプロパティ：BODY_GOAL_FAT（目標の体脂肪率・体組成と共通）、PLAN_START、PLAN_WEEKLY_LOSS、PLAN_DEADLINE、PLAN_ACTIVITY
+ * 設定はスクリプトのプロパティ：BODY_GOAL_FAT（目標の体脂肪率・体組成と共通）、PLAN_START、PLAN_WEEKLY_LOSS、PLAN_DEADLINE、PLAN_ACTIVITY、
+ * PLAN_SHAPE（linear/ease）、PLAN_PAUSES（休止期間のJSON。AI相談で変更）、PLAN_PHASE（cut/maintain）、PLAN_FLOOR_FAT（最低体脂肪率）
  * シート「減量調整履歴」：次週の調整案の履歴。「採用」が「はい」の行が、その週からの1日の目標カロリーになる
  */
 
@@ -27,6 +28,10 @@ function planDateCell_(v) {
   return m ? m[1] + '/' + ('0' + m[2]).slice(-2) + '/' + ('0' + m[3]).slice(-2) : String(v);
 }
 
+function planPausesRead_() {
+  try { return PlanLib.cleanPauses(JSON.parse(PropertiesService.getScriptProperties().getProperty('PLAN_PAUSES') || '[]')); } catch (e) { return []; }
+}
+
 function planSettings_() {
   var p = PropertiesService.getScriptProperties();
   var g = Number(p.getProperty('BODY_GOAL_FAT')) || 0;
@@ -35,7 +40,11 @@ function planSettings_() {
     startDate: p.getProperty('PLAN_START') || '',
     weeklyLossKg: Number(p.getProperty('PLAN_WEEKLY_LOSS')) || PlanLib.DEFAULTS.weeklyLossKg,
     deadline: p.getProperty('PLAN_DEADLINE') || '',
-    activity: Number(p.getProperty('PLAN_ACTIVITY')) || PlanLib.DEFAULTS.activity
+    activity: Number(p.getProperty('PLAN_ACTIVITY')) || PlanLib.DEFAULTS.activity,
+    shape: p.getProperty('PLAN_SHAPE') === 'linear' ? 'linear' : 'ease',
+    pauses: planPausesRead_(),
+    phase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
+    floorFat: Number(p.getProperty('PLAN_FLOOR_FAT')) || 0
   };
 }
 
@@ -71,7 +80,7 @@ function planSetDate_(v, label, allowEmpty) {
   return m[1] + '/' + ('0' + m[2]).slice(-2) + '/' + ('0' + m[3]).slice(-2);
 }
 
-/** 計画の設定：{goalFat, startDate, weeklyLossKg, deadline, activity} */
+/** 計画の設定：{goalFat, startDate, weeklyLossKg, deadline, activity, shape, phase, floorFat}（休止期間はAI相談から planPauseApply で変更） */
 function planSet(p) {
   p = p || {};
   var goal = Number(p.goalFat), weekly = Number(p.weeklyLossKg), act = Number(p.activity);
@@ -81,12 +90,56 @@ function planSet(p) {
   if (deadline && toDays_(deadline) <= toDays_(start)) throw new Error('期限は開始日より後にしてください');
   if (isNaN(weekly) || weekly < 0.1 || weekly > 1.0) throw new Error('週あたりの脂肪の減量は0.1〜1.0kgで入力してください');
   if (isNaN(act) || act < 1.2 || act > 2.0) throw new Error('活動係数は1.2〜2.0で入力してください');
+  var shape = p.shape === 'linear' ? 'linear' : 'ease';
+  var phase = p.phase === 'maintain' ? 'maintain' : 'cut';
+  var floor = p.floorFat === '' || p.floorFat == null ? 0 : Number(p.floorFat);
+  if (isNaN(floor) || floor < 0 || floor > 40) throw new Error('最低体脂肪率は0〜40で入力してください（空欄なら設定なし）');
+  if (floor && floor > goal && phase === 'cut') throw new Error('最低体脂肪率は、目標の体脂肪率以下にしてください');
+  if (phase === 'maintain' && !floor) throw new Error('維持期は最低体脂肪率の入力が必要です');
   var pr = PropertiesService.getScriptProperties();
+  pr.setProperty('PLAN_SHAPE', shape);
+  pr.setProperty('PLAN_PHASE', phase);
+  pr.setProperty('PLAN_FLOOR_FAT', floor ? String(Math.round(floor * 10) / 10) : '');
   pr.setProperty('BODY_GOAL_FAT', String(Math.round(goal * 10) / 10));
   pr.setProperty('PLAN_START', start);
   pr.setProperty('PLAN_WEEKLY_LOSS', String(Math.round(weekly * 100) / 100));
   pr.setProperty('PLAN_DEADLINE', deadline);
   pr.setProperty('PLAN_ACTIVITY', String(Math.round(act * 100) / 100));
+  return planGet();
+}
+
+/**
+ * 休止期間の変更（AI相談の「計画の変更案」を、ユーザーが［反映する］で確定したときだけ呼ばれる）。
+ * 入力は {action:'add_pause'|'remove_pause', from, to, reason}。サーバー側で必ず検証し直す。
+ */
+function planPauseNext_(c) {
+  c = c || {};
+  var pl = planSettings_(), today = today_();
+  if (!(pl.goalFat && pl.startDate)) throw new Error('先に計画を設定してください');
+  if (pl.phase === 'maintain') throw new Error('維持期には休止期間はありません（もともと維持カロリーで過ごします）');
+  var pauses = pl.pauses.slice();
+  var from = planSetDate_(c.from, '開始日', false), to = planSetDate_(c.to, '終了日', false);
+  if (c.action === 'remove_pause') {
+    var n = pauses.length;
+    pauses = pauses.filter(function (x) { return !(x.from === from && x.to === to); });
+    if (pauses.length === n) throw new Error('その休止期間は登録されていません');
+  } else if (c.action === 'add_pause') {
+    if (toDays_(from) < toDays_(today)) throw new Error('休止の開始日は今日以降にしてください');
+    if (toDays_(to) < toDays_(from)) throw new Error('休止の終了日は開始日以降にしてください');
+    var len = toDays_(to) - toDays_(from) + 1;
+    if (len > 21) throw new Error('1回の休止は21日までです');
+    if (toDays_(from) < toDays_(pl.startDate) || (pl.deadline && toDays_(to) > toDays_(pl.deadline))) throw new Error('休止は計画の開始日〜期限の中に入れてください');
+    var total = len;
+    pauses.forEach(function (x) { total += toDays_(x.to) - toDays_(x.from) + 1; if (!(toDays_(to) < toDays_(x.from) || toDays_(from) > toDays_(x.to))) throw new Error('すでにある休止期間と重なっています'); });
+    if (total > 42) throw new Error('休止の合計は42日までです');
+    pauses.push({ from: from, to: to, reason: String(c.reason || '').slice(0, 40) });
+  } else throw new Error('変更の種類が正しくありません');
+  return PlanLib.cleanPauses(pauses);
+}
+
+function planPauseApply(c) {
+  var next = planPauseNext_(c);
+  PropertiesService.getScriptProperties().setProperty('PLAN_PAUSES', JSON.stringify(next));
   return planGet();
 }
 
@@ -104,7 +157,7 @@ function planAdviceSystem_() {
     '',
     '## 守るルール',
     '- adjust.target（来週の1日の目標kcal）、adjust.weeklyBudget、adjust.deltaFromPrevious、adjust.protein、adjust.floorKcal は決定済み。変更・再計算・別の数値の提案をしない。文中で引用するときはそのまま使う。',
-    '- adjust.status：on_track＝計画どおり（目標を維持）、behind＝計画より遅れ、ahead＝計画より速い（筋肉が落ちやすいので緩める）、learning＝実測がまだ足りず計画値で運用、insufficient＝記録不足で調整しない。それぞれに合う言い方にする。',
+    '- adjust.status：paused＝休止期間中（維持カロリーで過ごす）、maintaining＝維持期で体脂肪率が許容帯の中、below_floor＝最低体脂肪率を下回った（少し多めに食べて筋トレは維持）、above_band＝許容帯の上限を超えた（少し控えめに）、floor_reached＝減量期で最低体脂肪率に到達（維持期への切替をすすめる）、on_track＝計画どおり（目標を維持）、behind＝計画より遅れ、ahead＝計画より速い（筋肉が落ちやすいので緩める）、learning＝実測がまだ足りず計画値で運用、insufficient＝記録不足で調整しない。それぞれに合う言い方にする。',
     '- 遅れの原因は adjust.reasons と実績（adjust.actual、weeks、meals7）から読み取る。摂取が目標より多いのが主因なら「目標は変えず、守る工夫」を書く。目標を下げすぎる提案をしない。',
     '- adjust.leanWarning がある場合は、筋トレの重さ・回数が落ちていないか確認し、たんぱく質を確保するよう伝える。診断はしない。',
     '- 食べ物の例は meals7（実際に食べたもの）を踏まえ、身近な食品・外食・コンビニで選べるものにする。極端な制限や、特定の食品の禁止はしない。',

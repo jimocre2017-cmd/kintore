@@ -98,6 +98,8 @@ header .sp{margin-left:auto}
 .chart .ma{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
 .chart .pt{fill:var(--accent);opacity:.45}
 .chart .goal{stroke:var(--good);stroke-width:1;opacity:.6}
+.chart .band{fill:var(--good);opacity:.14;stroke:none}
+.chart .pause{fill:var(--ink-3);opacity:.16}
 .chart .goaltx{fill:var(--good);font-weight:700}
 .chart .mk{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3}
 .chart .mkdot{fill:var(--surface);stroke:var(--good);stroke-width:2}
@@ -164,6 +166,11 @@ header .sp{margin-left:auto}
     <div class="f"><label>期限（空欄＝ペースから逆算）</label><input type="date" id="sDeadline"><div class="hint">期限を入れると、必要なペースを逆算します。</div></div>
   </div>
   <div class="f"><label>活動係数（消費カロリー＝基礎代謝×係数）</label><input type="number" id="sAct" inputmode="decimal" step="0.05" min="1.2" max="2"><div class="hint">立ち仕事＋運動習慣で1.5〜1.6が目安。体組成が10日分たまると、実測の消費カロリーに自動で切り替わります。</div></div>
+  <div class="fgrid">
+    <div class="f"><label>いまの局面</label><select id="sPhase"><option value="cut">減量期（目標の体脂肪率へ）</option><option value="maintain">維持期（最低体脂肪率を守る）</option></select><div class="hint">維持期は減量せず、維持カロリーで過ごします。</div></div>
+    <div class="f"><label>最低体脂肪率（%・任意）</label><input type="number" id="sFloor" inputmode="decimal" step="0.5" min="0" max="40" placeholder="例 12"><div class="hint">これを割らないための安全ライン。維持期は必須。減量期に届いたら維持期をすすめます。</div></div>
+  </div>
+  <div class="f"><label>減量ペースの形</label><select id="sShape"><option value="ease">終盤を緩やかに（おすすめ）</option><option value="linear">一定のペース</option></select><div class="hint">終盤は脂肪が落ちにくく筋肉も減りやすいので、最後の約2か月は前半の6割のペースにします（期限と目標は同じ）。</div></div>
   <div class="mbtns"><button class="btn" id="sCancel">キャンセル</button><button class="btn primary" id="sSave">保存</button></div>
 </div></div>
 

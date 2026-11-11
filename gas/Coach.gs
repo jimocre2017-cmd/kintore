@@ -70,15 +70,18 @@ function coachTraining_(today) {
 function coachDeadline_(v, today, userDeadline) {
   try {
     if (!v || !v.configured || v.noBody || !v.now || !v.built || !v.built.deadline) return null;
+    if (v.plan && v.plan.phase === 'maintain') return null; // 維持期は期限の判定をしない
     var daysLeft = PlanLib.toDays(v.built.deadline) - PlanLib.toDays(today);
+    var activeLeft = PlanLib.activeDaysLeft(v.built, today); // 休止期間を除いた、減量できる残り日数
     var remain = v.now.remainingKg, weight = v.now.weight;
     // userSet=false のとき deadline は「週あたりの減量ペースから計算した到達予定日」で、本人が決めた期限ではない
     var out = { deadline: v.built.deadline, userSetDeadline: !!userDeadline, daysLeft: daysLeft, remainingFatKg: PlanLib.r1(remain) };
     if (daysLeft <= 0) { out.expired = true; return out; }
-    var perWeek = remain / (daysLeft / 7), safe = weight * 0.01;
+    var perWeek = remain / (Math.max(activeLeft, 1) / 7), safe = weight * 0.01;
+    out.activeDaysLeft = activeLeft; out.pauseDaysLeft = daysLeft - activeLeft;
     out.requiredFatKgPerWeek = PlanLib.r2(perWeek);
     out.safeMaxKgPerWeek = PlanLib.r2(safe);
-    out.requiredDeficitKcalPerDay = Math.round(remain * PlanLib.KCAL_PER_KG / daysLeft);
+    out.requiredDeficitKcalPerDay = Math.round(remain * PlanLib.KCAL_PER_KG / Math.max(activeLeft, 1));
     out.feasibleWithinSafeRate = perWeek <= safe;
     return out;
   } catch (e) { return null; }
@@ -112,7 +115,8 @@ function coachData_() {
   if (v && v.configured && !v.noBody && v.built) {
     plan = {
       goalFat: v.built.goalFat, startDate: pl.startDate, deadline: v.built.deadline || null,
-      plannedWeeklyLossKg: PlanLib.r2(v.built.weeklyLossKg), toLoseKgFromStart: PlanLib.r1(v.built.toLoseKg),
+      phase: pl.phase, floorFatPct: pl.floorFat || null, curve: v.built.shape, pauses: v.built.pauses,
+      plannedWeeklyLossKg: PlanLib.r2(v.built.weeklyLossKg), plannedWeeklyLossKgLatePhase: PlanLib.r2(v.built.weeklyLossKg2 || v.built.weeklyLossKg), toLoseKgFromStart: PlanLib.r1(v.built.toLoseKg),
       now: v.now ? { fatPct: PlanLib.r1(v.now.fat), plannedFatPct: PlanLib.r1(v.now.plannedFat), gapKgVsPlan: PlanLib.r2(v.now.gapKg), remainingFatKg: PlanLib.r1(v.now.remainingKg) } : null,
       last3Weeks: (v.weeks || []).slice(-3), adjust: v.adjust
     };
@@ -126,7 +130,7 @@ function coachData_() {
   var last = coachLast_();
   return {
     today: today, nowTime: now,
-    goal: { goalFatPct: pl.goalFat || null, deadline: pl.deadline || null },
+    goal: { goalFatPct: pl.goalFat || null, deadline: pl.deadline || null, phase: pl.phase, floorFatPct: pl.floorFat || null },
     plan: plan, deadlineCheck: coachDeadline_(v, today, pl.deadline),
     body: body, meal: meal, mealsLast3Days: meals, training: train,
     chart: coachChart_() || null,
@@ -245,9 +249,11 @@ var ASK_TOPICS = {
     'chart（カルテ）と質問に書かれた痛み・違和感を最優先にし、今日の筋トレ・有酸素の可否と強度の目安（避ける動作・代わりの動作）、セルフケアの方向性を、training の直近の量と合わせて示す。診断はしない。鋭い痛み・しびれ・夜間痛・数日続く悪化があれば、運動を控えて整形外科などの受診を勧める。カルテが空で質問にも痛みの記述が無ければ、どこがどう痛むか（いつから・動作・強さ）を最初に聞き返す。'],
   protein: ['たんぱく質の摂り方', 'たんぱく質は足りてる？どう摂ればいい？',
     'meal.averagePerLoggedDay.protein と plan.adjust.protein（または body.plan.proteinGramsPerDay）の目安を比べ、不足なら1日の中でどこで足すか（朝・間食・夕食）を、身近な食品とグラム数で具体的に示す。サプリは記録に無いので推測しない。'],
+  maintain: ['維持期（最低体脂肪率の確保）', '最低体脂肪率を割らずに維持するための、食事と運動の考え方を教えて',
+    'goal.phase・goal.floorFatPct・plan.adjust.floor（currentFat・upperFat・marginPct）・plan.adjust.status を読む。維持期は「最低体脂肪率〜許容帯の上限」に収めるのが目標。食事は維持カロリー（plan.adjust.tdee）を中心に、たんぱく質の目安と、増減の調整幅（±200kcal・週単位）を示す。運動は筋トレの量と強度を維持して筋肉を守り、有酸素は健康維持・調整用として控えめに。最低体脂肪率を割りそうなら、食事を増やすことと有酸素を減らすことを先に勧める。減量期に最低体脂肪率へ到達していれば、維持期への切り替えを勧める（切り替えは本人が計画の設定で行う）。'],
   free: ['自由相談', '', '質問に直接答える。データで答えられる部分は数値を引用し、データに無いことは「記録に無いので分からない」と言う。']
 };
-var ASK_ORDER = ['meal', 'plan', 'stall', 'eatout', 'training', 'condition', 'body', 'protein', 'free'];
+var ASK_ORDER = ['meal', 'plan', 'maintain', 'stall', 'eatout', 'training', 'condition', 'body', 'protein', 'free'];
 
 function askSystem_(topic) {
   return [
@@ -260,6 +266,7 @@ function askSystem_(topic) {
     '- カルテ（chart）がある場合は、そこに書かれた痛み・既往・避けたい動作を最優先で守り、該当部位に負担のかかる運動・強度を勧めない（代替を示す）。カルテに無い痛みを推測しない。',
     '- 極端な食事制限・絶食・過度な運動で間に合わせる提案はしない。減量ペースは体重の約1%/週以内。診断・医療的断定をしない。強い疲労・痛み・体調不良があれば無理をさせず、続く場合は専門家への相談を勧める。',
     '- 役割の分担：総合診断は「診断」ボタン、毎週のカロリー調整は減量計画画面、見た目の変化は写真。質問がそれに当たる場合は答えたうえで、そちらも案内する。',
+    '- 休止期間（旅行・年末年始・疲労・ダイエットブレイクなど）の変更を本人がはっきり頼んだときだけ、planChange を出す（action：add_pause＝休止を追加、remove_pause＝休止を取り消す、from・to：yyyy/MM/dd、reason：短い理由）。日付は today を基準に、本人の言葉から決める。決められないときは planChange を出さず、answer で日付を聞き返す。ただの質問・愚痴・減量計画の見直しの相談では出さない（action は none）。休止中は減量せず維持カロリーで過ごし、そのぶん他の期間の減量ペースが少し上がること、期限は変わらないことを answer で伝える。実際に変わるのは本人が［反映する］を押したときで、あなたが変更したとは言わない。',
     '- 会話の続きの場合は、history の内容を踏まえて、同じことを繰り返さない。',
     '- 日本語。1文は短く、専門用語は避ける。',
     '',
@@ -283,10 +290,36 @@ function askSchema_() {
       points: { type: 'ARRAY', items: { type: 'STRING' } },
       nextSteps: { type: 'ARRAY', items: { type: 'STRING' } },
       followups: { type: 'ARRAY', items: { type: 'STRING' } },
-      dataNote: { type: 'STRING' }
+      dataNote: { type: 'STRING' },
+      planChange: { type: 'OBJECT', properties: { action: { type: 'STRING', enum: ['none', 'add_pause', 'remove_pause'] }, from: { type: 'STRING' }, to: { type: 'STRING' }, reason: { type: 'STRING' } }, required: ['action'] }
     },
     required: ['answer', 'points', 'nextSteps', 'followups', 'dataNote']
   };
+}
+
+/**
+ * AIの「計画の変更案」を検証して、反映前後の比較を計算して返す（無効・不要なら null）。
+ * 反映そのものは行わない。本人が［反映する］を押したとき planPauseApply が改めて検証して保存する。
+ */
+function coachPlanChange_(raw) {
+  try {
+    if (!raw || (raw.action !== 'add_pause' && raw.action !== 'remove_pause')) return null;
+    var c = { action: raw.action, from: raw.from, to: raw.to, reason: planStr_(raw.reason, 40) };
+    var next = planPauseNext_(c); // 無効な日付・重なり・上限超えはここで例外 → 変更案を出さない
+    var pl = planSettings_(), v = planView_();
+    if (!v || !v.base) return null;
+    var before = PlanLib.build(PlanLib.normalizePlan(pl), v.base);
+    var after = PlanLib.build(PlanLib.normalizePlan(Object.assign({}, pl, { pauses: next })), v.base);
+    return {
+      action: c.action, from: planSetDate_(c.from, '開始日', false), to: planSetDate_(c.to, '終了日', false), reason: c.reason,
+      days: PlanLib.toDays(planSetDate_(c.to, '終了日', false)) - PlanLib.toDays(planSetDate_(c.from, '開始日', false)) + 1,
+      effect: {
+        weeklyLossKgBefore: PlanLib.r2(before.weeklyLossKg), weeklyLossKgAfter: PlanLib.r2(after.weeklyLossKg),
+        deadline: after.deadline, totalPauseDaysAfter: next.reduce(function (a, x) { return a + PlanLib.toDays(x.to) - PlanLib.toDays(x.from) + 1; }, 0),
+        aggressiveAfter: !!after.aggressive
+      }
+    };
+  } catch (e) { return null; }
 }
 
 /** テーマ一覧（画面のボタン用） */
@@ -316,6 +349,8 @@ function coachAsk(req) {
     answer: planStr_(res.answer, 1500), points: planArr_(res.points, 4, 200), nextSteps: planArr_(res.nextSteps, 3, 250),
     followups: planArr_(res.followups, 3, 120), dataNote: planStr_(res.dataNote, 300)
   };
+  var pc = coachPlanChange_(res.planChange);
+  if (pc) out.planChange = pc;
   var at = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm');
   try {
     var ss = ss_(), sh = ss.getSheetByName(ASK_SHEET);
