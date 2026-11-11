@@ -737,6 +737,12 @@ var KT = (function () {
       return api('aiDeleteProgram', [tag], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
     },
 
+    // 総合コーチ（食事・運動・体組成・目標と期限をまとめて診断）。オンラインの時だけ。直近の結果は端末に控える
+    coachJudge: function () {
+      return api('coachJudge', [], 150000).then(function (r) { LS.set('kt_coach_last', { t: Date.now(), res: r }); return r; }, onlineOnly);
+    },
+    coachLast: function () { return Promise.resolve(LS.get('kt_coach_last', null)); },
+
     // YKトレーニング：メニューはルールで端末が決める。AIの解説とフェーズ保存はオンラインの時だけ
     ykAdvise: function (req) {
       return api('ykAdvise', [req], 120000).then(function (r) { LS.set('kt_yk_ai', { date: today(), key: req && req.key || '', res: r }); return r; }, onlineOnly);

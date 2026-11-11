@@ -826,6 +826,8 @@ function doPost(e) {
       planSet: planSet,
       planAdvise: planAdvise,
       planApply: planApply,
+      // 総合コーチ（Coach.gs）
+      coachJudge: typeof coachJudge === 'function' ? coachJudge : undefined,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,

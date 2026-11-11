@@ -20,6 +20,13 @@ function planSheet_() {
   return sh;
 }
 
+/** シートの日付セルは、スプレッドシートに日付へ変換されて Date で返ることがある。どちらでも 'yyyy/MM/dd' にそろえる */
+function planDateCell_(v) {
+  if (Object.prototype.toString.call(v) === '[object Date]') return Utilities.formatDate(v, TZ, 'yyyy/MM/dd');
+  var m = String(v).match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  return m ? m[1] + '/' + ('0' + m[2]).slice(-2) + '/' + ('0' + m[3]).slice(-2) : String(v);
+}
+
 function planSettings_() {
   var p = PropertiesService.getScriptProperties();
   var g = Number(p.getProperty('BODY_GOAL_FAT')) || 0;
@@ -37,7 +44,7 @@ function planTargets_() {
   var sh = planSheet_(), last = sh.getLastRow(), out = [];
   if (last < 2) return out;
   sh.getRange(2, 1, last - 1, PLAN_HEAD.length).getValues().forEach(function (r) {
-    if (String(r[5]) === 'はい' && Number(r[6]) > 0) out.push({ from: String(r[1]), kcal: Number(r[6]) });
+    if (String(r[5]) === 'はい' && Number(r[6]) > 0) out.push({ from: planDateCell_(r[1]), kcal: Number(r[6]) });
   });
   return out;
 }
@@ -47,7 +54,7 @@ function planLatestAdvice_() {
   if (last < 2) return null;
   var r = sh.getRange(last, 1, 1, PLAN_HEAD.length).getValues()[0];
   try {
-    return { createdAt: Utilities.formatDate(new Date(r[0]), TZ, 'yyyy/MM/dd HH:mm'), effectiveFrom: String(r[1]), status: String(r[2]), suggested: Number(r[3]), adopted: String(r[5]) === 'はい', adoptedKcal: Number(r[6]) || null, adjust: JSON.parse(r[7] || 'null'), advice: JSON.parse(r[8] || 'null') };
+    return { createdAt: Utilities.formatDate(new Date(r[0]), TZ, 'yyyy/MM/dd HH:mm'), effectiveFrom: planDateCell_(r[1]), status: String(r[2]), suggested: Number(r[3]), adopted: String(r[5]) === 'はい', adoptedKcal: Number(r[6]) || null, adjust: JSON.parse(r[7] || 'null'), advice: JSON.parse(r[8] || 'null') };
   } catch (e) { return null; }
 }
 
@@ -91,6 +98,9 @@ function planView_() {
 function planAdviceSystem_() {
   return [
     'あなたは減量中の人を支えるコーチです。計算はすべて済んでいるので、渡された adjust の数値を使って、来週の目標カロリーの理由と、守りやすい行動を日本語で簡潔に伝えます。',
+    '',
+    '## 役割（他の機能との分担）',
+    '- あなたの担当は「来週の1日の目標カロリーとその理由、守りやすい行動」だけ。今の総合的な状態診断・期限に間に合うかの判定は「総合コーチ」、見た目の変化の評価は「体つき写真」が担当するので、ここでは触れない（必要なら「総合コーチで確認」と一言だけ）。',
     '',
     '## 守るルール',
     '- adjust.target（来週の1日の目標kcal）、adjust.weeklyBudget、adjust.deltaFromPrevious、adjust.protein、adjust.floorKcal は決定済み。変更・再計算・別の数値の提案をしない。文中で引用するときはそのまま使う。',
@@ -188,7 +198,7 @@ function planApply(p) {
     var sh = planSheet_(), last = sh.getLastRow(), row = 0;
     if (last >= 2) {
       var vals = sh.getRange(2, 1, last - 1, PLAN_HEAD.length).getValues();
-      for (var i = vals.length - 1; i >= 0; i--) if (String(vals[i][1]) === from) { row = i + 2; break; }
+      for (var i = vals.length - 1; i >= 0; i--) if (planDateCell_(vals[i][1]) === from) { row = i + 2; break; }
     }
     if (!row) { sh.appendRow([new Date(), from, '手入力', kcal, '', 'はい', kcal, '', '']); }
     else { sh.getRange(row, 6, 1, 2).setValues([['はい', kcal]]); }

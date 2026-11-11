@@ -216,6 +216,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .tubeseg button.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
 /* AIトレーナー */
 .aibtn{display:inline-flex;align-items:center;gap:6px;padding:10px 14px;border-radius:10px;border:none;background:linear-gradient(135deg,#6d5bd0,#2a78d6);color:#fff;font-weight:700;white-space:nowrap}
+.aibtn.quiet{background:none;color:var(--ink-3);font-weight:500;font-size:13px;padding:10px 8px;border:1px solid var(--line)}
 .spark{display:inline-block;font-size:1.05em}
 .modal .box.aibox{max-width:720px;padding:0;display:flex;flex-direction:column}
 .aihead{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;padding:16px 20px;background:var(--surface);border-bottom:1px solid var(--line)}
@@ -332,12 +333,12 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
     <div class="kpi"><b class="num" id="kSecs">0</b><span>秒</span></div>
     <div class="kpi"><b class="num" id="kKcal">0</b><span id="kKcalLbl">推定 kcal</span></div>
   </div>
-  <button class="aibtn" id="aiOpen" aria-label="AIトレーナー"><span class="spark">✦</span>AIトレーナー</button>
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
   <a class="navlink" href="cardio.html">有酸素 →</a>
   <a class="navlink" href="body.html">体組成 →</a>
   <a class="navlink" href="meal.html">食事 →</a>
   <a class="navlink" href="analytics.html">分析 →</a>
+  <button class="aibtn quiet" id="aiOpen" aria-label="AIトレーナー（トレーニングメニューの作成）" title="トレーニングメニューをAIに作ってもらう">AIトレーナー</button>
 </header>
 
 <main id="main">
@@ -439,6 +440,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 
 <script src="cardio-lib.js"></script>
 <script src="api.js"></script>
+<script src="coach.js"></script>
 <script src="yk-lib.js"></script>
 <script>
 var APP = { navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
