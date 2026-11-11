@@ -828,6 +828,10 @@ function doPost(e) {
       planApply: planApply,
       // 総合コーチ（Coach.gs）
       coachJudge: typeof coachJudge === 'function' ? coachJudge : undefined,
+      coachAsk: typeof coachAsk === 'function' ? coachAsk : undefined,
+      coachTopics: typeof coachTopics === 'function' ? coachTopics : undefined,
+      coachChartGet: typeof coachChartGet === 'function' ? coachChartGet : undefined,
+      coachChartSet: typeof coachChartSet === 'function' ? coachChartSet : undefined,
       // AIトレーナー（AiTrainer.gs）
       aiConsult: aiConsult,
       aiApplyProgram: aiApplyProgram,

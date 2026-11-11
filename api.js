@@ -741,6 +741,9 @@ var KT = (function () {
     coachJudge: function () {
       return api('coachJudge', [], 150000).then(function (r) { LS.set('kt_coach_last', { t: Date.now(), res: r }); return r; }, onlineOnly);
     },
+    coachAsk: function (req) { return api('coachAsk', [req], 150000).then(function (r) { return r; }, onlineOnly); },
+    coachChart: function () { return api('coachChartGet', [], 30000).then(function (r) { LS.set('kt_coach_chart', r); return r; }, function (e) { var c = LS.get('kt_coach_chart', null); if (c) return c; return onlineOnly(e); }); },
+    coachChartSet: function (text) { return api('coachChartSet', [text], 30000).then(function (r) { LS.set('kt_coach_chart', r); return r; }, onlineOnly); },
     coachLast: function () { return Promise.resolve(LS.get('kt_coach_last', null)); },
 
     // YKトレーニング：メニューはルールで端末が決める。AIの解説とフェーズ保存はオンラインの時だけ
