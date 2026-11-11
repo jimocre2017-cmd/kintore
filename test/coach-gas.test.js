@@ -156,4 +156,27 @@ t('何も記録が無ければエラー', function () {
   assert.throws(function () { run('coachJudge()'); }, /記録がまだ/);
 });
 
+t('coachAsk：休止の変更案は検証して効果つきで返す。無効・不要な案は出さない', function () {
+  props.PLAN_DEADLINE = '2027/04/30'; delete props.PLAN_PAUSES;
+  var ask = function (pc) { sandbox.gemini_ = function () { return { answer: 'a', points: [], nextSteps: [], followups: [], dataNote: '', planChange: pc }; }; return run('coachAsk({topic: "free", question: "年末年始は休みたい"})'); };
+  var r = ask({ action: 'add_pause', from: '2026/12/28', to: '2027/01/05', reason: '年末年始' });
+  assert.ok(r.planChange && r.planChange.days === 9 && r.planChange.from === '2026/12/28');
+  assert.ok(r.planChange.effect.weeklyLossKgAfter > r.planChange.effect.weeklyLossKgBefore, '休んだ分、他の週のペースが上がる');
+  assert.strictEqual(r.planChange.effect.deadline, '2027/04/30');
+  assert.strictEqual(props.PLAN_PAUSES, undefined, '案の段階では保存しない');
+  assert.strictEqual(ask({ action: 'none' }).planChange, undefined);
+  assert.strictEqual(ask({ action: 'add_pause', from: '2026/10/01', to: '2026/10/03' }).planChange, undefined); // 過去日
+  assert.strictEqual(ask({ action: 'add_pause', from: '2026/12/28', to: '2027/02/28' }).planChange, undefined); // 長すぎ
+  assert.strictEqual(ask(undefined).planChange, undefined);
+});
+
+t('coachAsk：維持期テーマがあり、判定は最低体脂肪率・期限なしで渡す', function () {
+  assert.ok(JSON.parse(JSON.stringify(run('coachTopics()'))).some(function (x) { return x.key === 'maintain'; }));
+  props.PLAN_PHASE = 'maintain'; props.PLAN_FLOOR_FAT = '12';
+  var d = run('coachData_()');
+  assert.strictEqual(d.goal.phase, 'maintain'); assert.strictEqual(d.goal.floorFatPct, 12);
+  assert.strictEqual(d.deadlineCheck, null);
+  delete props.PLAN_PHASE; delete props.PLAN_FLOOR_FAT;
+});
+
 console.log('\n' + n + ' 件すべて成功');

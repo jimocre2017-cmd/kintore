@@ -826,6 +826,12 @@ function doPost(e) {
       planSet: planSet,
       planAdvise: planAdvise,
       planApply: planApply,
+      counselGet: typeof counselGet === 'function' ? counselGet : undefined,
+      counselSave: typeof counselSave === 'function' ? counselSave : undefined,
+      counselSkip: typeof counselSkip === 'function' ? counselSkip : undefined,
+      exerciseListAll: exerciseListAll,
+      setExercisesActive: setExercisesActive,
+      planPauseApply: typeof planPauseApply === 'function' ? planPauseApply : undefined,
       // 総合コーチ（Coach.gs）
       coachJudge: typeof coachJudge === 'function' ? coachJudge : undefined,
       coachAsk: typeof coachAsk === 'function' ? coachAsk : undefined,
@@ -941,6 +947,40 @@ function updateExerciseFields(exId, f) {
     }
     invalidate_(SH.EX);
     return { exercises: getExercises_(false) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * 種目の表示オン／オフ（種目マスタの「有効」列）の一覧。オフの種目も含めて返す（設定画面用）
+ */
+function exerciseListAll() {
+  return { all: getExercises_(true).map(function (e) { return { id: e.id, name: e.name, part: e.part, equipment: e.equipment, active: e.active, progOnly: e.progOnly }; }) };
+}
+
+/**
+ * 種目の表示をまとめてオン／オフにする（記録は消えない。オフにした種目は一覧・YK・プログラムの候補から外れ、過去の記録と集計はそのまま残る）
+ * @param {string[]} ids 対象の種目ID
+ * @param {boolean} active true＝表示（オン）、false＝非表示（オフ）
+ */
+function setExercisesActive(ids, active) {
+  var want = {}; (ids || []).forEach(function (x) { want[String(x).trim()] = true; });
+  if (!Object.keys(want).length) throw new Error('対象の種目がありません');
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var sh = sheet_(SH.EX), rows = rows_(SH.EX), n = 0;
+    if (!rows.length) throw new Error('種目がありません');
+    var col = sh.getRange(2, 15, rows.length, 1);
+    var vals = col.getValues();
+    rows.forEach(function (r, i) { if (want[String(r[0]).trim()]) { vals[i][0] = !!active; n++; } });
+    if (!n) throw new Error('該当する種目が見つかりません');
+    var stillOn = rows.filter(function (r, i) { return String(r[0]).trim() !== '' && String(r[1]).trim() !== '' && bool_(vals[i][0]); }).length;
+    if (!stillOn) throw new Error('すべてオフにはできません（1つは表示してください）');
+    col.setValues(vals);
+    invalidate_(SH.EX);
+    return { changed: n, exercises: getExercises_(false), all: exerciseListAll().all };
   } finally {
     lock.releaseLock();
   }

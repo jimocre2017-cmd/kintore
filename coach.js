@@ -50,7 +50,7 @@
       '.coachbox .chip:active{opacity:.7}' +
       '.coachbox .q{background:var(--accent-soft,#e3eefb);border-radius:12px 12px 2px 12px;padding:8px 12px;margin:10px 0 6px 18%;font-size:14px}' +
       '.coachbox .a{background:var(--surface-2,#f0efec);border-radius:12px 12px 12px 2px;padding:10px 12px;margin:6px 8% 6px 0;font-size:14px}' +
-      '.coachbox .a .tp{font-size:11px;color:var(--ink-3,#8a8983);margin-bottom:2px}.coachbox .a ul{margin:6px 0 0;padding-left:18px}.coachbox .a .nx{margin-top:6px;font-size:13px}' +
+      '.coachbox .a .tp{font-size:11px;color:var(--ink-3,#8a8983);margin-bottom:2px}.coachbox .a ul{margin:6px 0 0;padding-left:18px}.coachbox .a .nx{margin-top:6px;font-size:13px}.coachbox .pc{margin-top:8px;padding:8px 10px;border:1px solid var(--line,#ddd);border-radius:8px;font-size:13px}.coachbox .pc .pcb{margin-top:6px}' +
       '.coachbox .ask{display:flex;gap:6px;margin-top:10px;align-items:flex-end}.coachbox .ask textarea{flex:1;min-height:44px;max-height:120px;resize:vertical;border:1px solid var(--line,#e2e1dc);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;background:var(--surface,#fff);color:var(--ink,#141413)}' +
       '.coachbox .ask button{border:0;border-radius:10px;padding:11px 16px;font-size:14px;font-weight:700;background:var(--accent,#2a78d6);color:var(--accent-ink,#fff);cursor:pointer}.coachbox .ask button[disabled]{opacity:.6}' +
       '.coachbox details.chart{margin-top:12px;border:1px solid var(--line,#e2e1dc);border-radius:10px;padding:8px 10px;font-size:13px}.coachbox details.chart summary{cursor:pointer;font-weight:700;color:var(--ink-2,#55544f)}.coachbox details.chart textarea{width:100%;box-sizing:border-box;margin-top:6px;border:1px solid var(--line,#e2e1dc);border-radius:10px;padding:8px 10px;font:inherit;font-size:14px;background:var(--surface,#fff);color:var(--ink,#141413)}' +
@@ -123,20 +123,32 @@
     ['training', 'トレーニングと回復', '筋トレと有酸素のバランスは今のままでいい？回復は足りてる？'],
     ['condition', '痛み・コンディション', '今の痛みやコンディションを踏まえて、今日の運動と過ごし方を相談したい'],
     ['body', '体組成の読み方', '体重・体脂肪率・筋肉量の最近の動きを、どう読めばいい？'],
+    ['maintain', '維持期の食事と運動', '最低体脂肪率を割らずに維持するための、食事と運動の考え方を教えて'],
     ['protein', 'たんぱく質', 'たんぱく質は足りてる？どう摂ればいい？']
   ];
   var chat = [], tab = 'judge', topic = 'free', draft = '', chartText = '', chartOpen = false, chartLoaded = false;
   try { chat = JSON.parse(localStorage.getItem('kt_coach_chat') || '[]'); } catch (e) { chat = []; }
   function saveChat() { try { localStorage.setItem('kt_coach_chat', JSON.stringify(chat.slice(-12))); } catch (e) {} }
 
+  function pcHtml(c, i, state, err) {
+    var e = c.effect || {}, add = c.action === 'add_pause';
+    var h = '<div class="pc"><b>計画の変更案</b><div>' + (add ? '休止期間を追加' : '休止期間を取り消し') + '：' + esc(c.from) + '〜' + esc(c.to) + '（' + c.days + '日）' + (c.reason ? '「' + esc(c.reason) + '」' : '') + '</div>';
+    h += '<div class="meta">その間は減量せず維持カロリーで過ごします。' + (e.weeklyLossKgBefore != null ? '減量ペース（ピーク）：週' + e.weeklyLossKgBefore + 'kg → 週' + e.weeklyLossKgAfter + 'kg。' : '') + (e.deadline ? '期限は ' + esc(e.deadline) + ' のまま。' : '') + (e.aggressiveAfter ? '<b>ただしペースが速めになります。</b>' : '') + '</div>';
+    if (state === 'applied') h += '<div class="meta"><b>反映しました</b>（減量計画の画面に出ます）</div>';
+    else if (state === 'skipped') h += '<div class="meta">見送りました</div>';
+    else h += (err ? '<div class="meta" style="color:#c0392b">' + esc(err) + '</div>' : '') + '<div class="pcb"><button class="cx" type="button" data-pc="ok" data-i="' + i + '">反映する</button> <button class="cx" type="button" data-pc="no" data-i="' + i + '">見送る</button></div>';
+    return h + '</div>';
+  }
+
   function chatHtml(pending) {
     var h = '<div class="meta" style="margin-bottom:4px">記録データ（食事・運動・体組成・目標と期限）を根拠に答えます。テーマを選ぶか、自由に聞いてください。</div><div class="chips">' +
       TOPICS.map(function (t) { return '<button class="chip" data-t="' + t[0] + '" data-q="' + esc(t[2]) + '">' + esc(t[1]) + '</button>'; }).join('') + '</div>';
-    chat.forEach(function (m) {
+    chat.forEach(function (m, mi) {
       h += '<div class="q">' + esc(m.question) + '</div><div class="a"><div class="tp">' + esc(m.topicLabel) + '・' + esc(m.createdAt || '') + '</div>' + esc(m.answer).replace(/\n/g, '<br>');
       if ((m.points || []).length) h += '<ul>' + m.points.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul>';
       if ((m.nextSteps || []).length) h += '<div class="nx"><b>やること</b><ul>' + m.nextSteps.map(function (x) { return '<li>' + esc(x) + '</li>'; }).join('') + '</ul></div>';
       if (m.dataNote) h += '<div class="meta" style="margin-top:6px">' + esc(m.dataNote) + '</div>';
+      if (m.planChange) h += pcHtml(m.planChange, mi, m.pcState, m.pcErr);
       h += '</div>';
     });
     var last = chat[chat.length - 1];
@@ -166,6 +178,16 @@
     var ct = $('coachChart'); if (ct) ct.addEventListener('input', function () { chartText = ct.value; });
     var cs = $('coachChartSave'); if (cs) cs.addEventListener('click', function () {
       cs.disabled = true; KT.call('coachChartSet', chartText).then(function (r) { chartText = r.text; chartOpen = false; renderChat(null, null); }, function (e) { cs.disabled = false; renderChat(null, (e && e.message) || 'カルテを保存できませんでした'); });
+    });
+    Array.prototype.forEach.call(root.querySelectorAll('[data-pc]'), function (b) {
+      b.addEventListener('click', function () {
+        var i = +b.getAttribute('data-i'), m = chat[i]; if (!m || !m.planChange) return;
+        if (b.getAttribute('data-pc') === 'no') { m.pcState = 'skipped'; saveChat(); renderChat(); return; }
+        b.disabled = true;
+        KT.call('planPauseApply', { action: m.planChange.action, from: m.planChange.from, to: m.planChange.to, reason: m.planChange.reason }).then(function () {
+          m.pcState = 'applied'; m.pcErr = ''; saveChat(); renderChat();
+        }, function (e) { m.pcErr = (e && e.message) || '反映できませんでした'; renderChat(); });
+      });
     });
     var cl = $('coachClear'); if (cl) cl.addEventListener('click', function () { chat = []; saveChat(); renderChat(); });
     var bx = root.querySelector('.coachbox'); if (bx && chat.length) bx.scrollTop = bx.scrollHeight;

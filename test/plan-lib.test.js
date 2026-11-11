@@ -147,6 +147,74 @@ t('目標が未設定ならモードだけ返す', function () {
   assert.strictEqual(v.configured, false);
 });
 
+t('緩やかな計画（ease）：終盤を緩め、合計の減量と期限は変えない', function () {
+  var bm = P.bodyDays(B.daily(entries));
+  var base = P.baseline(bm, '2026/11/08', 7);
+  var mk = function (shape, pauses) { return P.build(P.normalizePlan({ goalFat: 12, startDate: '2026/11/08', deadline: '2027/04/30', shape: shape, pauses: pauses }), base); };
+  var lin = mk('linear'), ez = mk('ease');
+  near(P.plannedFatMass(ez, ez.deadline), ez.targetFatMass, 0.001, '期限で目標に着く');
+  near(P.plannedFatMass(lin, lin.deadline), lin.targetFatMass, 0.001);
+  assert.ok(ez.weeklyLossKg1 > lin.weeklyLossKg1, '前半は直線より速い');
+  near(ez.weeklyLossKg2 / ez.weeklyLossKg1, 0.6, 0.001, '終盤は前半の6割');
+  assert.ok(ez.phase2Days > 0 && P.rateAt(ez, ez.deadline) < P.rateAt(ez, '2026/12/01'));
+  // 途中の点：前半は直線より先行（脂肪量が少ない）、終盤は直線より後ろ
+  assert.ok(P.plannedFatMass(ez, '2027/01/31') < P.plannedFatMass(lin, '2027/01/31'));
+  var gapMid = P.plannedFatMass(lin, '2027/01/31') - P.plannedFatMass(ez, '2027/01/31');
+  var gapEnd = P.plannedFatMass(lin, '2027/04/15') - P.plannedFatMass(ez, '2027/04/15');
+  assert.ok(gapEnd >= 0 && gapEnd < gapMid, '先行分は終盤に向けて縮まり、期限で一致する');
+});
+
+t('休止期間：その間は減らさず、期限は変えずに残りの日で取り戻す', function () {
+  var bm = P.bodyDays(B.daily(entries));
+  var base = P.baseline(bm, '2026/11/08', 7);
+  var pauses = [{ from: '2026/12/28', to: '2027/01/05', reason: '年末年始' }];
+  var a = P.build(P.normalizePlan({ goalFat: 12, startDate: '2026/11/08', deadline: '2027/04/30' }), base);
+  var b = P.build(P.normalizePlan({ goalFat: 12, startDate: '2026/11/08', deadline: '2027/04/30', pauses: pauses }), base);
+  assert.strictEqual(b.activeDays, a.activeDays - 9);
+  assert.ok(b.weeklyLossKg > a.weeklyLossKg, '休んだ分、ほかの週は少し速くなる');
+  assert.strictEqual(P.plannedFatMass(b, '2026/12/28'), P.plannedFatMass(b, '2026/12/27')); // 休止中は減らない
+  assert.strictEqual(P.plannedFatMass(b, '2027/01/05'), P.plannedFatMass(b, '2026/12/27'));
+  assert.ok(P.plannedFatMass(b, '2027/01/06') < P.plannedFatMass(b, '2027/01/05'));
+  near(P.plannedFatMass(b, b.deadline), b.targetFatMass, 0.001);
+  assert.strictEqual(P.rateAt(b, '2026/12/31'), 0);
+  assert.strictEqual(P.activeDaysLeft(b, '2026/12/31'), P.activeDaysLeft(b, '2026/12/27'));
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(P.cleanPauses([{ from: '2027-1-3', to: '2027/01/01' }, { from: '2026/12/28', to: '2027-01-05', reason: 'x' }, {}]))), [{ from: '2026/12/28', to: '2027/01/05', reason: 'x' }]);
+});
+
+t('休止中の調整：維持カロリー（赤字0）で運用し、statusは paused', function () {
+  var bm = P.bodyDays(B.daily(entries));
+  var pauses = [{ from: '2026/11/20', to: '2026/11/25', reason: '旅行' }];
+  var v = P.view({ today: '2026/11/22', daily: B.daily(entries), meals: [], plan: { goalFat: 12, startDate: '2026/11/08', weeklyLossKg: 0.5, shape: 'ease', pauses: pauses }, targets: [], mealGoalKcal: 1800 });
+  if (v.adjust.status === 'insufficient' && !v.adjust.tdee) return; // 基礎代謝の記録が無いデータでは調整しない
+  assert.strictEqual(v.adjust.status, 'paused');
+  assert.strictEqual(v.adjust.planned.deficitKcalPerDay, 0);
+  assert.strictEqual(v.adjust.target, v.adjust.rawTarget);
+});
+
+t('維持期：最低体脂肪率の許容帯に収まれば維持カロリー、外れたら±200kcal', function () {
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 2400, intake: [2400] });
+  var mk = function (extra) { return run(s, { plan: Object.assign({ goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, phase: 'maintain' }, extra) }); };
+  var cur = mk({ floorFat: 20 }).adjust.floor.currentFat;
+  var inBand = mk({ floorFat: Math.floor(cur) - 0.5 }).adjust, above = mk({ floorFat: cur - 4 }).adjust, below = mk({ floorFat: cur + 3 }).adjust;
+  assert.strictEqual(inBand.status, 'maintaining');
+  assert.strictEqual(inBand.planned.deficitKcalPerDay, 0);
+  assert.strictEqual(inBand.target, Math.round(inBand.tdee.kcal / 10) * 10);
+  assert.strictEqual(above.status, 'above_band');
+  assert.strictEqual(above.target, Math.round((above.tdee.kcal - 200) / 10) * 10);
+  assert.strictEqual(below.status, 'below_floor');
+  assert.strictEqual(below.target, Math.round((below.tdee.kcal + 200) / 10) * 10);
+});
+
+t('減量期：最低体脂肪率に届いたら floor_reached で維持カロリーに切替を促す', function () {
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 2400, intake: [2400] });
+  var cur = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, floorFat: 20 } }).adjust.floor.currentFat;
+  var v = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, floorFat: cur + 1 } }).adjust;
+  assert.strictEqual(v.status, 'floor_reached');
+  assert.ok(v.floorReached);
+  var w = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, floorFat: cur - 3 } }).adjust;
+  assert.notStrictEqual(w.status, 'floor_reached');
+});
+
 t('gas/PlanLib.gs が plan-lib.js と同じ内容', function () {
   var fs = require('fs'), path = require('path');
   var a = fs.readFileSync(path.join(__dirname, '..', 'plan-lib.js'), 'utf8');
