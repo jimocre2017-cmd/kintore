@@ -40,7 +40,7 @@ function render(){
   S.V = view();
   var today = (S.body && S.body.today) || KT.today();
   $('dateLbl').textContent = today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(today)+'）';
-  renderMsg(); renderHero(); renderAdjust(); renderChart(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
+  renderMsg(); renderHero(); renderAdjust(); renderChart(); renderMilestones(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
 }
 
 function renderMsg(){
@@ -143,6 +143,26 @@ function movingAvg(map, ds){
   for (var i = 0; i < 7; i++) { var x = map[PL.fromDays(d - i)]; if (x && x.fat != null) v.push(x.fat); }
   return v.length >= 2 ? v.reduce(function(a, b){ return a + b; }, 0) / v.length : null;
 }
+
+/* ---- 経過目標：開始日から期限までを月末で区切り、各時点の計画値を出す ---- */
+function monthEndsOf(b){
+  var out = [], st = PL.toDays(b.startDate), dl = PL.toDays(b.deadline);
+  var p = b.startDate.split('/'), y = +p[0], m = +p[1];
+  for (var i = 0; i < 60; i++) {
+    var ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
+    var last = PL.toDays(ny+'/'+('0'+nm).slice(-2)+'/01') - 1;
+    if (last >= dl) break;
+    if (last > st) out.push(PL.fromDays(last));
+    y = ny; m = nm;
+  }
+  out.push(b.deadline);
+  return out;
+}
+function planAt(b, date){
+  var fm = PL.plannedFatMass(b, date);
+  return { date: date, fat: PL.plannedFatPct(b, date), fatMass: fm, weight: b.leanKg + fm, lost: Math.max(0, b.baseFatMass - fm) };
+}
+
 function renderChart(){
   var V = S.V, el = $('chartCard');
   if (!V || !V.built) { el.style.display = 'none'; return; }
@@ -168,15 +188,52 @@ function renderChart(){
   function Y(v){ return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); }
   var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="体脂肪率の計画と実績">';
   for (var i = 0; i <= 3; i++) { var gv = lo + (hi - lo) * i / 3, gy = Y(gv); s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(1)+'</text>'; }
+  // 目標の体脂肪率の横線
+  if (b.goalFat >= lo && b.goalFat <= hi) { var gy2 = Y(b.goalFat); s += '<line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy2+'" y2="'+gy2+'"/><text x="'+(pl+4)+'" y="'+(gy2-4)+'" class="goaltx">目標 '+f1(b.goalFat)+'%</text>'; }
+  // 月末の経過目標（計画ライン上の印と数値）
+  var msAll = monthEndsOf(b).filter(function(ds){ var dd = PL.toDays(ds); return dd >= d0 && dd <= d1; });
+  msAll.forEach(function(ds, i){
+    var dd = PL.toDays(ds), v = PL.plannedFatPct(b, ds), mx = X(dd), my = Y(v), last = ds === b.deadline;
+    s += '<line class="mk" x1="'+mx.toFixed(1)+'" x2="'+mx.toFixed(1)+'" y1="'+pt+'" y2="'+(H-pb)+'"/>'
+      + '<circle class="mkdot" cx="'+mx.toFixed(1)+'" cy="'+my.toFixed(1)+'" r="3.5"><title>'+mdw(ds)+' 計画 '+f1(v)+'%</title></circle>'
+      + '<text class="mktx" x="'+Math.min(W-pr, mx).toFixed(1)+'" y="'+(my-7).toFixed(1)+'" text-anchor="'+(last || mx > W - 40 ? 'end' : 'middle')+'">'+f1(v)+'</text>'
+      + '<text x="'+mx.toFixed(1)+'" y="'+(H-12)+'" text-anchor="'+(last ? 'end' : 'middle')+'" class="mkdate">'+md(ds)+'</text>';
+  });
   s += '<path class="plan" d="'+planPts.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
   pts.forEach(function(p){ s += '<circle class="pt" cx="'+X(p.d).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3"><title>'+mdw(PL.fromDays(p.d))+' '+f1(p.v)+'%（'+p.n+'回測定の平均）</title></circle>'; });
   if (mas.length > 1) s += '<path class="ma" d="'+mas.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
   if (t >= d0 && t <= d1) s += '<line class="now" x1="'+X(t)+'" x2="'+X(t)+'" y1="'+pt+'" y2="'+(H-pb)+'"/><text x="'+X(t)+'" y="'+(H-12)+'" text-anchor="'+(t - d0 > span * 0.85 ? 'end' : 'middle')+'">今日</text>';
   s += '<text x="'+pl+'" y="'+(H-2)+'">'+md(PL.fromDays(d0))+'</text><text x="'+(W-pr)+'" y="'+(H-2)+'" text-anchor="end">'+md(PL.fromDays(d1))+'</text></svg>';
-  h += s + '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span></div>';
+  h += s + '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span><span>◯ 月末の計画値（%）</span></div>';
   if (!pts.length) h += '<div class="note">この期間の測定がまだありません。</div>';
   el.innerHTML = h;
   Array.prototype.forEach.call($('rTabs').querySelectorAll('button'), function(btn){ btn.onclick = function(){ S.range = btn.getAttribute('data-r'); renderChart(); }; });
+}
+
+
+function renderMilestones(){
+  var V = S.V, el = $('msCard');
+  if (!V || !V.built) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  var b = V.built, today = V.today, t = PL.toDays(today), n = V.now;
+  var months = {}; (V.months || []).forEach(function(r){ months[r.month] = r; });
+  var rows = [{ label: '開始（'+md(b.startDate)+'）', date: b.startDate, kind: 'start' }];
+  monthEndsOf(b).forEach(function(ds){ rows.push({ label: ds === b.deadline ? 'ゴール（'+md(ds)+'）' : mdw(ds)+'（月末）', date: ds, kind: ds === b.deadline ? 'goal' : 'month' }); });
+  var todayRow = { label: '今日（'+mdw(today)+'）', date: today, kind: 'today' };
+  var ins = 0; rows.forEach(function(r, i){ if (PL.toDays(r.date) <= t) ins = i + 1; });
+  if (t > PL.toDays(b.startDate) && t < PL.toDays(b.deadline)) rows.splice(ins, 0, todayRow);
+  var h = '<h3>ゴールまでの経過目標</h3><div class="tblwrap"><table class="tbl" style="min-width:430px"><tr><th>時点</th><th>体脂肪率</th><th>体重</th><th>脂肪量</th><th>ここまでに落とす脂肪</th><th>実績</th></tr>';
+  rows.forEach(function(r){
+    var a = planAt(b, r.date), act = '<span class="mut">－</span>', dd = PL.toDays(r.date);
+    if (r.kind === 'today' && n) act = f1(n.fat)+'%<small>直近7日平均</small>';
+    else if (r.kind === 'start') act = f1(b.baseFat)+'%<small>基準</small>';
+    else if (dd <= t) { var m = months[PL.monthOf(r.date)]; if (m && m.fat != null) act = f1(m.fat)+'%<small>その月の平均</small>'; }
+    h += '<tr'+(r.kind === 'today' ? ' class="cur"' : '')+(r.kind === 'goal' ? ' style="font-weight:700"' : '')+'><td>'+r.label+'</td>'
+      + '<td class="num">'+f1(a.fat)+'%</td><td class="num">'+f1(a.weight)+'kg</td><td class="num">'+f1(a.fatMass)+'kg</td>'
+      + '<td class="num">'+(a.lost > 0 ? '−'+f1(a.lost)+'kg' : '－')+'</td><td class="num">'+act+'</td></tr>';
+  });
+  h += '</table></div><div class="note">除脂肪量（'+f1(b.leanKg)+'kg）を維持して、脂肪だけを一定のペース（週'+f2(b.weeklyLossKg)+'kg）で落とす計画です。実績は体組成の記録から。月末の行は、その月の平均と比べてください（ずれは週の平均で判断）。</div>';
+  el.innerHTML = h;
 }
 
 /* ---- 日・週・月 ---- */

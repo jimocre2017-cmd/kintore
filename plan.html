@@ -97,6 +97,12 @@ header .sp{margin-left:auto}
 .chart .plan{fill:none;stroke:var(--good);stroke-width:2;stroke-dasharray:5 4}
 .chart .ma{fill:none;stroke:var(--accent);stroke-width:2.5;stroke-linejoin:round;stroke-linecap:round}
 .chart .pt{fill:var(--accent);opacity:.45}
+.chart .goal{stroke:var(--good);stroke-width:1;opacity:.6}
+.chart .goaltx{fill:var(--good);font-weight:700}
+.chart .mk{stroke:var(--line);stroke-width:1;stroke-dasharray:2 3}
+.chart .mkdot{fill:var(--surface);stroke:var(--good);stroke-width:2}
+.chart .mktx{fill:var(--good);font-weight:700}
+.chart .mkdate{fill:var(--ink-3)}
 .chart .now{stroke:var(--ink-3);stroke-width:1;stroke-dasharray:2 3}
 .legend{display:flex;gap:14px;font-size:11px;color:var(--ink-3);margin-top:6px;flex-wrap:wrap}
 .legend i{display:inline-block;width:14px;height:0;border-top:2px solid;vertical-align:3px;margin-right:4px}
@@ -139,6 +145,7 @@ header .sp{margin-left:auto}
   <section class="card hero" id="heroCard"><div class="loading">読み込み中…</div></section>
   <section class="card target" id="adjustCard" style="display:none"></section>
   <section class="card" id="chartCard"></section>
+  <section class="card" id="msCard"></section>
   <section class="card" id="dayCard"></section>
   <section class="card" id="weekCard"></section>
   <section class="card" id="monthCard"></section>
