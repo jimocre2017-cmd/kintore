@@ -94,6 +94,7 @@ function onOpen() {
   SpreadsheetApp.getUi().createMenu('筋トレ管理')
     .addItem('初期セットアップ（シート作成）', 'setupSpreadsheet')
     .addItem('日次集計を全件再計算', 'rebuildAllDaily')
+    .addItem('既存記録を1.5法タグで再計算', 'recalcLogs')
     .addItem('ウェブアプリのURLを表示', 'showAppUrl')
     .addToUi();
 }
@@ -1052,6 +1053,42 @@ function addExercise(p) {
   }
 }
 
+/**
+ * 記録データの「集計レップ・集計秒・負荷量」を、今の種目マスタ（1.5法タグ等）で作り直す。
+ * 入力値（負荷・回数・秒）は触らない。終わったら日次集計も作り直す。
+ * @param {boolean=} dryRun true なら書き込まず、変わる件数だけ返す
+ */
+function recalcLogs(dryRun) {
+  var lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    var exMap = {};
+    getExercises_(true).forEach(function (e) { exMap[e.id] = e; });
+    var rows = rows_(SH.LOG), out = [], changed = 0, skipped = 0, sample = [];
+    rows.forEach(function (r) {
+      var ex = exMap[String(r[L.EXID])];
+      if (!ex) { skipped++; out.push([r[L.AREPS], r[L.ASECS], r[L.VOL]]); return; }
+      var load = (ex.loadType === 'kg' || ex.loadType === '加重') ? num_(r[L.LOAD]) : 0;
+      var c = calcSet_(ex, load, ex.measure === '回数' ? num_(r[L.REPS]) : 0, ex.measure === '秒' ? num_(r[L.SECS]) : 0);
+      if (num_(r[L.AREPS]) !== c.aReps || num_(r[L.ASECS]) !== c.aSecs || num_(r[L.VOL]) !== c.vol) {
+        changed++;
+        if (sample.length < 5) sample.push(ex.name + ' ' + ymd_(r[L.DATE]) + ' 回数' + num_(r[L.AREPS]) + '→' + c.aReps + ' 負荷量' + num_(r[L.VOL]) + '→' + c.vol);
+      }
+      out.push([c.aReps, c.aSecs, c.vol]);
+    });
+    if (!dryRun && changed) {
+      sheet_(SH.LOG).getRange(2, L.AREPS + 1, out.length, 3).setValues(out);
+      invalidate_(SH.LOG);
+      rebuildAllDaily();
+    }
+    var res = { total: rows.length, changed: changed, skipped: skipped, dryRun: !!dryRun, sample: sample };
+    console.log('recalcLogs ' + JSON.stringify(res)); // エディタから実行した時は実行ログで確認する
+    return res;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
 /* ============================================================
  * 日次集計シート
  * ============================================================ */
@@ -1150,14 +1187,18 @@ function shiftAnchor_(type, anchor, n) {
   return mk_(a.y + n, 1, 1);
 }
 
+var AGG_KCAL_ = null;
 function agg_(logs) {
-  var t = { sets: 0, reps: 0, secs: 0, vol: 0, days: 0 };
+  var t = { sets: 0, reps: 0, secs: 0, vol: 0, days: 0, kcal: 0 };
   var days = {};
+  var kc = AGG_KCAL_; // getAnalytics が設定（体重は最新の体組成で一括計算）
   logs.forEach(function (l) {
     var w = (l.w === undefined) ? 1 : l.w; // 付随部位は0.5
     t.sets += w; t.reps += l.aReps * w; t.secs += l.aSecs * w; t.vol += l.vol * w; days[l.date] = 1;
+    if (kc) t.kcal += kcalOfSet_(l.aReps, l.aSecs, kc.st, kc.kw) * w;
   });
   t.days = Object.keys(days).length;
+  t.kcal = Math.round(t.kcal);
   t.vol = r1_(t.vol); t.sets = r1_(t.sets); t.reps = r1_(t.reps); t.secs = r1_(t.secs);
   return t;
 }
@@ -1193,6 +1234,7 @@ function trendBuckets_(range) {
 
 function getAnalytics(type, anchor) {
   anchor = ymd_(anchor) || today_();
+  AGG_KCAL_ = { st: getSettings_(), kw: kcalWeight_() };
   var cur = periodRange_(type, anchor);
   var prv = periodRange_(cur.type, shiftAnchor_(cur.type, anchor, -1));
   var all = getLogs_(prv.start, cur.end);
