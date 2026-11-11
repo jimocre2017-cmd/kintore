@@ -12,7 +12,7 @@
 :root{
   --bg:#f4f4f2; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc; --grid:#ecebe7;
   --ink:#141413; --ink-2:#55544f; --ink-3:#8a8983;
-  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb; --series:#2a78d6; --series-prev:#c9c8c2;
+  --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb; --series:#2a78d6; --series-prev:#c9c8c2; --cardio:#1a9a62;
   --up:#1a7f4b; --down:#c73a39;
   --body:#dcdbd6; --lv0:#ebeae6; --lv1:#3b82f6; --lv2:#eab308; --lv3:#dc2626;
   --radius:14px;
@@ -21,7 +21,7 @@
   :root:not([data-theme="light"]){
     --bg:#121211; --surface:#1c1c1a; --surface-2:#262624; --line:#34332f; --grid:#2a2a27;
     --ink:#f5f4ef; --ink-2:#c3c2b7; --ink-3:#8f8e86;
-    --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44; --series:#3987e5; --series-prev:#4a4945;
+    --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44; --series:#3987e5; --series-prev:#4a4945; --cardio:#3fb57a;
     --up:#3fb57a; --down:#e66767;
     --body:#3a3a37; --lv0:#4a4945; --lv1:#3b82f6; --lv2:#eab308; --lv3:#ef4444;
   }
@@ -58,6 +58,16 @@ header h1{font-size:18px;margin:0}
 .tile .v{font-size:28px;font-weight:800;margin:4px 0 2px;line-height:1.1}
 .tile .v small{font-size:13px;color:var(--ink-2);font-weight:600;margin-left:2px}
 .tile .c{font-size:12px;color:var(--ink-2)}
+.kcalgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:10px}
+.kcalbox{background:var(--surface-2);border-radius:12px;padding:12px}
+.kcalbox .t{font-size:12px;color:var(--ink-3);font-weight:600;display:flex;align-items:center;gap:6px}
+.kcalbox .t i{display:inline-block;width:10px;height:10px;border-radius:3px}
+.kcalbox .v{font-size:26px;font-weight:800;margin:4px 0 2px;line-height:1.1}
+.kcalbox .v small{font-size:13px;color:var(--ink-2);font-weight:600;margin-left:2px}
+.kcalbox .c{font-size:12px;color:var(--ink-2)}
+.splitbar{display:flex;height:12px;border-radius:6px;overflow:hidden;background:var(--grid);margin-top:12px}
+.splitbar i{display:block;height:100%}
+@media (max-width:600px){ .kcalgrid{grid-template-columns:1fr} }
 .delta{font-weight:700;white-space:nowrap}
 .delta.up{color:var(--up)} .delta.down{color:var(--down)} .delta.flat{color:var(--ink-3)}
 
@@ -212,7 +222,7 @@ td.memo{white-space:normal;min-width:180px;text-align:left;color:var(--ink-2)}
 <script src="api.js"></script>
 <script>
 var ST = { type:'day', anchor:null, data:null, metric:'vol', trendMetric:'vol' };
-var METRICS = { vol:{l:'総負荷量',u:'kg'}, reps:{l:'レップ',u:'回'}, sets:{l:'セット',u:'セット'}, secs:{l:'秒',u:'秒'}, days:{l:'日数',u:'日'} };
+var METRICS = { vol:{l:'総負荷量',u:'kg'}, reps:{l:'レップ',u:'回'}, sets:{l:'セット',u:'セット'}, secs:{l:'秒',u:'秒'}, days:{l:'日数',u:'日'}, kcal:{l:'消費kcal',u:'kcal'} };
 var PREV_NAME = { day:'前日', week:'前週', month:'前月', quarter:'前四半期', year:'前年' };
 
 var call = KT.call; // オンライン時は最新、オフライン時は保存済みの結果（api.js）
@@ -221,8 +231,9 @@ function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){retu
 function fmt(n){ n=Number(n)||0; return (Math.round(n*10)/10).toLocaleString('ja-JP'); }
 function fmtKg(n){ n=Number(n)||0; return (Math.round(n*100)/100).toString(); }
 function fmtSecs(s){ s=Math.round(Number(s)||0); if (s<60) return s+'秒'; var m=Math.floor(s/60), r=s%60; if (m<60) return m+'分'+(r?r+'秒':''); return Math.floor(m/60)+'時間'+(m%60)+'分'; }
-function mval(o, k){ return Number(o[k])||0; }
-function mfmt(k, v){ return k==='secs' ? fmtSecs(v) : fmt(v)+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':k==='kcal'?'kcal':k==='days'?'日':''); }
+// 古い保存データ（kcalTotal が無い）でも消費kcalが出るよう、筋トレ分の kcal に戻す
+function mval(o, k){ var v = o[k]; if (v == null && (k==='kcalTotal' || k==='kcalStrength')) v = o.kcal; return Number(v)||0; }
+function mfmt(k, v){ return k==='secs' ? fmtSecs(v) : fmt(v)+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':/^kcal/.test(k)?'kcal':k==='days'?'日':''); }
 
 function delta(cur, prev){
   if (!prev && !cur) return '<span class="delta flat">—</span>';
@@ -280,6 +291,40 @@ function setType(t, anchor){
   load();
 }
 
+// 消費カロリー（合計と、筋トレ・有酸素それぞれ）。筋トレ＝動作と休憩のMETs、有酸素＝平均時速からMETを決めて体重×時間
+function kcalCard(d, pn){
+  var c = d.total.cur, p = d.total.prev;
+  var tot = mval(c,'kcalTotal'), s = mval(c,'kcalStrength'), cd = mval(c,'kcalCardio');
+  var ptot = mval(p,'kcalTotal'), ps = mval(p,'kcalStrength'), pc = mval(p,'kcalCardio');
+  function box(color, label, v, pv, extra){
+    return '<div class="kcalbox"><div class="t">'+(color?'<i style="background:'+color+'"></i>':'')+label+'</div>'
+      + '<div class="v num">'+fmt(v)+'<small>kcal</small></div>'
+      + '<div class="c">'+pn+' '+fmt(pv)+'kcal　'+delta(v,pv)+(extra?'<br>'+extra:'')+'</div></div>';
+  }
+  var sx = c.sets ? fmt(c.sets)+'セット' : '筋トレの記録なし';
+  var cx = c.cardioCount ? c.cardioCount+'回・'+fmt(c.cardioKm)+'km・'+fmtSecs((c.cardioMins||0)*60) : '有酸素の記録なし';
+  var h = '<div class="card"><div class="card-head"><div><h2>消費カロリー</h2><div class="desc">合計＝筋トレ＋有酸素。筋トレは動作と休憩のMETs法、有酸素は平均時速からMETを決めて体重×時間で計算した推定値（体重は最新の体組成）</div></div></div>'
+    + '<div class="kcalgrid">' + box('', '合計', tot, ptot, '') + box('var(--series)', '筋トレ', s, ps, sx) + box('var(--cardio)', '有酸素', cd, pc, cx) + '</div>';
+  if (tot > 0){
+    var sp = Math.round(s/tot*100);
+    h += '<div class="splitbar" title="筋トレ '+sp+'% / 有酸素 '+(100-sp)+'%"><i style="width:'+(s/tot*100)+'%;background:var(--series)"></i><i style="width:'+(cd/tot*100)+'%;background:var(--cardio)"></i></div>'
+      + '<div class="desc" style="margin-top:6px">筋トレ '+sp+'%　有酸素 '+(100-sp)+'%</div>';
+  }
+  return h + '</div>';
+}
+
+// その日の有酸素（1回ごとの消費カロリー付き）
+function cardioCard(d){
+  var h = '<div class="card"><h2>有酸素</h2><div class="desc">この日のウォーキング・ランニング。消費kcalは平均時速から決めたMET×体重×時間</div>';
+  if (!d.cardio || !d.cardio.length) return h + '<div class="empty">この日の有酸素の記録はありません</div></div>';
+  h += '<div class="scroll"><table><thead><tr><th>時刻</th><th>種類</th><th>距離</th><th>時間</th><th>平均時速</th><th>消費kcal</th></tr></thead><tbody>';
+  d.cardio.forEach(function(l){
+    var tm = l.start ? l.start+(l.end?'〜'+l.end:'') : '—';
+    h += '<tr><td class="num l">'+esc(tm)+'</td><td class="l">'+esc(l.type)+'</td><td class="num">'+(l.km?fmt(l.km)+'km':'—')+'</td><td class="num">'+(l.mins?fmtSecs(l.mins*60):'—')+'</td><td class="num">'+(l.avg?fmt(l.avg)+'km/h':'—')+'</td><td class="num hl">'+fmt(l.kcal)+'kcal</td></tr>';
+  });
+  return h + '</tbody></table></div></div>';
+}
+
 function render(){
   var d = ST.data, pn = PREV_NAME[d.type];
   $('rangeLbl').textContent = d.range.label;
@@ -287,14 +332,16 @@ function render(){
 
   var c = d.total.cur, p = d.total.prev;
   var h = '<div class="tiles">';
-  [['vol','総負荷量'],['reps','レップ'],['sets','セット'],['secs','秒種目の合計'],['kcal','推定消費kcal'],['days','トレーニング日数']].forEach(function(m){
+  [['vol','総負荷量'],['reps','レップ'],['sets','セット'],['secs','秒種目の合計'],['kcalTotal','合計消費kcal'],['days','トレーニング日数']].forEach(function(m){
     var k=m[0], v=mval(c,k), pv=mval(p,k), val;
     if (k==='secs') val = '<span class="num">'+fmtSecs(v)+'</span>';
-    else val = '<span class="num">'+fmt(v)+'</span><small>'+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':k==='kcal'?'kcal':'日')+'</small>';
+    else val = '<span class="num">'+fmt(v)+'</span><small>'+(k==='vol'?'kg':k==='reps'?'回':k==='sets'?'セット':/^kcal/.test(k)?'kcal':'日')+'</small>';
     if (k==='days' && d.type!=='day') val += '<small> / '+d.periodDays+'日</small>';
     h += '<div class="tile"><div class="t">'+m[1]+'</div><div class="v">'+val+'</div><div class="c">'+pn+' '+mfmt(k,pv)+'　'+delta(v,pv)+'</div></div>';
   });
   h += '</div>';
+
+  h += kcalCard(d, pn);
 
   h += '<div id="mapSlot"></div>';
 
@@ -324,8 +371,10 @@ function render(){
   if (d.trend.length){
     var unit = d.type==='year' ? '月別' : d.type==='quarter' ? '週別' : '日別';
     h += '<div class="card"><div class="card-head"><div><h2>推移（'+unit+'）</h2><div class="desc">棒をタップするとその'+(d.type==='year'?'月':d.type==='quarter'?'週':'日')+'に移動します</div></div>'
-      + metricSeg('trendMetric', ['vol','reps','sets','secs']) + '</div>'
-      + '<div class="chart" id="chart"></div></div>';
+      + metricSeg('trendMetric', ['vol','reps','sets','secs','kcal']) + '</div>'
+      + '<div class="chart" id="chart"></div>'
+      + (ST.trendMetric==='kcal' ? '<div class="desc" style="margin-top:6px"><span style="color:var(--series)">■</span> 筋トレ　<span style="color:var(--cardio)">■</span> 有酸素（棒の高さ＝合計）</div>' : '')
+      + '</div>';
   }
 
   
@@ -356,6 +405,7 @@ function render(){
 
   
   if (d.type==='day'){
+    h += cardioCard(d);
     h += '<div class="card"><h2>セット明細</h2><div class="desc">この日に記録した全セット（取消は除く）</div>';
     if (!d.sets.length) h += '<div class="empty">この日の記録はありません</div>';
     else {
@@ -370,14 +420,14 @@ function render(){
     }
     h += '</div>';
   } else {
-    h += '<div class="card"><h2>日計</h2><div class="desc">トレーニングした日ごとの合計。日付をタップするとその日の明細を表示</div>';
+    h += '<div class="card"><h2>日計</h2><div class="desc">トレーニング・有酸素をした日ごとの合計。日付をタップするとその日の明細を表示</div>';
     if (!d.daily.length) h += '<div class="empty">この期間の記録はありません</div>';
     else {
-      h += '<div class="scroll"><table><thead><tr><th>日付</th><th>セット</th><th>レップ</th><th>総負荷量</th><th>秒</th><th>部位</th></tr></thead><tbody>';
+      h += '<div class="scroll"><table><thead><tr><th>日付</th><th>セット</th><th>レップ</th><th>総負荷量</th><th>秒</th><th>消費kcal</th><th>部位</th></tr></thead><tbody>';
       d.daily.forEach(function(r){
         var p = r.date.split('/');
         h += '<tr><td class="l"><a href="#" data-day="'+r.date+'" style="color:var(--accent);font-weight:700;text-decoration:none">'+(+p[1])+'/'+(+p[2])+'（'+r.dow+'）</a></td>'
-          + '<td class="num">'+r.sets+'</td><td class="num">'+fmt(r.reps)+'</td><td class="num">'+(r.vol?fmt(r.vol)+'kg':'—')+'</td><td class="num">'+(r.secs?fmtSecs(r.secs):'—')+'</td>'
+          + '<td class="num">'+r.sets+'</td><td class="num">'+fmt(r.reps)+'</td><td class="num">'+(r.vol?fmt(r.vol)+'kg':'—')+'</td><td class="num">'+(r.secs?fmtSecs(r.secs):'—')+'</td><td class="num">'+(r.kcal!=null?fmt(r.kcal)+(r.kcalC?'<br><span class="muted" style="font-size:11px">筋'+fmt(r.kcalS)+'・有'+fmt(r.kcalC)+'</span>':''):'<span class="muted">—</span>')+'</td>'
           + '<td class="l" style="white-space:normal">'+r.parts.map(esc).join('・')+'</td></tr>';
       });
       h += '</tbody></table></div>';
@@ -647,6 +697,15 @@ function niceMax(v){
   return n*e;
 }
 
+// 消費kcalの棒は、下＝筋トレ・上＝有酸素の積み上げ
+function kcalStack(t, x, bw, base, ih, vmax){
+  if (!vmax) return '';
+  var hs = ih*(Number(t.kcalS)||0)/vmax, hc = ih*(Number(t.kcalC)||0)/vmax, out = '';
+  if (hs>0) out += '<rect x="'+(x-bw/2)+'" y="'+(base-hs)+'" width="'+bw+'" height="'+hs+'" fill="var(--series)"/>';
+  if (hc>0) out += '<rect x="'+(x-bw/2)+'" y="'+(base-hs-hc)+'" width="'+bw+'" height="'+hc+'" fill="var(--cardio)"/>';
+  return out;
+}
+
 function drawTrend(){
   var d = ST.data, k = ST.trendMetric, el = $('chart');
   var W = el.clientWidth || 800, H = 260, padL = 52, padR = 8, padT = 12, padB = 30;
@@ -663,7 +722,7 @@ function drawTrend(){
   var every = Math.ceil(n / Math.max(1, Math.floor(iw/34)));
   d.trend.forEach(function(t, i){
     var v = mval(t,k), x = padL + band*i + band/2, h = vmax? ih*v/vmax : 0, y = padT+ih-h, r = Math.min(4, h);
-    if (h>0) s += '<path d="M'+(x-bw/2)+','+(padT+ih)+' V'+(y+r)+' Q'+(x-bw/2)+','+y+' '+(x-bw/2+r)+','+y+' H'+(x+bw/2-r)+' Q'+(x+bw/2)+','+y+' '+(x+bw/2)+','+(y+r)+' V'+(padT+ih)+' Z" fill="var(--series)"/>';
+    if (k==='kcal') s += kcalStack(t, x, bw, padT+ih, ih, vmax); else if (h>0) s += '<path d="M'+(x-bw/2)+','+(padT+ih)+' V'+(y+r)+' Q'+(x-bw/2)+','+y+' '+(x-bw/2+r)+','+y+' H'+(x+bw/2-r)+' Q'+(x+bw/2)+','+y+' '+(x+bw/2)+','+(y+r)+' V'+(padT+ih)+' Z" fill="var(--series)"/>';
     if (i % every === 0) s += '<text x="'+x+'" y="'+(H-10)+'" text-anchor="middle" font-size="11" fill="var(--ink-3)">'+esc(t.label)+'</text>';
     s += '<rect class="hit" data-i="'+i+'" x="'+(padL+band*i)+'" y="'+padT+'" width="'+band+'" height="'+(ih+padB)+'" fill="transparent" style="cursor:pointer"/>';
   });
@@ -676,7 +735,7 @@ function drawTrend(){
     function show(){
       var x = padL + band*i + band/2, v = mval(t,k), y = padT + ih - (vmax? ih*v/vmax : 0);
       var sc = el.clientWidth / W;
-      tip.innerHTML = '<b>'+esc(t.from===t.to? t.from : t.from+'〜'+t.to.slice(5))+'</b><br>総負荷量 '+fmt(t.vol)+'kg<br>レップ '+fmt(t.reps)+'回・セット '+t.sets+(t.secs?'<br>秒 '+fmtSecs(t.secs):'');
+      tip.innerHTML = '<b>'+esc(t.from===t.to? t.from : t.from+'〜'+t.to.slice(5))+'</b><br>総負荷量 '+fmt(t.vol)+'kg<br>レップ '+fmt(t.reps)+'回・セット '+t.sets+(t.secs?'<br>秒 '+fmtSecs(t.secs):'')+(t.kcal!=null?'<br>消費 '+fmt(t.kcal)+'kcal（筋'+fmt(t.kcalS)+'・有'+fmt(t.kcalC)+'）':'');
       tip.style.left = Math.max(70, Math.min(el.clientWidth-70, x*sc))+'px'; tip.style.top = (y*sc - 6)+'px'; tip.classList.add('show');
     }
     r.addEventListener('mouseenter', show);

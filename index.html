@@ -330,7 +330,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
     <div class="kpi"><b class="num" id="kReps">0</b><span>レップ</span></div>
     <div class="kpi"><b class="num" id="kVol">0</b><span>総負荷量 kg</span></div>
     <div class="kpi"><b class="num" id="kSecs">0</b><span>秒</span></div>
-    <div class="kpi"><b class="num" id="kKcal">0</b><span>推定 kcal</span></div>
+    <div class="kpi"><b class="num" id="kKcal">0</b><span id="kKcalLbl">推定 kcal</span></div>
   </div>
   <button class="aibtn" id="aiOpen" aria-label="AIトレーナー"><span class="spark">✦</span>AIトレーナー</button>
   <button class="syncchip" id="syncChip"><i></i><span>同期</span></button>
@@ -437,6 +437,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 
 <div class="toast" id="toast"></div>
 
+<script src="cardio-lib.js"></script>
 <script src="api.js"></script>
 <script src="yk-lib.js"></script>
 <script>
@@ -581,7 +582,10 @@ function renderSummary(){
   $('kReps').textContent = fmt(t.reps);
   $('kVol').textContent = fmt(t.vol);
   $('kSecs').textContent = fmt(t.secs);
-  $('kKcal').textContent = fmt(t.kcal||0);
+  // 消費カロリー：大きい数字＝筋トレ＋有酸素の合計。有酸素がある日だけ内訳を小さく添える（古いデータには kcalTotal が無いので kcal に戻す）
+  var kS = t.kcalStrength != null ? t.kcalStrength : (t.kcal||0), kC = t.kcalCardio||0;
+  $('kKcal').textContent = fmt(t.kcalTotal != null ? t.kcalTotal : (t.kcal||0));
+  $('kKcalLbl').textContent = kC ? '消費kcal（筋'+fmt(kS)+'・有'+fmt(kC)+'）' : '推定 kcal';
 }
 
 function renderList(){
