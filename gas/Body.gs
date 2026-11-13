@@ -8,7 +8,7 @@
  */
 
 var BSH = '体組成ログ';
-var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング'];
+var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング', '集計除外'];
 // 測定のタイミング・条件（複数選べる）。同じ条件どうしで比べると体重・体脂肪率のブレが小さくなる
 var BTAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
 var BODY_READY = false;
@@ -29,6 +29,9 @@ function ensureBody_() {
 
 function bNum_(v) { return v === '' || v === null || v === undefined ? null : Number(v); }
 
+// 「集計除外」の列：1・true・"1" なら除外（平均・グラフ・比較・AI分析に使わない）
+function bFlag_(v) { return v === 1 || v === true || String(v == null ? '' : v).trim() === '1'; }
+
 function bTime_(v) {
   if (v instanceof Date) return Utilities.formatDate(v, TZ, 'HH:mm');
   var m = String(v == null ? '' : v).trim().match(/^(\d{1,2}):(\d{2})/);
@@ -46,7 +49,8 @@ function bodyObj_(r) {
   return {
     id: String(r[10] || '') || ('L' + date), time: bTime_(r[11]), tags: bTags_(r[12]), date: date,
     weight: bNum_(r[1]), fat: bNum_(r[2]), muscle: bNum_(r[3]), bmi: bNum_(r[4]),
-    bmr: bNum_(r[5]), visceral: bNum_(r[6]), height: bNum_(r[7]), memo: String(r[8] || '')
+    bmr: bNum_(r[5]), visceral: bNum_(r[6]), height: bNum_(r[7]), memo: String(r[8] || ''),
+    exclude: bFlag_(r[13])
   };
 }
 
@@ -62,6 +66,7 @@ function bodySort_(entries) {
 function bodyDaily_(entries, tag) {
   var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
   bodySort_(entries.slice()).forEach(function (e) {
+    if (e.exclude) return; // 集計から除外した測定は平均に入れない
     if (tag && e.tags.indexOf(tag) < 0) return;
     if (!byDate[e.date]) { byDate[e.date] = []; order.push(e.date); }
     byDate[e.date].push(e);
@@ -121,7 +126,7 @@ function bodySave(p) {
   var date = ymd_(p.date);
   if (!date) throw new Error('日付が正しくありません');
   var id = String(p.id || '').trim() || ('L' + date); // IDなし（旧版の送信待ち）は、その日の旧1件を上書きする
-  var time = bTime_(p.time), tags = bTags_(p.tags);
+  var time = bTime_(p.time), tags = bTags_(p.tags), exclude = bFlag_(p.exclude);
   if (toDays_(date) > toDays_(today_())) throw new Error('未来の日付は記録できません');
   var weight = bVal_(p.weight, '体重', 20, 300, 2);
   var fat = bVal_(p.fat, '体脂肪率', 1, 70, 1);
@@ -145,7 +150,7 @@ function bodySave(p) {
     }
     if (!created) created = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss');
     function c(v) { return v === null ? '' : v; }
-    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(',')];
+    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(','), exclude ? 1 : ''];
     if (rowIdx) sh.getRange(rowIdx, 1, 1, row.length).setValues([row]);
     else sh.getRange(Math.max(last, 1) + 1, 1, 1, row.length).setValues([row]);
     invalidate_(BSH);
@@ -270,7 +275,7 @@ function bodyCompare_(logs, today) {
 function bodyConditions_(entries, today) {
   var from = addDays_(today, -27), out = [];
   BTAGS.forEach(function (t) {
-    var list = entries.filter(function (e) { return e.date >= from && e.date <= today && e.tags.indexOf(t) >= 0; });
+    var list = entries.filter(function (e) { return !e.exclude && e.date >= from && e.date <= today && e.tags.indexOf(t) >= 0; });
     if (!list.length) return;
     function avg(f) { var v = list.map(function (e) { return e[f]; }).filter(function (x) { return x !== null; }); return v.length ? r1_(v.reduce(function (a, b) { return a + b; }, 0) / v.length) : null; }
     out.push({ condition: t, count: list.length, weightAvg: avg('weight'), fatAvg: avg('fat'), muscleAvg: avg('muscle'), latestDate: list[0].date, latestWeight: list[0].weight });
@@ -287,7 +292,7 @@ function aiBody_(today) {
     var g = bodyGet(), logs = g.logs; // 日ごとの平均（新しい順）
     if (!logs.length) return null;
     var latest = logs[0], entries = g.entries;
-    var dayList = entries.filter(function (e) { return e.date === latest.date; }).reverse().map(function (e) {
+    var dayList = entries.filter(function (e) { return e.date === latest.date && !e.exclude; }).reverse().map(function (e) {
       return { time: e.time || null, tags: e.tags, weight: e.weight, fat: e.fat, muscle: e.muscle, visceral: e.visceral };
     });
     var weekStart = addDays_(today, -((dow_(today) + 6) % 7)), weeks = [], w;

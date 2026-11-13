@@ -493,7 +493,7 @@ function kcalWeight_() {
   try {
     if (typeof bodyEntries_ === 'function' && ss_().getSheetByName(BSH)) {
       var es = bodyEntries_();
-      for (var i = 0; i < es.length; i++) if (es[i].weight) return es[i].weight;
+      for (var i = 0; i < es.length; i++) if (es[i].weight && !es[i].exclude) return es[i].weight;
     }
   } catch (err) {}
   return def;
