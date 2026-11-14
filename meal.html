@@ -178,6 +178,14 @@ header .sp{margin-left:auto}
 .macro .pl b{color:var(--ink)}
 .macro .rg{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:3px}
 .macro .rg .st-in{color:var(--good)}.macro .rg .st-under{color:var(--ink-2)}.macro .rg .st-over{color:var(--warn)}
+.wt{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+.wt th,.wt td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
+.wt th{font-weight:600;color:var(--ink-2);text-align:left}
+.wt thead th{font-size:11px;color:var(--ink-3);text-align:right}.wt thead th:first-child{text-align:left}
+.wt tr[data-d]{cursor:pointer}.wt tr.sel th{color:var(--accent)}
+.wt td.st-over{color:var(--warn);font-weight:700}.wt td.st-under{color:var(--ink-2);background:var(--surface-2)}
+.wt tr.plan td,.wt tr.plan th{color:var(--accent-2,#2a78d6);font-weight:700}
+.wt tr.sum th,.wt tr.sum td{color:var(--ink-2);background:var(--surface-2)}
 .wk .gl3{position:absolute;left:0;right:0;border-top:1px dotted var(--ink-3);pointer-events:none}
 .rgrid{display:grid;grid-template-columns:64px 1fr 1fr 1fr;gap:6px;align-items:center;margin-bottom:10px}
 .rgrid .h{font-size:11px;color:var(--ink-3);text-align:center}
@@ -384,6 +392,26 @@ function renderList(){
   $('listCard').innerHTML = h;
   $('listCard').onclick = function(e){ var b = e.target.closest('.meal'); if (b) openForm(b.getAttribute('data-id')); };
 }
+function weekTable(d, g, days, av){
+  var cols = [['kcal','kcal','kcal'],['protein','たんぱく質','g'],['fat','脂質','g']];
+  function cell(v, k, ok){
+    var st = ok ? ML.status(v, g[k+'Min'], g[k+'Max']) : null;
+    return '<td class="num'+(st==='over'?' st-over':st==='under'?' st-under':'')+'">'+(ok ? v : '<span style="color:var(--ink-3)">未</span>')+'</td>';
+  }
+  var h = '<table class="wt"><thead><tr><th>日</th>'+cols.map(function(c){ return '<th>'+c[1]+'</th>'; }).join('')+'</tr></thead><tbody>';
+  days.forEach(function(x){
+    h += '<tr data-d="'+x.date+'"'+(x.date===S.date?' class="sel"':'')+'><th>'+mdw(x.date)+'</th>'+cols.map(function(c){ return cell(x[c[0]], c[0], x.meals > 0); }).join('')+'</tr>';
+  });
+  h += '<tr class="sum"><th>平均</th>'+cols.map(function(c){ return '<td class="num">'+av[c[0]]+'</td>'; }).join('')+'</tr>';
+  var wp = cols.map(function(c){ return ML.weekPlan(d.logs, S.date, g[c[0]], g[c[0]+'Min'], g[c[0]+'Max'], c[0], c[0]==='kcal'?10:1); });
+  if (wp.some(function(p){ return p; })) h += '<tr class="plan"><th>'+(S.date===d.today?'今日':mdw(S.date).replace(/（.*/,''))+'の目標</th>'+wp.map(function(p){ return '<td class="num">'+(p ? p.target : '–')+'</td>'; }).join('')+'</tr>';
+  // 今週（月曜〜今日）の合計と、週の目標（目安×7）
+  var ws = ML.weekStart(d.today), tot = { kcal: 0, protein: 0, fat: 0 };
+  for (var n = ws; n <= ML.toDays(d.today); n++) { var t = ML.dayTotal(d.logs, ML.fromDays(n)); tot.kcal += t.kcal; tot.protein += t.protein; tot.fat += t.fat; }
+  h += '<tr class="sum"><th>今週の合計</th>'+cols.map(function(c){ return '<td class="num">'+ML.r1(tot[c[0]])+'</td>'; }).join('')+'</tr>';
+  if (cols.some(function(c){ return g[c[0]]; })) h += '<tr class="sum"><th>週の目標</th>'+cols.map(function(c){ return '<td class="num">'+(g[c[0]] ? g[c[0]]*7 : '–')+'</td>'; }).join('')+'</tr>';
+  return h + '</tbody></table><div class="hint" style="font-size:11px;color:var(--ink-3);margin:4px 0 8px">赤みのある数字は上限超え、グレーは下限未満。行をタップするとその日を開きます。週は月曜始まりです。</div>';
+}
 function renderWeek(){
   var d = S.data, g = d.goals || {}, days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
   var h = '<h3>直近7日</h3>';
@@ -399,12 +427,13 @@ function renderWeek(){
   if (gv) h += '<div class="gl2" style="bottom:'+(15+Math.round(gv/mx*100))+'px"></div>';
   [gl, gh].forEach(function(x){ if (x) h += '<div class="gl3" style="bottom:'+(15+Math.round(x/mx*100))+'px"></div>'; });
   h += '</div>';
+  h += weekTable(d, g, days, av);
   var sp = ML.energySplit(av);
   h += '<div class="kv" style="margin-top:12px"><div><b class="num">'+av.kcal+'</b><span>平均kcal/日</span></div><div><b class="num">'+av.protein+'</b><span>平均たんぱく質g'+(g.protein?'（目安'+g.protein+(g.proteinMin||g.proteinMax?'、'+(g.proteinMin||'')+'〜'+(g.proteinMax||''):'')+'）':'')+'</span></div><div><b class="num">'+av.fat+'</b><span>平均脂質g</span></div></div>';
   h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">記録した日（'+av.days+'日）だけの平均です。'+(sp?'エネルギー比：たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%。':'')+'見積もりは概算なので、細かい差より傾向を見てください。</div>';
   h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:4px">棒をタップすると、その日の記録を開いて後から追加できます。「未」は記録のない日です。</div>';
   $('weekCard').innerHTML = h;
-  $('weekCard').onclick = function(e){ var k = e.target.closest('.chips button'); if (k) { S.wk = k.getAttribute('data-k'); renderWeek(); return; } var b = e.target.closest('.wk .c'); if (b) { S.date = b.getAttribute('data-d'); renderDay(); renderAdd(); renderList(); renderWeek(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
+  $('weekCard').onclick = function(e){ var k = e.target.closest('.chips button'); if (k) { S.wk = k.getAttribute('data-k'); renderWeek(); return; } var b = e.target.closest('.wk .c, .wt tr[data-d]'); if (b) { S.date = b.getAttribute('data-d'); renderDay(); renderAdd(); renderList(); renderWeek(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 }
 
 /* ---- 入力 ---- */
