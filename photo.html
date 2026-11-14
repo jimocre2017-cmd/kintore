@@ -189,6 +189,19 @@ header .sp{margin-left:auto}
 .f input,.f textarea,.f select{border:1px solid var(--line);background:var(--surface-2);border-radius:10px;padding:10px;width:100%}
 .f .hint{font-size:12px;color:var(--ink-3);line-height:1.6}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sw{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;gap:10px;-webkit-overflow-scrolling:touch;scrollbar-width:none;touch-action:pan-x pan-y}
+.sw::-webkit-scrollbar{display:none}
+.sw .sl{flex:0 0 100%;scroll-snap-align:center;min-width:0}
+.sw .sl img{width:100%;border-radius:10px;display:block;background:var(--surface-2);aspect-ratio:3/4;object-fit:contain}
+.sw .pair{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sw .pair .none{aspect-ratio:3/4;border-radius:10px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;color:var(--ink-3);font-size:12px;text-align:center;padding:8px}
+.sw figcaption,.sw .cap{font-size:12px;color:var(--ink-2);text-align:center;margin-top:4px}
+.sw figure{margin:0;min-width:0}
+.swinfo{text-align:center;font-size:13px;color:var(--ink-2);margin:8px 0 2px;line-height:1.7}
+.swinfo b{color:var(--ink)}
+.swnav{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:6px}
+.swnav .btn{min-height:40px;padding:0 16px}
+.swnav .pos{font-size:13px;color:var(--ink-3);min-width:64px;text-align:center}
 .sel-bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px;color:var(--ink-2)}
 </style>
 </head>
@@ -242,6 +255,17 @@ header .sp{margin-left:auto}
   <div class="ai" id="cAiOut"></div>
 </div></div>
 
+<!-- スワイプで見比べる -->
+<div class="modal" id="swModal"><div class="box">
+  <h2><span id="swTitle">スワイプで比べる</span><button class="x" id="swClose" aria-label="閉じる">✕</button></h2>
+  <div class="tabs" id="swAng"></div>
+  <div class="tabs" id="swMode"><button data-m="one" class="on">1枚ずつ</button><button data-m="pair">前の写真と並べる</button></div>
+  <div class="sw" id="swBody"></div>
+  <div class="swinfo" id="swInfo"></div>
+  <div class="swnav"><button class="btn small" id="swPrev" aria-label="前へ">‹ 前</button><span class="pos" id="swPos"></span><button class="btn small" id="swNext" aria-label="次へ">次 ›</button></div>
+  <div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:8px;text-align:center">左右にスワイプ（PCは ← → キー）。古い順に並び、最初は最新を表示します。</div>
+</div></div>
+
 <div class="toast" id="toast"></div>
 
 <script src="api.js"></script>
@@ -264,6 +288,7 @@ function nowHM(){ var t = new Date(); return p2(t.getHours())+':'+p2(t.getMinute
 
 var S = { data: null, logs: [], angle: '前', sel: [], shown: 24, loadErr: null, cmp: { a: null, b: null, mode: 'side' }, viewId: '' };
 var IMG = {}; // id → サムネイル（dataURL）
+var SELMAX = 8; // 一覧で選べる枚数（2枚なら比較、2枚以上ならスワイプで見られる）
 function photos(){ return S.data ? S.data.photos : []; }
 function byId(id){ var L = photos(); for (var i = 0; i < L.length; i++) if (L[i].id === id) return L[i]; return null; }
 
@@ -290,12 +315,15 @@ function renderCmp(){
   });
   var fst = PL.first(all, latest);
   h += '<button class="btn small" data-ref="'+(fst?fst.id:'')+'"'+(fst?'':' disabled')+'>最初（'+(fst?mdw(fst.date).replace(/（.）/,''):'－')+'）</button></div>';
-  h += '<div class="sel-bar" style="margin-top:10px">'+(S.sel.length ? '選んだ写真：'+S.sel.length+'/2' : '下の一覧で2枚を選んで、自由に比べることもできます。')+(S.sel.length===2 ? ' <button class="btn small primary" id="selGo">この2枚を比べる</button>' : '')+(S.sel.length ? ' <button class="btn small" id="selClr">選択を解除</button>' : '')+'</div>';
+  h += '<div class="rowbtns"><button class="btn small primary" id="swWeek">「'+S.angle+'」を1週間ずつスワイプ</button></div>';
+  h += '<div class="sel-bar" style="margin-top:10px">'+(S.sel.length ? '選んだ写真：'+S.sel.length+'/'+SELMAX : '下の一覧で写真を選ぶと（最大'+SELMAX+'枚）、自由に比べたり、選んだ写真をスワイプで見られます。')+(S.sel.length===2 ? ' <button class="btn small primary" id="selGo">この2枚を比べる</button>' : '')+(S.sel.length>=2 ? ' <button class="btn small primary" id="swSel">選んだ'+S.sel.length+'枚をスワイプ</button>' : '')+(S.sel.length ? ' <button class="btn small" id="selClr">選択を解除</button>' : '')+'</div>';
   $('cmpCard').innerHTML = h;
   $('cmpCard').onclick = function(e){
     var b = e.target.closest('button'); if (!b || b.disabled) return;
     if (b.hasAttribute('data-ref')) openCmp(b.getAttribute('data-ref'), latest.id);
     else if (b.id === 'selGo') openCmp(S.sel[0], S.sel[1]);
+    else if (b.id === 'swWeek') openSwipe('week');
+    else if (b.id === 'swSel') openSwipe('sel');
     else if (b.id === 'selClr') { S.sel = []; render(); }
   };
 }
@@ -329,7 +357,7 @@ function renderGallery(){
 function shown_ids(){ return PL.byAngle(photos(), S.angle).slice(0, S.shown).map(function(p){ return p.id; }); }
 function toggleSel(id){
   var i = S.sel.indexOf(id);
-  if (i >= 0) S.sel.splice(i, 1); else { if (S.sel.length >= 2) S.sel.shift(); S.sel.push(id); }
+  if (i >= 0) S.sel.splice(i, 1); else { if (S.sel.length >= SELMAX) S.sel.shift(); S.sel.push(id); }
   render();
 }
 var loading = false;
@@ -496,6 +524,122 @@ $('cAi').onclick = function(){
     $('cAiOut').innerHTML = h;
   }, function(er){ btn.disabled = false; btn.textContent = 'AIに所見を聞く'; toast(er.message, true); });
 };
+
+/* ---- スワイプで見比べる ---- */
+var SW = { kind: 'week', angle: '前', mode: 'one', items: [], full: {}, idx: 0, mixed: false };
+function swItems(){
+  if (SW.kind === 'week') return PL.weekly(photos(), SW.angle).map(function(x){ return x.photo; });
+  return PL.sortNewest(S.sel.map(byId).filter(Boolean)).reverse(); // 選んだ写真を古い順に
+}
+function swSrc(p){ return SW.full[p.id] || IMG[p.id] || ''; }
+function swImg(p){ return '<img data-pid="'+esc(p.id)+'" src="'+swSrc(p)+'" alt="">'; }
+function swCap(p){ return mdw(p.date)+(p.time?' '+p.time:'')+(SW.mixed?'・'+p.angle:''); }
+function swBuild(){
+  var L = SW.items, h = '';
+  SW.mixed = L.some(function(p){ return p.angle !== L[0].angle; });
+  L.forEach(function(p, i){
+    var prev = i > 0 ? L[i-1] : null;
+    if (SW.mode === 'pair') {
+      h += '<div class="sl"><div class="pair"><figure>'+(prev ? swImg(prev)+'<figcaption>'+swCap(prev)+'</figcaption>' : '<div class="none">これより前の写真はありません</div>')+'</figure><figure>'+swImg(p)+'<figcaption>'+swCap(p)+'</figcaption></figure></div></div>';
+    } else {
+      h += '<div class="sl">'+swImg(p)+'<div class="cap">'+swCap(p)+'</div></div>';
+    }
+  });
+  $('swBody').innerHTML = h;
+}
+function swInfo(){
+  var L = SW.items, i = SW.idx, p = L[i]; if (!p) { $('swInfo').innerHTML = ''; return; }
+  var prev = i > 0 ? L[i-1] : null, t = '';
+  if (SW.kind === 'week') t += '<b>'+Math.round(PL.daysBetween(PL.weekStart(L[0].date), PL.weekStart(p.date)) / 7) + 1+'週目</b>　';
+  if (SW.mode === 'pair' && prev) {
+    t += prev.date === p.date ? '同じ日の別の写真' : PL.daysBetween(prev.date, p.date)+'日間の変化';
+    var d = PL.bodyDiff(S.logs, prev, p).filter(function(r){ return r.key === 'weight' || r.key === 'fat'; });
+    if (d.length) t += '<br>' + d.map(function(r){ return r.label+' '+r.before+'→'+r.after+r.unit+'（'+sgn(r.diff)+r.unit+'）'; }).join('　');
+  } else {
+    var b = PL.bodyAt(S.logs, p.date);
+    if (b && (b.weight != null || b.fat != null)) t += (b.weight != null ? '体重 '+b.weight+'kg' : '')+(b.fat != null ? '　体脂肪率 '+b.fat+'%' : '');
+    if (p.memo) t += '<br>'+esc(p.memo);
+  }
+  $('swInfo').innerHTML = t;
+  $('swPos').textContent = (i+1)+' / '+L.length;
+  $('swPrev').disabled = i <= 0; $('swNext').disabled = i >= L.length - 1;
+}
+function swPaint(id){
+  Array.prototype.forEach.call($('swBody').querySelectorAll('img[data-pid]'), function(im){
+    if (im.getAttribute('data-pid') === id) { var s = SW.full[id] || IMG[id]; if (s && im.getAttribute('src') !== s) im.src = s; }
+  });
+}
+function swLoad(kind, ids){ // 10枚ずつ
+  var store = kind === 'full' ? SW.full : IMG;
+  var need = ids.filter(function(id){ return !store[id]; }).slice(0, 10);
+  if (!need.length) return Promise.resolve(false);
+  return KT.call('photoImages', need, kind).then(function(m){
+    Object.keys(m).forEach(function(id){ if (m[id]) { store[id] = m[id]; swPaint(id); } });
+    return need.some(function(id){ return m[id]; });
+  }, function(){ return false; });
+}
+function swLoadAllThumbs(token){
+  if (token !== SW.token) return;
+  swLoad('thumb', SW.items.map(function(p){ return p.id; })).then(function(more){ if (more) swLoadAllThumbs(token); });
+}
+function swNear(){
+  var lo = Math.max(0, SW.idx - (SW.mode === 'pair' ? 2 : 1)), hi = Math.min(SW.items.length - 1, SW.idx + 1), ids = [];
+  for (var i = lo; i <= hi; i++) ids.push(SW.items[i].id);
+  swLoad('full', ids);
+}
+function swSlideW(){ var b = $('swBody'); return b.clientWidth + 10; }
+function swGo(i, smooth){
+  i = Math.max(0, Math.min(SW.items.length - 1, i));
+  $('swBody').scrollTo({ left: i * swSlideW(), behavior: smooth ? 'smooth' : 'auto' });
+  SW.idx = i; swInfo(); swNear();
+}
+function swRender(keepIdx){
+  SW.items = swItems();
+  if (!SW.items.length) { $('swBody').innerHTML = '<div class="empty">写真がありません。</div>'; $('swInfo').innerHTML = ''; $('swPos').textContent = ''; return; }
+  swBuild();
+  var idx = keepIdx != null ? Math.min(keepIdx, SW.items.length - 1) : SW.items.length - 1; // 最初は最新
+  SW.token = (SW.token || 0) + 1;
+  swGo(idx, false);
+  swLoadAllThumbs(SW.token);
+}
+function openSwipe(kind){
+  SW = { kind: kind, angle: S.angle, mode: SW.mode || 'one', items: [], full: SW.full || {}, idx: 0, mixed: false, token: SW.token || 0 };
+  $('swTitle').textContent = kind === 'week' ? '1週間ずつスワイプ' : '選んだ写真をスワイプ';
+  $('swAng').style.display = kind === 'week' ? '' : 'none';
+  $('swAng').innerHTML = PL.ANGLES.map(function(a){ return '<button data-a="'+a+'"'+(a===SW.angle?' class="on"':'')+'>'+a+'</button>'; }).join('');
+  Array.prototype.forEach.call($('swMode').children, function(x){ x.classList.toggle('on', x.getAttribute('data-m') === SW.mode); });
+  $('swModal').classList.add('open');
+  swRender();
+}
+$('swAng').onclick = function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  SW.angle = b.getAttribute('data-a');
+  Array.prototype.forEach.call($('swAng').children, function(x){ x.classList.toggle('on', x === b); });
+  swRender();
+};
+$('swMode').onclick = function(e){
+  var b = e.target.closest('button'); if (!b) return;
+  SW.mode = b.getAttribute('data-m');
+  Array.prototype.forEach.call($('swMode').children, function(x){ x.classList.toggle('on', x === b); });
+  swRender(SW.idx);
+};
+var swT = null;
+$('swBody').addEventListener('scroll', function(){
+  clearTimeout(swT);
+  swT = setTimeout(function(){
+    var i = Math.round($('swBody').scrollLeft / swSlideW());
+    if (i !== SW.idx && i >= 0 && i < SW.items.length) { SW.idx = i; swInfo(); swNear(); }
+  }, 80);
+});
+$('swPrev').onclick = function(){ swGo(SW.idx - 1, true); };
+$('swNext').onclick = function(){ swGo(SW.idx + 1, true); };
+$('swClose').onclick = function(){ $('swModal').classList.remove('open'); };
+document.addEventListener('keydown', function(e){
+  if (!$('swModal').classList.contains('open')) return;
+  if (e.key === 'ArrowLeft') swGo(SW.idx - 1, true);
+  else if (e.key === 'ArrowRight') swGo(SW.idx + 1, true);
+  else if (e.key === 'Escape') $('swModal').classList.remove('open');
+});
 
 /* ---- 同期表示・起動 ---- */
 KT.onStatus(function(st){

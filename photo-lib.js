@@ -47,6 +47,19 @@ var PhotoLib = (function () {
     return L.length ? L[L.length - 1] : null;
   }
 
+  // 月曜始まりの週の開始日（月曜）
+  function weekStart(s) { var d = toDays(s); return fromDays(d - ((d + 3) % 7)); }
+
+  // 向きごとに、週（月曜始まり）につき1枚（その週で最も新しい写真）を選び、古い順に返す。[{ week, photo }]
+  function weekly(photos, angle) {
+    var seen = {}, out = [];
+    byAngle(photos, angle).forEach(function (p) { // 新しい順
+      var w = weekStart(p.date);
+      if (!seen[w]) { seen[w] = true; out.push({ week: w, photo: p }); }
+    });
+    return out.reverse();
+  }
+
   // その日付以前で最も新しい体組成（日平均）。logs は新しい順
   function bodyAt(logs, date) {
     for (var i = 0; i < logs.length; i++) if (logs[i].date <= date) return logs[i];
@@ -70,6 +83,6 @@ var PhotoLib = (function () {
     return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)) };
   }
 
-  return { ANGLES: ANGLES, toDays: toDays, fromDays: fromDays, daysBetween: daysBetween, sortNewest: sortNewest, order: order, byAngle: byAngle, groupSets: groupSets, reference: reference, first: first, bodyAt: bodyAt, bodyDiff: bodyDiff, fitSize: fitSize };
+  return { ANGLES: ANGLES, toDays: toDays, fromDays: fromDays, daysBetween: daysBetween, sortNewest: sortNewest, order: order, byAngle: byAngle, groupSets: groupSets, weekStart: weekStart, weekly: weekly, reference: reference, first: first, bodyAt: bodyAt, bodyDiff: bodyDiff, fitSize: fitSize };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = PhotoLib;

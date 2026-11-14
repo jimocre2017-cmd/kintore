@@ -42,10 +42,19 @@ var MealLib = (function () {
   // 目標に対する達成率（目標0＝null）
   function pct(v, goal) { return goal > 0 ? Math.round(v / goal * 100) : null; }
 
+  // 下限（アンダー）・上限（トップ）に対する状態。どちらも未設定なら null。'under'＝下限未満、'over'＝上限超え、'in'＝範囲内
+  function status(v, lo, hi) {
+    lo = lo > 0 ? lo : 0; hi = hi > 0 ? hi : 0;
+    if (!lo && !hi) return null;
+    if (lo && v < lo) return 'under';
+    if (hi && v > hi) return 'over';
+    return 'in';
+  }
+
   // 食事の区分の並び順
   var TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
   function typeOrder(t) { var i = TYPES.indexOf(t); return i < 0 ? 99 : i; }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, TYPES: TYPES, typeOrder: typeOrder };
+  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
