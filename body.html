@@ -177,6 +177,9 @@ header .sp{margin-left:auto}
 .tag.cond{background:var(--accent);color:var(--accent-ink);margin:0 4px 0 0}
 .avgrow td{font-weight:700;background:var(--surface-2)}
 .tag.excl{background:var(--ink-3);color:#fff;margin:0 4px 0 0}
+.guide summary{cursor:pointer;font-weight:700;font-size:14px;color:var(--ink-2)}
+.guide ul{margin:10px 0 0;padding-left:18px;font-size:13px;line-height:1.7;color:var(--ink-2)}
+.guide li{margin-bottom:4px}
 .tbl tr.row.excl td{opacity:.5}
 .chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--ink-2);line-height:1.5}
 .chk input{width:20px;height:20px;margin-top:1px;flex:none}
@@ -199,6 +202,17 @@ header .sp{margin-left:auto}
   <section class="stats" id="stats"></section>
   <section class="actions"><button class="btn primary wide" id="addBtn">＋ 測定を記録（朝・昼・晩など何回でも）</button></section>
   <section class="card" id="filterCard"></section>
+  <section class="card" id="guideCard"><details class="guide"><summary>測り方のルール（毎日の基準）</summary>
+    <ul>
+      <li><b>基準の測り方</b>：起床後に排尿し、飲食の前に、同じ服装で測ります。タグは「起床後」。</li>
+      <li><b>便は待たない</b>：便が残っていても、毎日同じ条件なら日ごとの比較はできます。便の分は週平均でならされます。</li>
+      <li><b>「排便後」</b>：実際に便が出てから測った時だけ。尿だけなら付けません。参考の記録で、基準には使いません。</li>
+      <li><b>食事のあと</b>：「食事後」を付けます。日内変化を見る用で、基準には使いません。</li>
+      <li><b>数値がぶれた測定</b>：測定の編集で「集計から除外」にできます（記録は残ります）。</li>
+      <li><b>見方</b>：上の「集計の条件」で「起床後」を選ぶと、基準の測定だけで推移を見られます。日々の増減は気にせず、2〜4週間の平均で判断します。</li>
+      <li><b>数値の正確さ</b>：体重は正確です。体脂肪率・骨格筋率・基礎代謝・内臓脂肪は目安で、同じ条件での推移を見るために使います。</li>
+    </ul>
+  </details></section>
   <section class="card" id="dayCard"></section>
   <section class="card" id="chartCard"><div class="loading">読み込み中…</div></section>
   <section class="card" id="cmpCard"></section>
@@ -212,7 +226,7 @@ header .sp{margin-left:auto}
     <div class="f"><label>日付</label><input type="date" id="fDate"></div>
     <div class="f"><label>測った時刻</label><input type="time" id="fTime"></div>
   </div>
-  <div class="f"><label>測定のタイミング・条件（複数選べます）</label><div class="chips" id="fTags"></div><div class="hint">体重・体脂肪率は、同じ条件で測ると比べやすくなります（例：起床後・排便後）。</div></div>
+  <div class="f"><label>測定のタイミング・条件（複数選べます）</label><div class="chips" id="fTags"></div><div class="hint">基準は「起床後」（排尿後・飲食前）。「排便後」は、実際に便が出てから測った時だけ付けます（尿だけなら付けません）。食後に測ったら「食事後」を付けます。</div></div>
   <div class="fgrid">
     <div class="f"><label>体重（kg）</label><input type="number" id="fWeight" inputmode="decimal" step="0.1" min="20" max="300"></div>
     <div class="f"><label>体脂肪率（%）</label><input type="number" id="fFat" inputmode="decimal" step="0.1" min="1" max="70"></div>
