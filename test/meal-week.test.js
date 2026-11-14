@@ -30,3 +30,29 @@ assert.strictEqual(ML.weekPlan(logs, '2026/11/14', 0, 0, 0, 'fat', 1), null);
 p = ML.weekPlan([L('2026/11/08', 3000, 0, 99)], '2026/11/09', 50, 0, 0, 'fat', 1);
 assert.strictEqual(p.target, 50);
 console.log('OK');
+
+// ---- コメント（多い・少ない → 対処） ----
+function tgt(k, ref, lo, hi) { var o = {}; o[k] = { ref: ref, lo: lo || 0, hi: hi || 0 }; return o; }
+var tg = { kcal: { ref: 1900, lo: 1700, hi: 2100 }, protein: { ref: 110, lo: 100, hi: 0 }, fat: { ref: 50, lo: 0, hi: 55 } };
+// 脂質が多く、カロリーとたんぱく質が少ない
+var a = ML.advise({ kcal: 1500, protein: 70, fat: 70 }, tg, false);
+assert.deepStrictEqual(a.state, { kcal: 'under', protein: 'under', fat: 'over' });
+assert.ok(/脂質を減らしつつ、たんぱく質を足す/.test(a.lines[0])); assert.ok(/炭水化物で補/.test(a.lines[1]));
+assert.ok(a.lines.length === 2 && /脂質が多い/.test(a.head) && /カロリーが少ない/.test(a.head));
+// 範囲内
+a = ML.advise({ kcal: 1900, protein: 112, fat: 50 }, tg, false);
+assert.deepStrictEqual(a.state, { kcal: 'ok', protein: 'ok', fat: 'ok' }); assert.ok(/範囲内/.test(a.lines[0]));
+// 1日の途中は「少ない」と言わず、残りを案内する
+a = ML.advise({ kcal: 600, protein: 30, fat: 20 }, tg, true);
+assert.strictEqual(a.state.kcal, 'ok'); assert.ok(/あと1500kcal/.test(a.lines.join('')) && /脂質 あと35gまで/.test(a.lines.join('')));
+// 途中でも多ければ言う
+a = ML.advise({ kcal: 900, protein: 30, fat: 60 }, tg, true); assert.strictEqual(a.state.fat, 'over');
+// 脂質×カロリーの超過
+a = ML.advise({ kcal: 2300, protein: 120, fat: 70 }, tg, false); assert.ok(/主な原因は脂質/.test(a.lines[0]));
+// 全体に少ない
+a = ML.advise({ kcal: 1300, protein: 60, fat: 48 }, tg, false); assert.ok(/全体に少なめ/.test(a.lines[0]));
+// 目標なし
+a = ML.advise({ kcal: 1300, protein: 60, fat: 30 }, {}, false); assert.strictEqual(a.lines.length, 0);
+// 上限なし：目安の1割超で「多い」
+a = ML.advise({ kcal: 1, protein: 1, fat: 56 }, { fat: { ref: 50, lo: 0, hi: 0 } }, false); assert.strictEqual(a.state.fat, 'over');
+console.log('OK advise');

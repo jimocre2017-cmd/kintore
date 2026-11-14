@@ -73,10 +73,62 @@ var MealLib = (function () {
     return { target: target, raw: Math.round(raw * 10) / 10, goal: goal, clamp: clamp, days: rec, avg: rec ? Math.round(sum / rec * 10) / 10 : null, left: left, diff: target - goal };
   }
 
+  /* 1日の合計に対するコメント（多い／少ない → 減らす・増やす方法）。AIは使わず、ルールで出す。
+     t＝その日の合計、tg＝{kcal,protein,fat: {ref:今日の目標, lo:下限, hi:上限}}、partial＝まだ1日の途中（少ないとは言わず、残りを案内する）
+     返り値 { state:{kcal,protein,fat: 'over'|'under'|'ok'|null}, head:'…', lines:[…] } */
+  var NAME = { kcal: 'カロリー', protein: 'たんぱく質', fat: '脂質' }, UNIT = { kcal: 'kcal', protein: 'g', fat: 'g' };
+  var HOW = {
+    kcal_over: 'カロリーが多め。間食・甘い飲み物・お酒を減らし、揚げ物や炒め物の油を控える。主食（米・パン・麺）を一口ずつ減らすのも効く。',
+    kcal_under: 'カロリーが少なめ。主食（米・パン・芋）やバナナ・おにぎりなど、低脂質のものから足す。削りすぎると筋肉が落ちるので注意。',
+    protein_over: 'たんぱく質は多め。極端でなければ問題ないが、増やした分は炭水化物や野菜に回してバランスを取る。',
+    protein_under: 'たんぱく質が少なめ。各食に手のひら1枚ぶん（鶏むね・ささみ・魚・卵・納豆・豆腐）を入れる。間にヨーグルトやプロテインを足すのが手軽。',
+    fat_over: '脂質が多め。揚げ物・バター・マヨネーズ・ドレッシング・脂身・洋菓子・ナッツを控える。調理は焼く・蒸す・ゆでるに、肉は皮なし・赤身に。',
+    fat_under: '脂質が少なめ。少なすぎるとホルモンやビタミンの吸収に響くので、魚・卵・オリーブ油・ナッツを少量足す。'
+  };
+  function advise(t, tg, partial) {
+    var keys = ['kcal', 'protein', 'fat'], st = {}, lines = [], used = {};
+    keys.forEach(function (k) {
+      var x = tg && tg[k];
+      if (!x || !(x.ref > 0 || x.lo > 0 || x.hi > 0)) { st[k] = null; return; }
+      var v = t[k] || 0, over = x.hi > 0 ? v > x.hi : (x.ref > 0 && v > x.ref * 1.1);
+      var under = !over && (x.lo > 0 ? v < x.lo : (x.ref > 0 && v < x.ref * 0.9));
+      st[k] = over ? 'over' : (under && !partial) ? 'under' : 'ok';
+    });
+    var on = keys.filter(function (k) { return st[k]; });
+    if (!on.length) return { state: st, head: '', lines: [] };
+    var head = on.map(function (k) { return NAME[k] + (st[k] === 'over' ? 'が多い' : st[k] === 'under' ? 'が少ない' : 'は範囲内'); }).join('・');
+    function use() { Array.prototype.slice.call(arguments).forEach(function (k) { used[k] = 1; }); }
+    // 組み合わせ
+    if (st.fat === 'over' && st.protein === 'under') {
+      lines.push('脂質を減らしつつ、たんぱく質を足すのが最優先です。揚げ物・バター・マヨネーズ・ドレッシング・脂身・菓子を控え、鶏むね・ささみ・白身魚・卵白・納豆・無脂肪ヨーグルト・プロテインに置き換えましょう。');
+      if (st.kcal === 'under') lines.push('カロリーも足りないので、減らした脂質の分は米・パン・芋などの炭水化物で補います（脂質では補わない）。');
+      use('fat_over', 'protein_under'); if (st.kcal === 'under') use('kcal_under');
+    } else if (st.fat === 'over' && st.kcal === 'over') {
+      lines.push('カロリー超過の主な原因は脂質の可能性が高いです。油もの・間食・お酒を減らすと、いちばん効率よく戻せます。');
+      use('fat_over', 'kcal_over');
+    } else if (st.kcal === 'under' && st.protein === 'under' && st.fat !== 'under') {
+      lines.push('全体に少なめです。各食にたんぱく源を足し、主食（米・パン・芋）もしっかり摂りましょう。脂質は足さなくて大丈夫です。');
+      use('kcal_under', 'protein_under');
+    }
+    keys.forEach(function (k) { if ((st[k] === 'over' || st[k] === 'under') && !used[k + '_' + st[k]]) lines.push(HOW[k + '_' + st[k]]); });
+    // 1日の途中：残りの案内
+    if (partial) {
+      var rem = [];
+      keys.forEach(function (k) {
+        var x = tg && tg[k], lim = x && (x.hi > 0 ? x.hi : x.ref > 0 ? x.ref : 0); if (!lim) return;
+        var left = Math.round((lim - (t[k] || 0)) * 10) / 10;
+        rem.push(NAME[k] + (left > 0 ? (k === 'fat' ? ' あと' + left + UNIT[k] + 'まで' : ' あと' + left + UNIT[k]) : ' 上限に到達'));
+      });
+      if (rem.length) lines.push('今日の残り：' + rem.join('／') + '。');
+    }
+    if (!lines.length) lines.push('今のところ範囲内です。この調子で。');
+    return { state: st, head: head, lines: lines };
+  }
+
   // 食事の区分の並び順
   var TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
   function typeOrder(t) { var i = TYPES.indexOf(t); return i < 0 ? 99 : i; }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, TYPES: TYPES, typeOrder: typeOrder };
+  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;

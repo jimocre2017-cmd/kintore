@@ -178,6 +178,11 @@ header .sp{margin-left:auto}
 .macro .pl b{color:var(--ink)}
 .macro .rg{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:3px}
 .macro .rg .st-in{color:var(--good)}.macro .rg .st-under{color:var(--ink-2)}.macro .rg .st-over{color:var(--warn)}
+.adv{margin:10px 0;padding:10px 12px;border-radius:10px;background:var(--surface-2);font-size:13px;line-height:1.6}
+.adv.bad{border-left:4px solid var(--warn)}
+.adv b{display:block;margin-bottom:2px}
+.adv p{margin:4px 0}
+.adv small{display:block;font-size:11px;color:var(--ink-3);margin-top:4px}
 .wt{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
 .wt th,.wt td{padding:6px 4px;border-bottom:1px solid var(--line);text-align:right}
 .wt th{font-weight:600;color:var(--ink-2);text-align:left}
@@ -370,6 +375,7 @@ function renderDay(){
     var wp = function(goal, lo, hi, key, step){ return ML.weekPlan(d.logs, S.date, goal, lo, hi, key, step); };
     h += macroRow('カロリー', t.kcal, g.kcal, 'kcal', g.kcalMin, g.kcalMax, wp(g.kcal, g.kcalMin, g.kcalMax, 'kcal', 10)) + macroRow('たんぱく質', t.protein, g.protein, 'g', g.proteinMin, g.proteinMax, wp(g.protein, g.proteinMin, g.proteinMax, 'protein', 1)) + macroRow('脂質', t.fat, g.fat, 'g', g.fatMin, g.fatMax, wp(g.fat, g.fatMin, g.fatMax, 'fat', 1))
       + '<div class="macro"><div class="t"><span>炭水化物</span><span><b class="num">'+t.carbs+'</b> g</span></div></div>';
+    h += adviceHtml(d, g, t);
     var sp = ML.energySplit(t);
     if (sp) h += '<div class="t" style="font-size:12px;color:var(--ink-3)">エネルギー比　たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%</div><div class="split"><i style="width:'+sp.protein+'%;background:#1a9e5c"></i><i style="width:'+sp.fat+'%;background:#d98a1f"></i><i style="width:'+sp.carbs+'%;background:#2a78d6"></i></div>';
   }
@@ -391,6 +397,20 @@ function renderList(){
   });
   $('listCard').innerHTML = h;
   $('listCard').onclick = function(e){ var b = e.target.closest('.meal'); if (b) openForm(b.getAttribute('data-id')); };
+}
+function adviceHtml(d, g, t){
+  var K = [['kcal',10],['protein',1],['fat',1]], tg = {}, any = false;
+  K.forEach(function(c){
+    var k = c[0], p = ML.weekPlan(d.logs, S.date, g[k], g[k+'Min'], g[k+'Max'], k, c[1]);
+    tg[k] = { ref: p ? p.target : (g[k] || 0), lo: g[k+'Min'] || 0, hi: g[k+'Max'] || 0 };
+    if (tg[k].ref || tg[k].lo || tg[k].hi) any = true;
+  });
+  if (!any) return '';
+  var partial = S.date === d.today && new Date().getHours() < 20;
+  var a = ML.advise(t, tg, partial);
+  if (!a.lines.length) return '';
+  var bad = Object.keys(a.state).some(function(k){ return a.state[k] === 'over' || a.state[k] === 'under'; });
+  return '<div class="adv'+(bad?' bad':'')+'"><b>'+esc(a.head)+'</b>'+a.lines.map(function(x){ return '<p>'+esc(x)+'</p>'; }).join('')+'<small>目標との比較によるルール判定です（1日の途中は「少ない」とは言わず、残りを案内します）。</small></div>';
 }
 function weekTable(d, g, days, av){
   var cols = [['kcal','kcal','kcal'],['protein','たんぱく質','g'],['fat','脂質','g']];
