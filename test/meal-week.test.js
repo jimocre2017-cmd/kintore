@@ -56,3 +56,17 @@ a = ML.advise({ kcal: 1300, protein: 60, fat: 30 }, {}, false); assert.strictEqu
 // 上限なし：目安の1割超で「多い」
 a = ML.advise({ kcal: 1, protein: 1, fat: 56 }, { fat: { ref: 50, lo: 0, hi: 0 } }, false); assert.strictEqual(a.state.fat, 'over');
 console.log('OK advise');
+
+// ---- 1日の判定・週の収支 ----
+assert.strictEqual(ML.judge(50, 40, 55, 46), 'ok'); assert.strictEqual(ML.judge(60, 40, 55, 46), 'over'); assert.strictEqual(ML.judge(30, 40, 55, 46), 'under');
+assert.strictEqual(ML.judge(52, 0, 0, 46), 'over'); assert.strictEqual(ML.judge(40, 0, 0, 46), 'under'); assert.strictEqual(ML.judge(46, 0, 0, 46), 'ok'); assert.strictEqual(ML.judge(5, 0, 0, 0), null);
+// 月曜は収支なし
+assert.strictEqual(ML.weekBalance([], '2026/11/09', 50, 'fat'), null);
+// 月〜金（5日）に60gずつ、目安50g → 使った300、ペース250、差+50、週350
+var b = ML.weekBalance(logs, '2026/11/14', 50, 'fat');
+assert.deepStrictEqual([b.used, b.week, b.pace, b.diff, b.elapsed, b.miss], [300, 350, 250, 50, 5, 0]);
+// 未記録の日は目安どおり：月だけ記録(60)、火〜木は未記録(各50)、今日=金 → used 60+150=210、ペース200
+b = ML.weekBalance([L('2026/11/09', 2000, 100, 60)], '2026/11/13', 50, 'fat');
+assert.deepStrictEqual([b.used, b.pace, b.diff, b.miss], [210, 200, 10, 3]);
+assert.strictEqual(ML.weekBalance(logs, '2026/11/14', 0, 'fat'), null);
+console.log('OK balance');
