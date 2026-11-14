@@ -329,6 +329,130 @@ function mealEstimate(req) {
   return out;
 }
 
+/* ============================================================
+ * 食事の相談（Gemini）：「今日は同窓会で中華。お酒なしでたくさん食べたい。どうしたらいい？」のような質問に答える
+ * 画面から、今日の目標・合計（週平均から割り戻した値）と質問文が届く。ここで直近7日の記録と、今日食べたものを足して答えさせる
+ * ============================================================ */
+
+function mealAskSystem_() {
+  return [
+    'あなたは、減量・筋トレをしている人を支える管理栄養士兼パーソナルトレーナーです。ユーザーの質問に、今日の状況と目標に合わせて、実行できる具体策で答えます。',
+    '',
+    '## ルール',
+    '- 最初に結論を1〜2文（summary）。「食べていい」「控える」の方向をはっきり書く。',
+    '- そのあと、場面ごとに短い箇条書き（sections）。外食・会食なら「行く前」「食べるとき（選び方・順番）」「食べたあと」の3つを基本にする。質問に合わせて増減してよい。',
+    '- 渡された「今日の目標・ここまでの合計」と「直近7日」を踏まえる。たんぱく質は足りているか、脂質は多めか、など数字に触れて具体的に。',
+    '- たくさん食べたい気持ちを否定しない。我慢で押さえるのではなく、「選び方・順番・前後の調整」で満足と目標を両立する案を出す。',
+    '- 極端な絶食や食事抜き、「その日だけ0kcal」のような案は出さない。調整は前後の食事で緩やかに（目安：前後で合計200〜300kcal程度）。',
+    '- 店の具体的なメニューは分からないので、断定しない。中華なら一般的な料理（例：蒸し鶏、海鮮と野菜の炒め、スープ、春巻き、炒飯、麻婆豆腐、酢豚、唐揚げ）の傾向で書き、「店のメニューに合わせて読み替えて」と添える。存在しない料理名を店の名物として書かない。',
+    '- お酒を飲まない前提のときは、飲み物は無糖のお茶・水・炭酸水を勧める（甘い飲料は控える）。',
+    '- estimate には、想定される食事の概算（例：「1,200〜1,600kcal、脂質50〜70g前後」）を書く。ぶれが大きいことも一言添える。',
+    '- 体調や持病が絡みそうなときは断定せず、医師に相談するよう一言添える。',
+    '- 日本語で、簡潔に。各項目は1文で。全体で800字以内。'
+  ].join('\n');
+}
+
+function mealAskSchema_() {
+  return {
+    type: 'OBJECT',
+    properties: {
+      summary: { type: 'STRING' },
+      sections: { type: 'ARRAY', items: { type: 'OBJECT', properties: { title: { type: 'STRING' }, points: { type: 'ARRAY', items: { type: 'STRING' } } }, required: ['title', 'points'] } },
+      estimate: { type: 'STRING' }
+    },
+    required: ['summary', 'sections', 'estimate']
+  };
+}
+
+function mealAsk(req) {
+  req = req || {};
+  var q = String(req.question || '').replace(/\r\n?/g, '\n').trim();
+  if (q.length < 4) throw new Error('相談したい内容を入力してください');
+  if (q.length > 800) throw new Error('相談の内容は800文字以内で入力してください');
+  var today = today_(), c = req.ctx || {}, lines = [];
+  function n(v) { v = Number(v); return isNaN(v) || v < 0 ? 0 : Math.round(v * 10) / 10; }
+  var tg = c.targets || {}, tt = c.totals || {};
+  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].forEach(function (k) {
+    var x = tg[k[0]] || {}, ref = n(x.ref), lo = n(x.lo), hi = n(x.hi);
+    if (!ref && !lo && !hi) return;
+    lines.push('- ' + k[1] + '：今日の目標 ' + (ref || '–') + k[2] + (lo ? '（下限' + lo + '）' : '') + (hi ? '（上限' + hi + '）' : '') + '、ここまで ' + n(tt[k[0]]) + k[2]);
+  });
+  var d = mealGet(), eaten = d.logs.filter(function (l) { return l.date === today; }).map(function (l) { return l.type + '：' + String(l.text || '').replace(/\n/g, ' ').slice(0, 60) + '（' + l.kcal + 'kcal P' + l.protein + ' F' + l.fat + '）'; });
+  var w = aiMeal_(today), sug = d.suggest;
+  var ctx = '今日（' + today + '）の目標と、ここまでの合計：\n' + (lines.join('\n') || '（目標未設定）')
+    + '\n\n今日これまでに食べたもの：\n' + (eaten.join('\n') || '（まだ記録なし）')
+    + (w ? '\n\n直近7日（記録した日だけ）：平均 ' + w.averagePerLoggedDay.kcal + 'kcal、たんぱく質' + w.averagePerLoggedDay.protein + 'g、脂質' + w.averagePerLoggedDay.fat + 'g、脂質エネルギー比' + w.fatEnergyPercent + '%' : '')
+    + (sug && sug.protein ? '\n\n体組成からの目安：たんぱく質 約' + sug.protein + 'g' + (sug.cutKcal ? '、減量なら約' + sug.cutKcal + 'kcal' : '') : '');
+  var res = gemini_(mealAskSystem_(), ctx + '\n\n## 相談\n' + q, mealAskSchema_());
+  var secs = (res.sections || []).slice(0, 6).map(function (s) {
+    return { title: String(s.title || '').slice(0, 30), points: (s.points || []).slice(0, 8).map(function (x) { return String(x).slice(0, 200); }) };
+  }).filter(function (s) { return s.points.length; });
+  var summary = String(res.summary || '').slice(0, 400);
+  if (!summary && !secs.length) throw new Error('回答を作れませんでした。もう少し具体的に書いてもう一度お試しください');
+  return { summary: summary, sections: secs, estimate: String(res.estimate || '').slice(0, 200) };
+}
+
+/* ============================================================
+ * 1日の食事のAI分析（Gemini）：その日に食べた物の内訳から、多い・少ないの原因と、減らす・増やす具体策を出す
+ * 画面の「ルール判定のコメント」を、食べた物に合わせて具体化したもの
+ * ============================================================ */
+
+function mealReviewSystem_() {
+  return [
+    'あなたは、減量・筋トレをしている人を支える管理栄養士です。1日の食事記録と目標を見て、食べた物に合わせた具体的な助言をします。',
+    '',
+    '## ルール',
+    '- summary：その日の状態を1〜2文で。カロリー・たんぱく質・脂質のどれが目標に対して多い／少ないか（数字つき）。',
+    '- causes：多い栄養素（特に脂質・カロリー）の原因になっている食べ物を、記録に書かれた物だけから、寄与の大きい順に最大4件。例：「唐揚げ（昼食）：脂質18g。脂質全体の約3割」。記録にない物を原因にしない。',
+    '- actions：減らす・増やす方法を、実際に食べた物に合わせて具体的に最大5件。置き換え案（例：唐揚げ→焼き鳥のむね・塩）、量の調整、調理法、足すべき食品（たんぱく質が少ないとき）を書く。1件1文。',
+    '- nextMeal：「まだ今日が終わっていない」と渡された場合は、次の食事で何を選ぶと目標に近づくかを1〜2文で。終わった日・過去の日は、明日に向けた一言。',
+    '- 「今日の目標」は週平均から割り戻した値なので、その数字を基準に評価する。下限・上限があればそれも使う。',
+    '- 記録が少なく判断できないときは、その旨を summary に書き、無理に原因を作らない。',
+    '- 極端な絶食・食事抜きは勧めない。体調や持病が絡みそうなときは断定しない。',
+    '- 日本語で簡潔に。全体で700字以内。'
+  ].join('\n');
+}
+
+function mealReviewSchema_() {
+  return {
+    type: 'OBJECT',
+    properties: {
+      summary: { type: 'STRING' },
+      causes: { type: 'ARRAY', items: { type: 'STRING' } },
+      actions: { type: 'ARRAY', items: { type: 'STRING' } },
+      nextMeal: { type: 'STRING' }
+    },
+    required: ['summary', 'causes', 'actions', 'nextMeal']
+  };
+}
+
+function mealReview(req) {
+  req = req || {};
+  var date = /^\d{4}\/\d{2}\/\d{2}$/.test(String(req.date || '')) ? req.date : today_();
+  var d = mealGet(), logs = d.logs.filter(function (l) { return l.date === date; }).sort(function (a, b) { return (a.time || '99') < (b.time || '99') ? -1 : 1; });
+  if (!logs.length) throw new Error('この日の食事の記録がありません');
+  function n(v) { v = Number(v); return isNaN(v) || v < 0 ? 0 : Math.round(v * 10) / 10; }
+  var c = req.ctx || {}, tg = c.targets || {}, lines = [];
+  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].forEach(function (k) {
+    var x = tg[k[0]] || {}, ref = n(x.ref), lo = n(x.lo), hi = n(x.hi);
+    if (ref || lo || hi) lines.push('- ' + k[1] + '：目標 ' + (ref || '–') + k[2] + (lo ? '（下限' + lo + '）' : '') + (hi ? '（上限' + hi + '）' : ''));
+  });
+  var tot = { kcal: 0, protein: 0, fat: 0, carbs: 0 };
+  var rec = logs.map(function (l) {
+    tot.kcal += l.kcal; tot.protein += l.protein; tot.fat += l.fat; tot.carbs += l.carbs;
+    return '【' + l.type + (l.time ? ' ' + l.time : '') + '】' + String(l.text || '').replace(/\n/g, ' ').slice(0, 120) + '　合計 ' + l.kcal + 'kcal P' + l.protein + ' F' + l.fat + ' C' + l.carbs
+      + (l.items ? '\n内訳：\n' + String(l.items).slice(0, 700) : '');
+  });
+  var partial = date === today_() && !!c.partial;
+  var ctx = '日付：' + date + (partial ? '（まだ1日の途中）' : '（1日が終わった／過去の日）') + '\n\n目標：\n' + (lines.join('\n') || '（目標未設定）')
+    + '\n\nここまでの合計：' + Math.round(tot.kcal) + 'kcal、たんぱく質' + n(tot.protein) + 'g、脂質' + n(tot.fat) + 'g、炭水化物' + n(tot.carbs) + 'g\n\n食事の記録：\n' + rec.join('\n\n');
+  var res = gemini_(mealReviewSystem_(), ctx, mealReviewSchema_());
+  function arr(a, max) { return (a || []).slice(0, max).map(function (x) { return String(x).slice(0, 220); }).filter(function (x) { return x; }); }
+  var out = { summary: String(res.summary || '').slice(0, 400), causes: arr(res.causes, 4), actions: arr(res.actions, 5), nextMeal: String(res.nextMeal || '').slice(0, 300) };
+  if (!out.summary && !out.actions.length) throw new Error('分析を作れませんでした。もう一度お試しください');
+  return out;
+}
+
 /** 動作確認用：エディタから実行して、シートが作られ読み書きできるか確かめる（テスト記録は削除される） */
 function mealTest() {
   var id = 'meal-test-' + uuid_();

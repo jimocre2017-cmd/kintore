@@ -597,6 +597,9 @@ var KT = (function () {
     },
     // 食事内容 → 栄養の見積もり（AIを使うのでオンラインのみ）
     mealEstimate: function (req) { return api('mealEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    // 食事の相談（AIを使うのでオンラインのみ）
+    mealAsk: function (req) { return api('mealAsk', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    mealReview: function (req) { return api('mealReview', [req], 120000).then(function (r) { return r; }, onlineOnly); },
     mealSave: function (entry) {
       entry = clone(entry); entry.id = entry.id || uuid();
       if (!entry.date) return Promise.reject(new Error('日付が正しくありません'));
