@@ -195,6 +195,7 @@ function planApply(p) {
     // 食事画面の目標：今日から有効にするため、開始週が今日以前（今週の月曜など）の場合だけ反映する
     var pr = PropertiesService.getScriptProperties();
     if (from <= today_()) {
+      mealShiftKcalRange_(pr, pr.getProperty('MEAL_GOAL_KCAL'), kcal); // 下限・上限も同じ幅だけずらす
       pr.setProperty('MEAL_GOAL_KCAL', String(kcal));
     } else {
       pr.setProperty('MEAL_GOAL_KCAL_NEXT', JSON.stringify({ from: from, kcal: kcal }));

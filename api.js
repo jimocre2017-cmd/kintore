@@ -434,7 +434,7 @@ var KT = (function () {
     } else if (op.type === 'mealFoodDel') { v.foods = v.foods || []; removeById(v.foods, op.id); }
   }
   function mealLocal() {
-    var v = clone(LS.get('kt_meal', null) || { today: today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0 }, suggest: null, foods: [] });
+    var v = clone(LS.get('kt_meal', null) || { today: today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0, kcalMin: 0, kcalMax: 0, proteinMin: 0, proteinMax: 0, fatMin: 0, fatMax: 0 }, suggest: null, foods: [] });
     v.today = today(); v.foods = v.foods || [];
     queue().forEach(function (op) { if (MEAL_OPS[op.type]) mealApplyOp(v, op, true); });
     v.logs.sort(function (a, b) { return a.date === b.date ? ((a.time || '') < (b.time || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });

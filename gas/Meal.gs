@@ -115,11 +115,27 @@ function mealGoals_() {
   // 減量計画で「来週から」採用した目標カロリーは、その日になったら反映する
   var nx = p.getProperty('MEAL_GOAL_KCAL_NEXT');
   if (nx) {
-    try { var o = JSON.parse(nx); if (o.from <= today_()) { p.setProperty('MEAL_GOAL_KCAL', String(o.kcal)); p.deleteProperty('MEAL_GOAL_KCAL_NEXT'); } }
+    try { var o = JSON.parse(nx); if (o.from <= today_()) { mealShiftKcalRange_(p, p.getProperty('MEAL_GOAL_KCAL'), o.kcal); p.setProperty('MEAL_GOAL_KCAL', String(o.kcal)); p.deleteProperty('MEAL_GOAL_KCAL_NEXT'); } }
     catch (e) { p.deleteProperty('MEAL_GOAL_KCAL_NEXT'); }
   }
   function g(k) { var v = Number(p.getProperty(k)); return v > 0 ? v : 0; }
-  return { kcal: g('MEAL_GOAL_KCAL'), protein: g('MEAL_GOAL_P'), fat: g('MEAL_GOAL_F') };
+  // kcal・protein・fat＝目安。〜Min＝下限（アンダー）、〜Max＝上限（トップ）。0＝設定なし
+  return {
+    kcal: g('MEAL_GOAL_KCAL'), protein: g('MEAL_GOAL_P'), fat: g('MEAL_GOAL_F'),
+    kcalMin: g('MEAL_GOAL_KCAL_MIN'), kcalMax: g('MEAL_GOAL_KCAL_MAX'),
+    proteinMin: g('MEAL_GOAL_P_MIN'), proteinMax: g('MEAL_GOAL_P_MAX'),
+    fatMin: g('MEAL_GOAL_F_MIN'), fatMax: g('MEAL_GOAL_F_MAX')
+  };
+}
+
+/** 目標カロリーを変えるとき、下限・上限も同じ幅だけずらす（範囲の幅は保つ）。減量計画の採用で目安だけ変わって範囲とずれるのを防ぐ */
+function mealShiftKcalRange_(pr, oldKcal, newKcal) {
+  var d = Number(newKcal) - Number(oldKcal);
+  if (!(Number(oldKcal) > 0) || !d) return;
+  ['MEAL_GOAL_KCAL_MIN', 'MEAL_GOAL_KCAL_MAX'].forEach(function (k) {
+    var v = Number(pr.getProperty(k));
+    if (v > 0) pr.setProperty(k, String(Math.max(1, Math.round(v + d))));
+  });
 }
 
 /** 体組成の最新値から、目標の目安を出す（たんぱく質＝体重×1.8g、維持カロリー＝基礎代謝×1.4）。体組成が無ければ null */
@@ -208,11 +224,27 @@ function mealSetGoals(g) {
   g = g || {};
   var pr = PropertiesService.getScriptProperties();
   pr.deleteProperty('MEAL_GOAL_KCAL_NEXT'); // 手で目標を直した時は、予約中の変更を取り消す
-  [['kcal', 'MEAL_GOAL_KCAL', 6000], ['protein', 'MEAL_GOAL_P', 500], ['fat', 'MEAL_GOAL_F', 500]].forEach(function (d) {
-    var v = g[d[0]] === '' || g[d[0]] === null || g[d[0]] === undefined ? 0 : Number(g[d[0]]);
+  var defs = [
+    ['kcal', 'MEAL_GOAL_KCAL', 6000], ['protein', 'MEAL_GOAL_P', 500], ['fat', 'MEAL_GOAL_F', 500],
+    ['kcalMin', 'MEAL_GOAL_KCAL_MIN', 6000], ['kcalMax', 'MEAL_GOAL_KCAL_MAX', 6000],
+    ['proteinMin', 'MEAL_GOAL_P_MIN', 500], ['proteinMax', 'MEAL_GOAL_P_MAX', 500],
+    ['fatMin', 'MEAL_GOAL_F_MIN', 500], ['fatMax', 'MEAL_GOAL_F_MAX', 500]
+  ];
+  var cur = mealGoals_(), next = {};
+  defs.forEach(function (d) {
+    if (!Object.prototype.hasOwnProperty.call(g, d[0])) { next[d[0]] = cur[d[0]]; return; } // 送られなかった項目は今のまま（古いアプリ版との互換）
+    var raw = g[d[0]], v = raw === '' || raw === null || raw === undefined ? 0 : Number(raw);
     if (isNaN(v) || v < 0 || v > d[2]) throw new Error('目標は0〜' + d[2] + 'で入力してください（0＝設定なし）');
-    pr.setProperty(d[1], String(Math.round(v)));
+    next[d[0]] = Math.round(v);
   });
+  // 下限 ≤ 目安 ≤ 上限（設定されている項目だけ確認）
+  [['kcal', 'カロリー'], ['protein', 'たんぱく質'], ['fat', '脂質']].forEach(function (k) {
+    var lo = next[k[0] + 'Min'], t = next[k[0]], hi = next[k[0] + 'Max'];
+    if (lo && hi && lo > hi) throw new Error(k[1] + 'の下限が上限より大きくなっています');
+    if (lo && t && lo > t) throw new Error(k[1] + 'の下限が目安より大きくなっています');
+    if (hi && t && t > hi) throw new Error(k[1] + 'の目安が上限より大きくなっています');
+  });
+  defs.forEach(function (d) { pr.setProperty(d[1], String(next[d[0]])); });
   return mealGoals_();
 }
 

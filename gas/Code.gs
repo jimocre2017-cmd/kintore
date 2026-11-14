@@ -815,6 +815,7 @@ function doPost(e) {
       photoImages: photoImages,
       photoDelete: photoDelete,
       photoCompare: photoCompare,
+      photoAutoRun: typeof photoAutoRun === 'function' ? photoAutoRun : undefined,
       // 食事（Meal.gs）
       mealGet: mealGet,
       mealEstimate: mealEstimate,

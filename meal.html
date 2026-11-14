@@ -171,7 +171,15 @@ header .sp{margin-left:auto}
 .mini .chart{margin-top:2px}
 .fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 
-.bar{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:4px}
+.bar{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:4px;position:relative}
+.bar .mk{position:absolute;top:0;bottom:0;width:2px;background:var(--ink-3);opacity:.7}
+.macro .rg{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:3px}
+.macro .rg .st-in{color:var(--good)}.macro .rg .st-under{color:var(--ink-2)}.macro .rg .st-over{color:var(--warn)}
+.wk .gl3{position:absolute;left:0;right:0;border-top:1px dotted var(--ink-3);pointer-events:none}
+.rgrid{display:grid;grid-template-columns:64px 1fr 1fr 1fr;gap:6px;align-items:center;margin-bottom:10px}
+.rgrid .h{font-size:11px;color:var(--ink-3);text-align:center}
+.rgrid label{font-size:12px;color:var(--ink-2)}
+.rgrid input{width:100%;min-width:0}
 .bar i{display:block;height:100%;border-radius:6px;background:var(--accent)}
 .macro{margin-bottom:12px}
 .macro .t{display:flex;justify-content:space-between;font-size:13px;color:var(--ink-2)}
@@ -238,24 +246,11 @@ header .sp{margin-left:auto}
     <div class="hint">量が分かれば書いてください。書かなければ標準的な1人前で見積もります。</div></div>
   <div class="rowbtns" style="margin:-4px 0 12px"><button class="btn primary small" id="fEst" style="flex:1">🤖 AIで栄養を見積もる</button></div>
   <div class="est" id="fEstBox" style="display:none"></div>
-  <div class="fgrid">
-    <div class="f"><label>カロリー（kcal）</label><input type="number" id="fKcal" inputmode="numeric" step="1" min="0" max="6000"></div>
-    <div class="f"><label>たんぱく質（g）</label><input type="number" id="fP" inputmode="decimal" step="0.1" min="0" max="500"></div>
-    <div class="f"><label>脂質（g）</label><input type="number" id="fF" inputmode="decimal" step="0.1" min="0" max="500"></div>
-    <div class="f"><label>炭水化物（g）</label><input type="number" id="fC" inputmode="decimal" step="0.1" min="0" max="1000"></div>
-  </div>
-  <div class="f" style="margin-bottom:8px"><label>この内容を品目として覚える（次から名前で入力できます）</label>
-    <div style="display:flex;gap:8px"><input type="text" id="fFoodName" maxlength="30" placeholder="例：オリジナルプロテインシェイク" style="flex:1"><button class="btn small" id="fFoodSave" type="button">覚える</button></div></div>
-  <div class="hint" style="margin:-4px 0 12px" id="fHint">見積もりは概算です。分かっている数値があれば直して保存してください。圏外でも、数値を直接入れて保存できます。</div>
-  <div class="mbtns"><button class="btn danger" id="fDel" style="display:none">削除</button><button class="btn primary" id="fSave">保存</button></div>
-</div></div>
-
-<div class="modal" id="goalModal"><div class="box">
-  <h2><span>1日の目標</span><button class="x" id="gClose" aria-label="閉じる">✕</button></h2>
-  <div class="fgrid">
-    <div class="f"><label>カロリー（kcal）</label><input type="number" id="gKcal" inputmode="numeric" step="10" min="0" max="6000"></div>
-    <div class="f"><label>たんぱく質（g）</label><input type="number" id="gP" inputmode="numeric" step="1" min="0" max="500"></div>
-    <div class="f"><label>脂質（g）</label><input type="number" id="gF" inputmode="numeric" step="1" min="0" max="500"></div>
+  <div class="rgrid">
+    <span></span><span class="h">下限（アンダー）</span><span class="h">目安</span><span class="h">上限（トップ）</span>
+    <label>カロリー<br>kcal</label><input type="number" id="gKcalMin" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcal" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcalMax" inputmode="numeric" step="10" min="0" max="6000">
+    <label>たんぱく質<br>g</label><input type="number" id="gPMin" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gP" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gPMax" inputmode="numeric" step="1" min="0" max="500">
+    <label>脂質<br>g</label><input type="number" id="gFMin" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gF" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gFMax" inputmode="numeric" step="1" min="0" max="500">
   </div>
   <div class="hint" id="gHint" style="margin-bottom:10px"></div>
   <div class="rowbtns" style="margin-bottom:10px"><button class="btn small" id="gFill">体組成から目安を入れる</button></div>
@@ -303,23 +298,30 @@ function renderMsg(){
   if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
   $('msg').innerHTML = h;
 }
-function macroRow(label, v, goal, unit){
-  var pc = ML.pct(v, goal), w = pc == null ? 0 : Math.min(100, pc);
-  var over = pc != null && pc > 110;
-  return '<div class="macro"><div class="t"><span>'+label+'</span><span><b class="num">'+v+'</b> '+unit+(goal ? ' / '+goal+unit+'（'+pc+'%）' : '')+'</span></div>'
-    + '<div class="bar"><i style="width:'+w+'%;'+(over?'background:var(--warn)':'')+'"></i></div></div>';
+function macroRow(label, v, goal, unit, lo, hi){
+  var st = ML.status(v, lo, hi), base = hi || goal || lo || 0;
+  var pc = ML.pct(v, goal), w = base ? Math.min(100, Math.round(v / base * 100)) : 0;
+  var over = hi ? v > hi : (pc != null && pc > 110);
+  var mk = lo && base ? '<span class="mk" style="left:'+Math.min(100, Math.round(lo / base * 100))+'%"></span>' : '';
+  var rg = '';
+  if (lo || hi) {
+    var msg = st === 'under' ? '下限まであと '+ML.r1(lo - v)+unit : st === 'over' ? '上限を '+ML.r1(v - hi)+unit+' 超えています' : '範囲内';
+    rg = '<div class="rg"><span>'+(lo ? '下限 '+lo+unit : '')+(lo && hi ? '　' : '')+(hi ? '上限 '+hi+unit : '')+'</span><span class="st-'+st+'">'+msg+'</span></div>';
+  }
+  return '<div class="macro"><div class="t"><span>'+label+'</span><span><b class="num">'+v+'</b> '+unit+(goal ? ' / 目安 '+goal+unit+'（'+pc+'%）' : '')+'</span></div>'
+    + '<div class="bar"><i style="width:'+w+'%;'+(over?'background:var(--warn)':'')+'"></i>'+mk+'</div>'+rg+'</div>';
 }
 function renderDay(){
   var d = S.data, t = ML.dayTotal(d.logs, S.date), g = d.goals || {};
   var h = '<div class="daynav"><button class="iconbtn" id="dPrev" aria-label="前の日">‹</button><b>'+(S.date === d.today ? '今日 ' : '')+mdw(S.date)+'</b><button class="iconbtn" id="dNext" aria-label="次の日"'+(S.date >= d.today ? ' disabled style="opacity:.3"' : '')+'>›</button></div>';
   if (!t.meals) h += '<div class="empty">この日の記録はまだありません。</div>';
   else {
-    h += macroRow('カロリー', t.kcal, g.kcal, 'kcal') + macroRow('たんぱく質', t.protein, g.protein, 'g') + macroRow('脂質', t.fat, g.fat, 'g')
+    h += macroRow('カロリー', t.kcal, g.kcal, 'kcal', g.kcalMin, g.kcalMax) + macroRow('たんぱく質', t.protein, g.protein, 'g', g.proteinMin, g.proteinMax) + macroRow('脂質', t.fat, g.fat, 'g', g.fatMin, g.fatMax)
       + '<div class="macro"><div class="t"><span>炭水化物</span><span><b class="num">'+t.carbs+'</b> g</span></div></div>';
     var sp = ML.energySplit(t);
     if (sp) h += '<div class="t" style="font-size:12px;color:var(--ink-3)">エネルギー比　たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%</div><div class="split"><i style="width:'+sp.protein+'%;background:#1a9e5c"></i><i style="width:'+sp.fat+'%;background:#d98a1f"></i><i style="width:'+sp.carbs+'%;background:#2a78d6"></i></div>';
   }
-  if (!g.kcal && !g.protein) h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">下の「1日の目標を設定」で目標を入れると、達成率が表示されます。</div>';
+  if (!g.kcal && !g.protein && !g.kcalMin && !g.kcalMax && !g.proteinMin && !g.proteinMax) h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">下の「1日の目標を設定」で目標を入れると、達成率と、下限・上限の範囲が表示されます。</div>';
   $('dayCard').innerHTML = h;
   $('dPrev').onclick = function(){ S.date = ML.fromDays(ML.toDays(S.date)-1); renderDay(); renderAdd(); renderList(); };
   $('dNext').onclick = function(){ if (S.date < d.today) { S.date = ML.fromDays(ML.toDays(S.date)+1); renderDay(); renderAdd(); renderList(); } };
@@ -342,16 +344,17 @@ function renderWeek(){
   var d = S.data, g = d.goals || {}, days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
   var h = '<h3>直近7日</h3>';
   if (!av.days) { $('weekCard').innerHTML = h + '<div class="empty">食事を記録すると、7日間の推移と平均が表示されます。</div>'; return; }
-  var mx = Math.max(g.kcal || 0, Math.max.apply(null, days.map(function(x){ return x.kcal; })), 1);
-  h += '<div class="legend" style="margin:0 0 4px"><span>カロリー（点線＝目標）</span></div><div class="wk">';
+  var mx = Math.max(g.kcal || 0, g.kcalMax || 0, g.kcalMin || 0, Math.max.apply(null, days.map(function(x){ return x.kcal; })), 1);
+  h += '<div class="legend" style="margin:0 0 4px"><span>カロリー（破線＝目安、点線＝下限・上限）</span></div><div class="wk">';
   days.forEach(function(x){
     var hh = Math.round(x.kcal / mx * 100);  // px（棒の最大の高さ100px）
     h += '<button class="c'+(x.meals?'':' zero')+(x.date===S.date?' sel':'')+'" data-d="'+x.date+'" title="'+mdw(x.date)+' '+x.kcal+'kcal"><i style="height:'+hh+'px"></i><span>'+(+x.date.split('/')[2])+(x.meals?'':'<b style="color:var(--warn)">未</b>')+'</span></button>';
   });
   if (g.kcal) h += '<div class="gl2" style="bottom:'+(15+Math.round(g.kcal/mx*100))+'px"></div>';
+  [g.kcalMin, g.kcalMax].forEach(function(x){ if (x) h += '<div class="gl3" style="bottom:'+(15+Math.round(x/mx*100))+'px"></div>'; });
   h += '</div>';
   var sp = ML.energySplit(av);
-  h += '<div class="kv" style="margin-top:12px"><div><b class="num">'+av.kcal+'</b><span>平均kcal/日</span></div><div><b class="num">'+av.protein+'</b><span>平均たんぱく質g'+(g.protein?'（目標'+g.protein+'）':'')+'</span></div><div><b class="num">'+av.fat+'</b><span>平均脂質g</span></div></div>';
+  h += '<div class="kv" style="margin-top:12px"><div><b class="num">'+av.kcal+'</b><span>平均kcal/日</span></div><div><b class="num">'+av.protein+'</b><span>平均たんぱく質g'+(g.protein?'（目安'+g.protein+(g.proteinMin||g.proteinMax?'、'+(g.proteinMin||'')+'〜'+(g.proteinMax||''):'')+'）':'')+'</span></div><div><b class="num">'+av.fat+'</b><span>平均脂質g</span></div></div>';
   h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">記録した日（'+av.days+'日）だけの平均です。'+(sp?'エネルギー比：たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%。':'')+'見積もりは概算なので、細かい差より傾向を見てください。</div>';
   h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:4px">棒をタップすると、その日の記録を開いて後から追加できます。「未」は記録のない日です。</div>';
   $('weekCard').innerHTML = h;
@@ -490,8 +493,9 @@ $('foList').addEventListener('click', function(e){
 $('goalBtn').onclick = function(){
   var g = S.data.goals || {}, sg = S.data.suggest;
   $('gKcal').value = g.kcal || ''; $('gP').value = g.protein || ''; $('gF').value = g.fat || '';
-  $('gHint').innerHTML = sg ? '体組成の最新値からの目安：たんぱく質 約'+sg.protein+'g（体重×1.8）'+(sg.maintenanceKcal?'／維持カロリー 約'+sg.maintenanceKcal+'kcal（基礎代謝×1.4）、減量するなら約'+sg.cutKcal+'kcal（-500kcal）':'')+'。0または空欄＝目標なし。'
-    : '体組成を記録すると、目安が表示されます。0または空欄＝目標なし。';
+  $('gKcalMin').value = g.kcalMin || ''; $('gKcalMax').value = g.kcalMax || ''; $('gPMin').value = g.proteinMin || ''; $('gPMax').value = g.proteinMax || ''; $('gFMin').value = g.fatMin || ''; $('gFMax').value = g.fatMax || '';
+  $('gHint').innerHTML = sg ? '体組成の最新値からの目安：たんぱく質 約'+sg.protein+'g（体重×1.8）'+(sg.maintenanceKcal?'／維持カロリー 約'+sg.maintenanceKcal+'kcal（基礎代謝×1.4）、減量するなら約'+sg.cutKcal+'kcal（-500kcal）':'')+'。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。'
+    : '体組成を記録すると、目安が表示されます。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。';
   $('gFill').style.display = sg ? '' : 'none';
   $('goalModal').classList.add('open');
 };
@@ -503,8 +507,10 @@ $('gFill').onclick = function(){
 };
 $('gClose').onclick = $('gCancel').onclick = function(){ $('goalModal').classList.remove('open'); };
 $('gSave').onclick = function(){
-  var g = { kcal: num('gKcal'), protein: num('gP'), fat: num('gF') };
-  if ([g.kcal,g.protein,g.fat].some(function(x){ return isNaN(x) || x < 0; })) { toast('0以上の数字で入力してください', true); return; }
+  var g = { kcal: num('gKcal'), protein: num('gP'), fat: num('gF'), kcalMin: num('gKcalMin'), kcalMax: num('gKcalMax'), proteinMin: num('gPMin'), proteinMax: num('gPMax'), fatMin: num('gFMin'), fatMax: num('gFMax') };
+  if (Object.keys(g).some(function(k){ return isNaN(g[k]) || g[k] < 0; })) { toast('0以上の数字で入力してください', true); return; }
+  var bad = [['カロリー','kcal'],['たんぱく質','protein'],['脂質','fat']].filter(function(k){ var lo = g[k[1]+'Min'], t = g[k[1]], hi = g[k[1]+'Max']; return (lo && hi && lo > hi) || (lo && t && lo > t) || (hi && t && t > hi); });
+  if (bad.length) { toast(bad[0][0]+'は「下限 ≤ 目安 ≤ 上限」になるように入れてください', true); return; }
   KT.call('mealSetGoals', g).then(function(r){ S.data = r; $('goalModal').classList.remove('open'); render(); toast('目標を保存しました'); }, function(er){ toast(er.message, true); });
 };
 
@@ -553,7 +559,7 @@ function init(){
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
     var hint = /^不明な操作：mealGet$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「食事の導入手順」を実行してください）' : (/^不明な操作/.test(e.message) ? '（アプリの画面ファイルが古いままです。アプリを閉じて開き直してください）' : '');
     S.loadErr = '読み込みに失敗しました：' + e.message + hint;
-    if (!S.data) S.data = { today: KT.today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0 }, suggest: null };
+    if (!S.data) S.data = { today: KT.today(), logs: [], goals: { kcal: 0, protein: 0, fat: 0, kcalMin: 0, kcalMax: 0, proteinMin: 0, proteinMax: 0, fatMin: 0, fatMax: 0 }, suggest: null };
     render();
   });
 }
