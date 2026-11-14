@@ -70,3 +70,7 @@ b = ML.weekBalance([L('2026/11/09', 2000, 100, 60)], '2026/11/13', 50, 'fat');
 assert.deepStrictEqual([b.used, b.pace, b.diff, b.miss], [210, 200, 10, 3]);
 assert.strictEqual(ML.weekBalance(logs, '2026/11/14', 0, 'fat'), null);
 console.log('OK balance');
+// マリネ計算：肉200g・全体5%・液12% → 液は肉の5/7 = 143g、塩 約17g
+var mr = ML.marinade(200, 5, 12);
+assert.strictEqual(mr.liquidG, 143); assert.strictEqual(mr.saltG, 17.1); assert.strictEqual(mr.liquidMl, 124);
+assert.strictEqual(ML.marinade(200, 12, 12), null); assert.strictEqual(ML.marinade(0, 5, 12), null);

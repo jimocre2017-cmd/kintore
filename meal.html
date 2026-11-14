@@ -259,6 +259,15 @@ header .sp{margin-left:auto}
     <div class="f2" id="fMulBox" style="display:none;margin-top:6px"><div class="f" style="margin:0"><label>量（倍率）</label><input type="number" id="fMul" inputmode="decimal" step="0.5" min="0.1" max="10" value="1"></div><div class="hint" style="align-self:end" id="fMulName"></div></div></div>
   <div class="f"><label>食べたもの（ざっくりでOK）</label><textarea id="fText" rows="3" maxlength="600" placeholder="例：トースト2枚、目玉焼き（卵2個）、ブラックコーヒー／ コンビニの鮭おにぎり2個とサラダチキン／ ビール350ml×2、枝豆、唐揚げ5個"></textarea>
     <div class="hint">量が分かれば書いてください。書かなければ標準的な1人前で見積もります。</div></div>
+  <details class="f" id="mrBox" style="margin:-4px 0 12px"><summary style="cursor:pointer;font-size:13px;color:var(--ink-2)">🧂 マリネ計算（肉に合わせて液の量を出す）</summary>
+    <div class="fgrid" style="margin-top:8px">
+      <div class="f"><label>肉・魚の重さ（g）</label><input type="number" id="mrMeat" inputmode="decimal" step="10" min="0" max="20000"></div>
+      <div class="f"><label>全体の塩分（%）</label><input type="number" id="mrTarget" inputmode="decimal" step="0.5" min="0.5" max="20" value="5"></div>
+      <div class="f"><label>マリネ液の塩分（%）</label><input type="number" id="mrBrine" inputmode="decimal" step="0.5" min="1" max="30" value="12"></div>
+    </div>
+    <div class="est" id="mrOut" style="margin:8px 0 6px">肉の重さを入れると、使う液の量が出ます。</div>
+    <button class="btn small" id="mrAdd" type="button" style="display:none">結果を「食べたもの」に追記</button>
+    <div class="hint">ジモカフェのマリネ液は約12%（水・ワイン各2L、塩600g）。目標は肉と液を合わせた全体の濃度で、均一になったときの値です。</div></details>
   <div class="rowbtns" style="margin:-4px 0 12px"><button class="btn primary small" id="fEst" style="flex:1">🤖 AIで栄養を見積もる</button></div>
   <div class="est" id="fEstBox" style="display:none"></div>
   <div class="fgrid">
@@ -624,6 +633,19 @@ function fillFromFood(mul){
 }
 $('fFoods').addEventListener('click', function(e){ var b = e.target.closest('button'); if (b) applyFood(b.getAttribute('data-id')); });
 $('fMul').addEventListener('input', function(){ fillFromFood(Number($('fMul').value)); });
+var MR = null;
+function mrCalc(){
+  var r = ML.marinade($('mrMeat').value, $('mrTarget').value, $('mrBrine').value), out = $('mrOut');
+  MR = r; $('mrAdd').style.display = r ? '' : 'none';
+  if (!r) { out.textContent = Number($('mrBrine').value) <= Number($('mrTarget').value) ? '液の塩分より低い値を、全体の塩分に入れてください。' : '肉の重さを入れると、使う液の量が出ます。'; return; }
+  out.innerHTML = '<div class="li"><span>マリネ液</span><b>'+r.liquidG+'g（約'+r.liquidMl+'ml）</b></div><div class="li"><span>入る塩の量</span><b>約'+r.saltG+'g</b></div><div class="li"><span>合計の重さ</span><b>'+r.totalG+'g</b></div>';
+}
+['mrMeat','mrTarget','mrBrine'].forEach(function(id){ $(id).addEventListener('input', mrCalc); });
+$('mrAdd').onclick = function(){
+  if (!MR) return;
+  var line = 'マリネ：肉'+$('mrMeat').value+'g＋マリネ液'+MR.liquidG+'g（約'+MR.liquidMl+'ml）・塩分約'+MR.saltG+'g（全体'+$('mrTarget').value+'%）';
+  var t = $('fText'); t.value = (t.value.trim() ? t.value.trim()+'\n' : '') + line; toast('追記しました');
+};
 $('fFoodSave').onclick = function(){
   var f = S.form; if (!f) return;
   var name = $('fFoodName').value.trim();

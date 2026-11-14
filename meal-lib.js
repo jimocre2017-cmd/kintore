@@ -152,6 +152,13 @@ var MealLib = (function () {
   var TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
   function typeOrder(t) { var i = TYPES.indexOf(t); return i < 0 ? 99 : i; }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  // 肉＋マリネ液の全体が目標の塩分%になる液の量。塩分は重量%、液の比重は約1.15で ml に換算
+  function marinade(meatG, targetPct, brinePct, density) {
+    meatG = Number(meatG); targetPct = Number(targetPct); brinePct = Number(brinePct); density = Number(density) || 1.15;
+    if (!(meatG > 0) || !(targetPct > 0) || !(brinePct > targetPct)) return null;
+    var liquid = meatG * targetPct / (brinePct - targetPct);
+    return { liquidG: Math.round(liquid), liquidMl: Math.round(liquid / density), saltG: r1(liquid * brinePct / 100), totalG: Math.round(meatG + liquid) };
+  }
+  return { r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
