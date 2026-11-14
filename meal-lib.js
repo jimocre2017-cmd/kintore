@@ -51,10 +51,32 @@ var MealLib = (function () {
     return 'in';
   }
 
+  // その週（月曜始まり）の月曜の日数
+  function weekStart(date) { var n = toDays(date); return n - ((n + 3) % 7); }
+
+  /* 「今日の目標」＝週の合計が目安×7に着くように、残りの日で割り戻した値。
+     月曜から前日までの実績（記録の無い日は目安どおり食べた扱いにして、ずれを作らない）を差し引いて、今日以降の日数で割る。
+     下限・上限があれば、その範囲に収める。key＝kcal / protein / fat、step＝丸める刻み（kcal=10、g=1）。目安が未設定なら null */
+  function weekPlan(logs, date, goal, lo, hi, key, step) {
+    if (!(goal > 0)) return null;
+    step = step || 1; lo = lo > 0 ? lo : 0; hi = hi > 0 ? hi : 0;
+    var start = weekStart(date), today = toDays(date), used = 0, sum = 0, rec = 0;
+    for (var d = start; d < today; d++) {
+      var t = dayTotal(logs, fromDays(d));
+      if (t.meals > 0) { used += t[key]; sum += t[key]; rec++; } else used += goal;
+    }
+    var left = 7 - (today - start), raw = (goal * 7 - used) / left, target = raw, clamp = null;
+    if (hi && target > hi) { target = hi; clamp = 'hi'; }
+    if (lo && target < lo) { target = lo; clamp = 'lo'; }
+    if (target < 0) target = 0;
+    target = Math.round(target / step) * step;
+    return { target: target, raw: Math.round(raw * 10) / 10, goal: goal, clamp: clamp, days: rec, avg: rec ? Math.round(sum / rec * 10) / 10 : null, left: left, diff: target - goal };
+  }
+
   // 食事の区分の並び順
   var TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
   function typeOrder(t) { var i = TYPES.indexOf(t); return i < 0 ? 99 : i; }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, TYPES: TYPES, typeOrder: typeOrder };
+  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;

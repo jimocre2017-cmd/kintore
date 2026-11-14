@@ -173,6 +173,9 @@ header .sp{margin-left:auto}
 
 .bar{height:10px;border-radius:6px;background:var(--surface-2);overflow:hidden;margin-top:4px;position:relative}
 .bar .mk{position:absolute;top:0;bottom:0;width:2px;background:var(--ink-3);opacity:.7}
+.bar .mk.plan{width:3px;background:var(--accent-2,#2a78d6);opacity:1;box-shadow:0 0 0 1px var(--surface)}
+.macro .pl{display:flex;justify-content:space-between;gap:8px;font-size:11px;color:var(--ink-2);margin-top:3px}
+.macro .pl b{color:var(--ink)}
 .macro .rg{display:flex;justify-content:space-between;font-size:11px;color:var(--ink-3);margin-top:3px}
 .macro .rg .st-in{color:var(--good)}.macro .rg .st-under{color:var(--ink-2)}.macro .rg .st-over{color:var(--warn)}
 .wk .gl3{position:absolute;left:0;right:0;border-top:1px dotted var(--ink-3);pointer-events:none}
@@ -327,25 +330,37 @@ function renderMsg(){
   if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
   $('msg').innerHTML = h;
 }
-function macroRow(label, v, goal, unit, lo, hi){
-  var st = ML.status(v, lo, hi), base = hi || goal || lo || 0;
+function macroRow(label, v, goal, unit, lo, hi, plan){
+  var st = ML.status(v, lo, hi), base = Math.max(hi || goal || lo || 0, plan ? plan.target : 0);
   var pc = ML.pct(v, goal), w = base ? Math.min(100, Math.round(v / base * 100)) : 0;
   var over = hi ? v > hi : (pc != null && pc > 110);
   var mk = lo && base ? '<span class="mk" style="left:'+Math.min(100, Math.round(lo / base * 100))+'%"></span>' : '';
+  var pm = plan ? '<span class="mk plan" style="left:'+Math.min(100, Math.round(plan.target / base * 100))+'%"></span>' : '';
+  var pl = '';
+  if (plan) {
+    var why = plan.days ? '今週ここまで平均 '+plan.avg+unit+'/日' : '今週はまだ記録なし';
+    pl = '<div class="pl"><span>▮ 今日の目標 <b class="num">'+plan.target+unit+'</b>'+(plan.diff ? '（目安'+(plan.diff > 0 ? '+' : '')+plan.diff+'）' : '')+'</span><span>'+why+(plan.clamp ? '・'+(plan.clamp === 'hi' ? '上限' : '下限')+'で止めています' : '')+'</span></div>';
+  }
   var rg = '';
   if (lo || hi) {
     var msg = st === 'under' ? '下限まであと '+ML.r1(lo - v)+unit : st === 'over' ? '上限を '+ML.r1(v - hi)+unit+' 超えています' : '範囲内';
     rg = '<div class="rg"><span>'+(lo ? '下限 '+lo+unit : '')+(lo && hi ? '　' : '')+(hi ? '上限 '+hi+unit : '')+'</span><span class="st-'+st+'">'+msg+'</span></div>';
   }
   return '<div class="macro"><div class="t"><span>'+label+'</span><span><b class="num">'+v+'</b> '+unit+(goal ? ' / 目安 '+goal+unit+'（'+pc+'%）' : '')+'</span></div>'
-    + '<div class="bar"><i style="width:'+w+'%;'+(over?'background:var(--warn)':'')+'"></i>'+mk+'</div>'+rg+'</div>';
+    + '<div class="bar"><i style="width:'+w+'%;'+(over?'background:var(--warn)':'')+'"></i>'+mk+pm+'</div>'+pl+rg+'</div>';
 }
 function renderDay(){
   var d = S.data, t = ML.dayTotal(d.logs, S.date), g = d.goals || {};
   var h = '<div class="daynav"><button class="iconbtn" id="dPrev" aria-label="前の日">‹</button><b>'+(S.date === d.today ? '今日 ' : '')+mdw(S.date)+'</b><button class="iconbtn" id="dNext" aria-label="次の日"'+(S.date >= d.today ? ' disabled style="opacity:.3"' : '')+'>›</button></div>';
-  if (!t.meals) h += '<div class="empty">この日の記録はまだありません。</div>';
-  else {
-    h += macroRow('カロリー', t.kcal, g.kcal, 'kcal', g.kcalMin, g.kcalMax) + macroRow('たんぱく質', t.protein, g.protein, 'g', g.proteinMin, g.proteinMax) + macroRow('脂質', t.fat, g.fat, 'g', g.fatMin, g.fatMax)
+  if (!t.meals) {
+    h += '<div class="empty">この日の記録はまだありません。</div>';
+    if (g.kcal || g.protein || g.fat) {
+      var w0 = function(goal, lo, hi, key, step){ return ML.weekPlan(d.logs, S.date, goal, lo, hi, key, step); };
+      h += macroRow('カロリー', 0, g.kcal, 'kcal', g.kcalMin, g.kcalMax, w0(g.kcal, g.kcalMin, g.kcalMax, 'kcal', 10)) + macroRow('たんぱく質', 0, g.protein, 'g', g.proteinMin, g.proteinMax, w0(g.protein, g.proteinMin, g.proteinMax, 'protein', 1)) + macroRow('脂質', 0, g.fat, 'g', g.fatMin, g.fatMax, w0(g.fat, g.fatMin, g.fatMax, 'fat', 1));
+    }
+  } else {
+    var wp = function(goal, lo, hi, key, step){ return ML.weekPlan(d.logs, S.date, goal, lo, hi, key, step); };
+    h += macroRow('カロリー', t.kcal, g.kcal, 'kcal', g.kcalMin, g.kcalMax, wp(g.kcal, g.kcalMin, g.kcalMax, 'kcal', 10)) + macroRow('たんぱく質', t.protein, g.protein, 'g', g.proteinMin, g.proteinMax, wp(g.protein, g.proteinMin, g.proteinMax, 'protein', 1)) + macroRow('脂質', t.fat, g.fat, 'g', g.fatMin, g.fatMax, wp(g.fat, g.fatMin, g.fatMax, 'fat', 1))
       + '<div class="macro"><div class="t"><span>炭水化物</span><span><b class="num">'+t.carbs+'</b> g</span></div></div>';
     var sp = ML.energySplit(t);
     if (sp) h += '<div class="t" style="font-size:12px;color:var(--ink-3)">エネルギー比　たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%</div><div class="split"><i style="width:'+sp.protein+'%;background:#1a9e5c"></i><i style="width:'+sp.fat+'%;background:#d98a1f"></i><i style="width:'+sp.carbs+'%;background:#2a78d6"></i></div>';
