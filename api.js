@@ -244,7 +244,7 @@ var KT = (function () {
       status.online = true; status.error = null;
       var view = localView(init);
       updateCbs.forEach(function (f) { try { f(view); } catch (e) {} });
-      setTimeout(prefetchAnalytics, 1500);
+      setTimeout(prefetchAnalytics, 8000); // 操作の邪魔をしないよう、同期の少し後に回す
       return view;
     }).then(function (v) {
       syncing = null; status.syncing = false; emitStatus();
@@ -267,7 +267,8 @@ var KT = (function () {
 
   window.addEventListener('online', function () { status.online = true; emitStatus(); schedule(500); });
   window.addEventListener('offline', function () { status.online = false; emitStatus(); });
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && cfg()) schedule(300); });
+  // 画面に戻るたびに全データを取り直さない（送信待ちがあるか、最後の同期から60秒以上たったときだけ）
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && cfg() && (queue().length || Date.now() - LS.get('kt_synced', 0) > 60000)) schedule(300); });
   setInterval(function () { if (queue().length && cfg()) sync().catch(function () {}); }, 45000);
 
   /* ---------- 分析のキャッシュ ---------- */

@@ -2,7 +2,7 @@
  * 画面ファイルを端末に保存し、オフラインでも開けるようにする。
  * 通信（Google Apps Script への送信）は扱わない（api.js 側で送信待ちとして保存）。
  */
-var VERSION = 'kt-v36';
+var VERSION = 'kt-v38';
 var FILES = ['./', './index.html', './analytics.html', './cardio.html', './cardio-lib.js', './body.html', './body-lib.js', './photo.html', './photo-lib.js', './meal.html', './meal-lib.js', './plan.html', './plan-lib.js', './plan-page.js', './yk-lib.js', './counsel-lib.js', './api.js', './coach.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
@@ -15,8 +15,8 @@ self.addEventListener('activate', function (e) {
   }).then(function () { return self.clients.claim(); }));
 });
 
-// 同じサイトのファイル：オンラインなら最新版を取りにいく（3秒待っても来なければ保存版）。オフラインは保存版。
-// ※以前は「保存版を先に返す」方式で、更新後も古い画面が出ることがあったため変更
+// 同じサイトのファイル：保存版を先に返して即表示し、裏で最新版を取りにいく（次回起動から反映）。
+// 保存版が無いときだけ通信を待つ。更新を確実に配るため、画面を直したら VERSION を上げること（install時に最新を取り直す）
 self.addEventListener('fetch', function (e) {
   var req = e.request;
   if (req.method !== 'GET') return;
@@ -28,9 +28,8 @@ self.addEventListener('fetch', function (e) {
         if (res && res.ok) cache.put(req, res.clone());
         return res;
       });
-      if (!hit) return net;
-      var timeout = new Promise(function (resolve) { setTimeout(function () { resolve(hit); }, 3000); });
-      return Promise.race([net.catch(function () { return hit; }), timeout]);
+      if (hit) { var bg = net.catch(function () {}); e.waitUntil(bg); return hit; }
+      return net;
     });
   }));
 });
