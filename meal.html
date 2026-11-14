@@ -410,7 +410,7 @@ function weekTable(d, g, days, av){
   for (var n = ws; n <= ML.toDays(d.today); n++) { var t = ML.dayTotal(d.logs, ML.fromDays(n)); tot.kcal += t.kcal; tot.protein += t.protein; tot.fat += t.fat; }
   h += '<tr class="sum"><th>今週の合計</th>'+cols.map(function(c){ return '<td class="num">'+ML.r1(tot[c[0]])+'</td>'; }).join('')+'</tr>';
   if (cols.some(function(c){ return g[c[0]]; })) h += '<tr class="sum"><th>週の目標</th>'+cols.map(function(c){ return '<td class="num">'+(g[c[0]] ? g[c[0]]*7 : '–')+'</td>'; }).join('')+'</tr>';
-  return h + '</tbody></table><div class="hint" style="font-size:11px;color:var(--ink-3);margin:4px 0 8px">赤みのある数字は上限超え、グレーは下限未満。行をタップするとその日を開きます。週は月曜始まりです。</div>';
+  return h + '</tbody></table><div class="hint" style="font-size:11px;color:var(--ink-3);margin:4px 0 8px">オレンジの数字は上限超え、グレーは下限未満。行をタップするとその日を開きます。週は月曜始まりです。</div>';
 }
 function renderWeek(){
   var d = S.data, g = d.goals || {}, days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
