@@ -246,6 +246,20 @@ header .sp{margin-left:auto}
     <div class="hint">量が分かれば書いてください。書かなければ標準的な1人前で見積もります。</div></div>
   <div class="rowbtns" style="margin:-4px 0 12px"><button class="btn primary small" id="fEst" style="flex:1">🤖 AIで栄養を見積もる</button></div>
   <div class="est" id="fEstBox" style="display:none"></div>
+  <div class="fgrid">
+    <div class="f"><label>カロリー（kcal）</label><input type="number" id="fKcal" inputmode="numeric" step="1" min="0" max="6000"></div>
+    <div class="f"><label>たんぱく質（g）</label><input type="number" id="fP" inputmode="decimal" step="0.1" min="0" max="500"></div>
+    <div class="f"><label>脂質（g）</label><input type="number" id="fF" inputmode="decimal" step="0.1" min="0" max="500"></div>
+    <div class="f"><label>炭水化物（g）</label><input type="number" id="fC" inputmode="decimal" step="0.1" min="0" max="1000"></div>
+  </div>
+  <div class="f" style="margin-bottom:8px"><label>この内容を品目として覚える（次から名前で入力できます）</label>
+    <div style="display:flex;gap:8px"><input type="text" id="fFoodName" maxlength="30" placeholder="例：オリジナルプロテインシェイク" style="flex:1"><button class="btn small" id="fFoodSave" type="button">覚える</button></div></div>
+  <div class="hint" style="margin:-4px 0 12px" id="fHint">見積もりは概算です。分かっている数値があれば直して保存してください。圏外でも、数値を直接入れて保存できます。</div>
+  <div class="mbtns"><button class="btn danger" id="fDel" style="display:none">削除</button><button class="btn primary" id="fSave">保存</button></div>
+</div></div>
+
+<div class="modal" id="goalModal"><div class="box">
+  <h2><span>1日の目標</span><button class="x" id="gClose" aria-label="閉じる">✕</button></h2>
   <div class="rgrid">
     <span></span><span class="h">下限（アンダー）</span><span class="h">目安</span><span class="h">上限（トップ）</span>
     <label>カロリー<br>kcal</label><input type="number" id="gKcalMin" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcal" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcalMax" inputmode="numeric" step="10" min="0" max="6000">
@@ -285,7 +299,21 @@ function fromInputDate(s){ return s.replace(/-/g,'/'); }
 function uid(){ return 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 var S = { data: null, date: null, form: null, loadErr: null };
 
-function render(){
+// 表示中にエラーが出ても「読み込み中…」のまま固まらないようにする。古い画面ファイルが残っている場合は、保存を消して1回だけ開き直す
+function render(){ try { renderAll(); } catch (e) { renderFail(e); } }
+function renderFail(e){
+  try { console.error(e); } catch (x) {}
+  try {
+    if (!sessionStorage.getItem('kt_heal_meal_render')) {
+      sessionStorage.setItem('kt_heal_meal_render', '1');
+      var go = function(){ location.reload(); };
+      if (window.caches && caches.keys) caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(go, go); else go();
+      return;
+    }
+  } catch (x) {}
+  $('dayCard').innerHTML = '<div class="banner">表示でエラーが出ました：'+esc(e && e.message)+'<br>アプリを閉じて開き直してください。直らないときはこの文面を教えてください。</div>';
+}
+function renderAll(){
   if (!S.data) return;
   var d = S.data, dt = d.today.split('/');
   $('dateLbl').textContent = (+dt[0])+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
