@@ -819,6 +819,8 @@ function doPost(e) {
       // 食事（Meal.gs）
       mealGet: mealGet,
       mealEstimate: mealEstimate,
+      mealAsk: mealAsk,
+      mealReview: mealReview,
       // YKトレーニング（Yk.gs）
       ykAdvise: typeof ykAdvise === 'function' ? ykAdvise : undefined,
       ykSetPhase: typeof ykSetPhase === 'function' ? ykSetPhase : undefined,
