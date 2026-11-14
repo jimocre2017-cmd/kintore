@@ -125,10 +125,33 @@ var MealLib = (function () {
     return { state: st, head: head, lines: lines };
   }
 
+  /* 1日の結果の判定：'over'（多い）／'under'（少ない）／'ok'（目標内）／null（目標なし）
+     上限があれば上限、無ければ目安の+10%を超えたら多い。下限があれば下限、無ければ目安の-10%を下回ったら少ない */
+  function judge(v, lo, hi, ref) {
+    lo = lo > 0 ? lo : 0; hi = hi > 0 ? hi : 0; ref = ref > 0 ? ref : 0;
+    if (!lo && !hi && !ref) return null;
+    if (hi ? v > hi : (ref && v > ref * 1.1)) return 'over';
+    if (lo ? v < lo : (ref && v < ref * 0.9)) return 'under';
+    return 'ok';
+  }
+
+  /* 今週（月曜〜昨日）の収支：実績の合計と、目標ペース（目安×経過日数）との差。記録の無い日は目安どおりの扱い。月曜は null */
+  function weekBalance(logs, today, goal, key) {
+    if (!(goal > 0)) return null;
+    var start = weekStart(today), t = toDays(today), el = t - start;
+    if (el <= 0) return null;
+    var used = 0, miss = 0;
+    for (var d = start; d < t; d++) {
+      var x = dayTotal(logs, fromDays(d));
+      if (x.meals > 0) used += x[key]; else { used += goal; miss++; }
+    }
+    return { used: r1(used), week: r1(goal * 7), pace: r1(goal * el), diff: r1(used - goal * el), elapsed: el, miss: miss };
+  }
+
   // 食事の区分の並び順
   var TYPES = ['朝食', '昼食', '夕食', '間食', '飲酒', 'その他'];
   function typeOrder(t) { var i = TYPES.indexOf(t); return i < 0 ? 99 : i; }
 
-  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, TYPES: TYPES, typeOrder: typeOrder };
+  return { r1: r1, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
