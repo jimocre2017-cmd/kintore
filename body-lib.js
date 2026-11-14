@@ -85,6 +85,7 @@ var BodyLib = (function () {
   function daily(entries, tag) {
     var byDate = {}, order = [];
     sortEntries(entries).forEach(function (e) {
+      if (e.exclude) return; // 「集計から除外」した測定（排便前など、数値がぶれた測定）は平均に入れない
       if (tag && (e.tags || []).indexOf(tag) < 0) return;
       if (!byDate[e.date]) { byDate[e.date] = []; order.push(e.date); }
       byDate[e.date].push(e);
@@ -111,7 +112,7 @@ var BodyLib = (function () {
   }
   // 同じ日の測定のうち、最初と最後の差（朝→夜の変化）。2回未満なら null
   function intraday(entries, date, field) {
-    var vals = entries.filter(function (e) { return e.date === date && e[field] != null; }).sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : ((a.time || '') > (b.time || '') ? 1 : 0); });
+    var vals = entries.filter(function (e) { return e.date === date && !e.exclude && e[field] != null; }).sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : ((a.time || '') > (b.time || '') ? 1 : 0); });
     if (vals.length < 2) return null;
     return { first: vals[0][field], last: vals[vals.length - 1][field], diff: r1(vals[vals.length - 1][field] - vals[0][field]) };
   }

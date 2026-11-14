@@ -176,6 +176,10 @@ header .sp{margin-left:auto}
 .chips button small{opacity:.7;margin-left:3px;font-weight:500}
 .tag.cond{background:var(--accent);color:var(--accent-ink);margin:0 4px 0 0}
 .avgrow td{font-weight:700;background:var(--surface-2)}
+.tag.excl{background:var(--ink-3);color:#fff;margin:0 4px 0 0}
+.tbl tr.row.excl td{opacity:.5}
+.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--ink-2);line-height:1.5}
+.chk input{width:20px;height:20px;margin-top:1px;flex:none}
 </style>
 </head>
 <body>
@@ -218,6 +222,7 @@ header .sp{margin-left:auto}
     <div class="f"><label>内臓脂肪レベル</label><input type="number" id="fVisceral" inputmode="decimal" step="0.5" min="1" max="59"></div>
   </div>
   <div class="f"><label>身長（cm）</label><input type="number" id="fHeight" inputmode="decimal" step="0.1" min="100" max="230"><div class="hint">前回の値が入ります。BMIを空欄にすると、体重と身長から計算します。</div></div>
+  <div class="f"><label class="chk"><input type="checkbox" id="fExclude"><span>この測定を集計から除外する<br><small style="color:var(--ink-3)">平均・グラフ・比較・AIの分析に使いません（記録は残ります）。測定後に排便があった、など数値が大きくぶれた時に使います。</small></span></label></div>
   <div class="f"><label>備考</label><textarea id="fMemo" rows="2" maxlength="300" placeholder="例：起床後・トイレ後"></textarea></div>
   <div class="mbtns"><button class="btn danger" id="fDel" style="display:none">削除</button><button class="btn primary" id="fSave" style="grid-column:span 1">保存</button></div>
 </div></div>
@@ -231,6 +236,7 @@ header .sp{margin-left:auto}
 <div class="toast" id="toast"></div>
 
 <script src="api.js"></script>
+<script src="coach.js"></script>
 <script src="body-lib.js"></script>
 <script>
 var BL = BodyLib;
@@ -424,7 +430,7 @@ function renderPlan(){
 function renderFilter(){
   var E = S.data.entries || [];
   if (!E.length) { $('filterCard').innerHTML = ''; return; }
-  var cnt = {}; E.forEach(function(e){ (e.tags||[]).forEach(function(t){ cnt[t] = (cnt[t]||0)+1; }); });
+  var cnt = {}; E.forEach(function(e){ if (e.exclude) return; (e.tags||[]).forEach(function(t){ cnt[t] = (cnt[t]||0)+1; }); });
   var h = '<h3>集計の条件</h3><div class="chips" id="fltChips"><button data-t=""'+(S.tag===''?' class="on"':'')+'>全測定の日平均</button>';
   BL.TAGS.forEach(function(t){ if (cnt[t]) h += '<button data-t="'+t+'"'+(S.tag===t?' class="on"':'')+'>'+t+'<small>'+cnt[t]+'</small></button>'; });
   h += '</div><div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">'+(S.tag
@@ -435,7 +441,7 @@ function renderFilter(){
 }
 
 /* ---- その日の測定（時刻・条件ごと） ---- */
-function tagsHtml(l){ return (l.tags||[]).map(function(t){ return '<span class="tag cond">'+esc(t)+'</span>'; }).join(''); }
+function tagsHtml(l){ return (l.exclude ? '<span class="tag excl">集計除外</span>' : '') + (l.tags||[]).map(function(t){ return '<span class="tag cond">'+esc(t)+'</span>'; }).join(''); }
 function renderDay(){
   var d = S.data, E = d.entries || [], day = S.day || d.today;
   var list = E.filter(function(e){ return e.date === day; }).sort(function(a,b){ return (a.time||'') < (b.time||'') ? -1 : ((a.time||'') > (b.time||'') ? 1 : 0); });
@@ -444,13 +450,14 @@ function renderDay(){
   else {
     h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th>時刻・条件</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>内臓</th></tr></thead><tbody>';
     list.forEach(function(e){
-      h += '<tr class="row" data-id="'+esc(e.id)+'"><td>'+(e.time?esc(e.time):'－')+(e.pending?'<span class="tag pend">未送信</span>':'')+'<div style="margin-top:3px">'+tagsHtml(e)+'</div></td><td class="num">'+v(e.weight,'',1)+'</td><td class="num">'+v(e.fat,'',1)+'</td><td class="num">'+v(e.muscle,'',1)+'</td><td class="num">'+v(e.bmi,'',1)+'</td><td class="num">'+v(e.visceral)+'</td></tr>';
+      h += '<tr class="row'+(e.exclude?' excl':'')+'" data-id="'+esc(e.id)+'"><td>'+(e.time?esc(e.time):'－')+(e.pending?'<span class="tag pend">未送信</span>':'')+'<div style="margin-top:3px">'+tagsHtml(e)+'</div></td><td class="num">'+v(e.weight,'',1)+'</td><td class="num">'+v(e.fat,'',1)+'</td><td class="num">'+v(e.muscle,'',1)+'</td><td class="num">'+v(e.bmi,'',1)+'</td><td class="num">'+v(e.visceral)+'</td></tr>';
     });
-    if (list.length > 1) {
-      var av = BL.daily(list)[0];
+    var avl = BL.daily(list), av = avl[0], nEx = list.filter(function(e){ return e.exclude; }).length;
+    if (av && av.count > 1) {
       h += '<tr class="avgrow"><td>平均</td><td class="num">'+v(av.weight,'',1)+'</td><td class="num">'+v(av.fat,'',1)+'</td><td class="num">'+v(av.muscle,'',1)+'</td><td class="num">'+v(av.bmi,'',1)+'</td><td class="num">'+v(av.visceral)+'</td></tr>';
     }
     h += '</tbody></table></div>';
+    if (nEx) h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">「集計除外」の測定は、平均・グラフ・比較・AI分析に使っていません（行をタップして外せます）。</div>';
     var iw = BL.intraday(list, day, 'weight'), ifat = BL.intraday(list, day, 'fat');
     if (iw || ifat) h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">この日の最初→最後：'+(iw?'体重 '+sgn(iw.diff)+'kg':'')+(iw&&ifat?'　':'')+(ifat?'体脂肪率 '+sgn(ifat.diff)+'%':'')+'（条件が違う測定の差は、水分・食事・運動の影響を含みます）</div>';
   }
@@ -470,7 +477,7 @@ function renderHist(){
   if (!L.length) { $('histCard').innerHTML = ''; return; }
   var h = '<h3>日ごとの一覧（'+(S.tag?esc(S.tag)+'の平均':'日平均')+'・タップでその日の測定を表示）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日付</th><th>回数</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>基代</th><th>内臓</th></tr></thead><tbody>';
   L.slice(0, 60).forEach(function(l){
-    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+(S.tag ? l.count+'/' : '')+(cnt[l.date]||l.count||1)+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
+    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+((S.tag || l.count !== (cnt[l.date]||l.count)) ? l.count+'/' : '')+(cnt[l.date]||l.count||1)+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
   });
   h += '</tbody></table></div>';
   $('histCard').innerHTML = h;
@@ -493,6 +500,7 @@ function openForm(id, date){
   var d = S.data, ex = id ? (d.entries||[]).filter(function(e){ return e.id === id; })[0] : null;
   var dt = ex ? ex.date : (date || d.today);
   S.form = { id: ex ? ex.id : '', edit: !!ex, tags: ex ? (ex.tags||[]).slice() : [] };
+  $('fExclude').checked = !!(ex && ex.exclude);
   $('fTitle').textContent = ex ? mdw(ex.date)+(ex.time?' '+ex.time:'')+' の測定を編集' : '測定を記録';
   $('fDate').value = toInputDate(dt);
   $('fDate').max = toInputDate(d.today);
@@ -514,7 +522,7 @@ $('fClose').onclick = closeForm;
 $('fSave').onclick = function(){
   var date = fromInputDate($('fDate').value);
   if (!date) { toast('日付を入力してください', true); return; }
-  var e = { id: S.form.id || undefined, date: date, time: $('fTime').value || '', tags: S.form.tags.slice(), weight: num('fWeight'), fat: num('fFat'), muscle: num('fMuscle'), bmi: num('fBmi'), bmr: num('fBmr'), visceral: num('fVisceral'), height: num('fHeight'), memo: $('fMemo').value.trim() };
+  var e = { id: S.form.id || undefined, date: date, time: $('fTime').value || '', tags: S.form.tags.slice(), weight: num('fWeight'), fat: num('fFat'), muscle: num('fMuscle'), bmi: num('fBmi'), bmr: num('fBmr'), visceral: num('fVisceral'), height: num('fHeight'), memo: $('fMemo').value.trim(), exclude: $('fExclude').checked };
   if (e.weight === '' && e.fat === '' && e.muscle === '' && e.bmr === '' && e.visceral === '') { toast('数値を1つ以上入力してください', true); return; }
   var chk = [['weight','体重',20,300],['fat','体脂肪率',1,70],['muscle','骨格筋率',5,70],['bmi','BMI',8,80],['bmr','基礎代謝',500,5000],['visceral','内臓脂肪レベル',1,59],['height','身長',100,230]];
   for (var i = 0; i < chk.length; i++) {

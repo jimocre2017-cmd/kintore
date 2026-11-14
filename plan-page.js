@@ -20,7 +20,8 @@ function comma(n){ return n == null || isNaN(n) ? '－' : Math.round(n).toString
 // 計画より脂肪が多い(+)＝遅れ(赤)、少ない(−)＝先行(緑)
 function gapCls(x, band){ if (x == null || Math.abs(x) < (band || 0.001)) return 'mut'; return x > 0 ? 'pos' : 'neg'; }
 var STATUS = {
-  on_track: ['順調', 'good'], behind: ['遅れ', 'bad'], ahead: ['先行（速め）', 'warn'], learning: ['計測中', ''], insufficient: ['記録不足', 'warn']
+  on_track: ['順調', 'good'], behind: ['遅れ', 'bad'], ahead: ['先行（速め）', 'warn'], learning: ['計測中', ''], insufficient: ['記録不足', 'warn'],
+  paused: ['休止中（維持カロリー）', ''], maintaining: ['維持：許容帯の中', 'good'], below_floor: ['最低ライン割れ', 'bad'], above_band: ['許容帯の上', 'warn'], floor_reached: ['最低ラインに到達', 'good']
 };
 
 var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', busy: false, loadErr: null };
@@ -28,7 +29,7 @@ var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', b
 function view(){
   if (!S.plan) return null;
   var p = S.plan.plan || {};
-  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity };
+  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat };
   return PL.view({
     today: (S.body && S.body.today) || KT.today(), daily: S.body ? S.body.logs : [], meals: S.meal ? S.meal.logs : [],
     plan: cfg, targets: S.plan.targets || [], mealGoalKcal: S.meal && S.meal.goals ? S.meal.goals.kcal : 0
@@ -40,7 +41,7 @@ function render(){
   S.V = view();
   var today = (S.body && S.body.today) || KT.today();
   $('dateLbl').textContent = today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(today)+'）';
-  renderMsg(); renderHero(); renderAdjust(); renderChart(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
+  renderMsg(); renderHero(); renderAdjust(); renderChart(); renderMilestones(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
 }
 
 function renderMsg(){
@@ -64,7 +65,8 @@ function renderHero(){
   var b = V.built, n = V.now, ad = V.adjust, st = STATUS[ad.status] || ['', ''];
   var h = '<h3>目標に対する現在地（直近7日の平均）</h3>';
   if (!n) { el.innerHTML = h + '<div class="empty">直近7日に体組成の測定がありません。測れる時に測ると、ここに現在地が出ます。</div>'; return; }
-  var gap = n.gapKg, band = 0.3, pre = PL.toDays(V.today) < PL.toDays(b.startDate);
+  if (V.plan && V.plan.phase === 'maintain') { el.innerHTML = h + maintainHero(V, n, ad, st); return; }
+  var gap = n.gapKg, band = PL.BAND_KG, pre = PL.toDays(V.today) < PL.toDays(b.startDate);
   var verdict = pre ? '開始前' : (Math.abs(gap) < band ? 'ほぼ計画どおり' : (gap > 0 ? '計画より遅れ' : '計画より先行'));
   h += '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+(pre ? '' : (Math.abs(gap) < band ? 'good' : (gap > 0 ? 'bad' : 'good')))+'">'+verdict+'</span><span class="chip '+st[1]+'">'+st[0]+'</span></div>';
   if (pre) h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">計画は '+mdw(b.startDate)+' から始まります。それまでの数値は基準線の暫定値で、開始後7日間に測った日の平均で確定します。</div>';
@@ -73,6 +75,14 @@ function renderHero(){
   h += '<div class="kv"><div><b class="num">'+f1(n.remainingKg)+'kg</b><span>目標 '+b.goalFat+'% まで落とす脂肪</span></div><div><b class="num">'+dl[0]+'/'+(+dl[1])+'/'+(+dl[2])+'</b><span>予定の到達日</span></div><div><b class="num">'+f2(b.weeklyLossKg)+'kg</b><span>週あたりの計画</span></div></div>';
   h += '<div class="note">体脂肪率は水分や食事で1日に±1%ほど動くため、判断は日ではなく週の平均で行います。測定数は直近7日で '+n.days+' 日分。</div>';
   el.innerHTML = h;
+}
+
+function maintainHero(V, n, ad, st){
+  var fl = ad && ad.floor, p = V.plan, up = p.floorFat ? p.floorFat + PL.MAINT_BAND : null;
+  var h = '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+st[1]+'">'+(st[0] || '維持期')+'</span></div>';
+  if (p.floorFat) h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">維持期：最低 <b class="num">'+f1(p.floorFat)+'%</b> 〜 許容帯の上限 <b class="num">'+f1(up)+'%</b>'+(fl ? ' ／ 最低ラインまで <b class="num '+(fl.marginPct < 0 ? 'pos' : '')+'">'+sg(fl.marginPct)+'%</b>' : '')+'</div>';
+  h += '<div class="note">維持期は減量せず、維持カロリーで過ごします。体脂肪率が最低ラインを割りそうなら少し多めに食べ、許容帯の上を超えたら少し控えます（いずれも週単位で±200kcalまで）。判断は日ではなく直近7日の平均です。</div>';
+  return h;
 }
 
 function renderAdjust(){
@@ -110,7 +120,7 @@ function renderAdjust(){
     h += '<div class="note">採用すると、'+mdw(from)+'からの目標として履歴に残り、食事画面の目標カロリーにも反映されます。数値は手で直しても構いません。</div>';
   }
   h += '<div class="rowbtns"><button class="btn small" id="aAdvise"'+(S.busy?' disabled':'')+'>'+(S.busy ? '処理中…' : (adv ? 'AIに出し直してもらう' : 'AIに来週の方針を出してもらう'))+'</button></div>';
-  if (ai && ai.createdAt) h += '<div class="note">'+esc(ai.createdAt)+' に作成'+(ai.model ? '（'+esc(ai.model)+'）' : '')+'。数値はアプリが計算し、AIは文章にしています。</div>';
+  if (ai && ai.createdAt) h += '<div class="note">'+esc(ai.createdAt)+' に作成'+(ai.model ? '（'+esc(ai.model)+'）' : '')+'。数値はアプリが計算し、AIは文章にしています。いまの総合診断（期限に間に合うか）は「総合コーチ」、見た目の変化は「体つき写真」で。</div>';
   el.innerHTML = h;
   $('aAdvise').onclick = advise;
   if ($('aApply')) $('aApply').onclick = function(){ apply(from, ad); };
@@ -143,13 +153,33 @@ function movingAvg(map, ds){
   for (var i = 0; i < 7; i++) { var x = map[PL.fromDays(d - i)]; if (x && x.fat != null) v.push(x.fat); }
   return v.length >= 2 ? v.reduce(function(a, b){ return a + b; }, 0) / v.length : null;
 }
+
+/* ---- 経過目標：開始日から期限までを月末で区切り、各時点の計画値を出す ---- */
+function monthEndsOf(b){
+  var out = [], st = PL.toDays(b.startDate), dl = PL.toDays(b.deadline);
+  var p = b.startDate.split('/'), y = +p[0], m = +p[1];
+  for (var i = 0; i < 60; i++) {
+    var ny = m === 12 ? y + 1 : y, nm = m === 12 ? 1 : m + 1;
+    var last = PL.toDays(ny+'/'+('0'+nm).slice(-2)+'/01') - 1;
+    if (last >= dl) break;
+    if (last > st) out.push(PL.fromDays(last));
+    y = ny; m = nm;
+  }
+  out.push(b.deadline);
+  return out;
+}
+function planAt(b, date){
+  var fm = PL.plannedFatMass(b, date);
+  return { date: date, fat: PL.plannedFatPct(b, date), fatMass: fm, weight: b.leanKg + fm, lost: Math.max(0, b.baseFatMass - fm) };
+}
+
 function renderChart(){
   var V = S.V, el = $('chartCard');
   if (!V || !V.built) { el.style.display = 'none'; return; }
   el.style.display = '';
   var b = V.built, today = V.today, map = PL.bodyDays(S.body ? S.body.logs : []);
   var h = '<h3>計画ラインと実績（体脂肪率）</h3><div class="tabs" id="rTabs">'+[['30','30日'],['90','90日'],['all','開始〜期限']].map(function(r){ return '<button data-r="'+r[0]+'"'+(r[0]===S.range?' class="on"':'')+'>'+r[1]+'</button>'; }).join('')+'</div>';
-  var st = PL.toDays(b.startDate), dl = PL.toDays(b.deadline), t = PL.toDays(today), d0, d1;
+  var maint = V.plan && V.plan.phase === 'maintain', st = PL.toDays(b.startDate), dl = maint ? PL.toDays(today) + 14 : PL.toDays(b.deadline), t = PL.toDays(today), d0, d1;
   if (S.range === 'all') { d0 = st; d1 = Math.max(dl, t); } else { var n = +S.range; d0 = Math.max(st, t - n + 1); d1 = Math.max(d0 + 6, Math.min(dl, t + 7)); }
   var pts = [], mas = [], lo = 1e9, hi = -1e9, d;
   for (d = d0; d <= Math.min(d1, t); d++) {
@@ -160,23 +190,76 @@ function renderChart(){
   var planPts = [], step = Math.max(1, Math.round((d1 - d0) / 40));
   for (d = d0; d <= d1; d += step) { planPts.push({ d: d, v: PL.plannedFatPct(b, PL.fromDays(d)) }); }
   planPts.push({ d: d1, v: PL.plannedFatPct(b, PL.fromDays(d1)) });
+  if (maint) planPts = [];
   planPts.forEach(function(p){ lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); });
-  lo = Math.min(lo, b.goalFat); hi = Math.max(hi, b.baseFat);
+  var fl = V.plan && V.plan.floorFat > 0 ? V.plan.floorFat : 0;
+  if (maint) { if (fl) { lo = Math.min(lo, fl); hi = Math.max(hi, fl + PL.MAINT_BAND); } if (!isFinite(lo) || lo > hi) { lo = (fl || b.goalFat) - 1; hi = (fl || b.goalFat) + 2; } }
+  else { lo = Math.min(lo, b.goalFat); hi = Math.max(hi, b.baseFat); }
   var padv = Math.max(0.5, (hi - lo) * 0.1); lo -= padv; hi += padv;
   var W = 640, H = 230, pl = 40, pr = 10, pt = 12, pb = 26, span = Math.max(1, d1 - d0);
   function X(dd){ return pl + (W - pl - pr) * (dd - d0) / span; }
   function Y(v){ return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); }
   var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="体脂肪率の計画と実績">';
   for (var i = 0; i <= 3; i++) { var gv = lo + (hi - lo) * i / 3, gy = Y(gv); s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(1)+'</text>'; }
-  s += '<path class="plan" d="'+planPts.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
+  // 休止期間の網掛け
+  (b.pauses || []).forEach(function(pz){
+    var a = Math.max(d0, PL.toDays(pz.from)), z = Math.min(d1, PL.toDays(pz.to)); if (z < a) return;
+    s += '<rect class="pause" x="'+X(a).toFixed(1)+'" y="'+pt+'" width="'+Math.max(2, X(z + 1) - X(a)).toFixed(1)+'" height="'+(H-pt-pb)+'"><title>休止 '+md(pz.from)+'〜'+md(pz.to)+(pz.reason ? '（'+pz.reason+'）' : '')+'</title></rect>';
+  });
+  // 許容バンド：計画ラインの上下 ±BAND_KG（脂肪量）を体脂肪率に直して帯にする
+  if (!maint && planPts.length > 1) {
+    var up = planPts.map(function(p){ var fm = PL.plannedFatMass(b, PL.fromDays(p.d)) + PL.BAND_KG; return { d: p.d, v: fm / (b.leanKg + fm) * 100 }; });
+    var dn = planPts.map(function(p){ var fm = Math.max(0, PL.plannedFatMass(b, PL.fromDays(p.d)) - PL.BAND_KG); return { d: p.d, v: fm / (b.leanKg + fm) * 100 }; }).reverse();
+    s += '<path class="band" d="'+up.concat(dn).map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+' Z"/>';
+  }
+  // 維持期：最低体脂肪率〜許容帯の上限
+  if (maint && fl) { var fy = Y(fl), uy = Y(fl + PL.MAINT_BAND); s += '<rect class="band" x="'+pl+'" y="'+uy.toFixed(1)+'" width="'+(W-pl-pr)+'" height="'+(fy-uy).toFixed(1)+'"/><line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+fy.toFixed(1)+'" y2="'+fy.toFixed(1)+'"/><text x="'+(pl+4)+'" y="'+(fy+11).toFixed(1)+'" class="goaltx">最低 '+f1(fl)+'%</text>'; }
+  // 目標の体脂肪率の横線
+  if (!maint && b.goalFat >= lo && b.goalFat <= hi) { var gy2 = Y(b.goalFat); s += '<line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy2+'" y2="'+gy2+'"/><text x="'+(pl+4)+'" y="'+(gy2-4)+'" class="goaltx">目標 '+f1(b.goalFat)+'%</text>'; }
+  // 月末の経過目標（計画ライン上の印と数値）
+  var msAll = (maint ? [] : monthEndsOf(b)).filter(function(ds){ var dd = PL.toDays(ds); return dd >= d0 && dd <= d1; });
+  msAll.forEach(function(ds, i){
+    var dd = PL.toDays(ds), v = PL.plannedFatPct(b, ds), mx = X(dd), my = Y(v), last = ds === b.deadline;
+    s += '<line class="mk" x1="'+mx.toFixed(1)+'" x2="'+mx.toFixed(1)+'" y1="'+pt+'" y2="'+(H-pb)+'"/>'
+      + '<circle class="mkdot" cx="'+mx.toFixed(1)+'" cy="'+my.toFixed(1)+'" r="3.5"><title>'+mdw(ds)+' 計画 '+f1(v)+'%</title></circle>'
+      + '<text class="mktx" x="'+Math.min(W-pr, mx).toFixed(1)+'" y="'+(my-7).toFixed(1)+'" text-anchor="'+(last || mx > W - 40 ? 'end' : 'middle')+'">'+f1(v)+'</text>'
+      + '<text x="'+mx.toFixed(1)+'" y="'+(H-12)+'" text-anchor="'+(last ? 'end' : 'middle')+'" class="mkdate">'+md(ds)+'</text>';
+  });
+  if (planPts.length) s += '<path class="plan" d="'+planPts.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
   pts.forEach(function(p){ s += '<circle class="pt" cx="'+X(p.d).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3"><title>'+mdw(PL.fromDays(p.d))+' '+f1(p.v)+'%（'+p.n+'回測定の平均）</title></circle>'; });
   if (mas.length > 1) s += '<path class="ma" d="'+mas.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
   if (t >= d0 && t <= d1) s += '<line class="now" x1="'+X(t)+'" x2="'+X(t)+'" y1="'+pt+'" y2="'+(H-pb)+'"/><text x="'+X(t)+'" y="'+(H-12)+'" text-anchor="'+(t - d0 > span * 0.85 ? 'end' : 'middle')+'">今日</text>';
   s += '<text x="'+pl+'" y="'+(H-2)+'">'+md(PL.fromDays(d0))+'</text><text x="'+(W-pr)+'" y="'+(H-2)+'" text-anchor="end">'+md(PL.fromDays(d1))+'</text></svg>';
-  h += s + '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span></div>';
+  h += s + '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span>'+(maint ? '<span><i style="border-color:var(--good);opacity:.5"></i>最低〜許容帯</span>' : '<span><i style="border-color:var(--good);opacity:.35;border-top-width:6px"></i>許容幅（±'+PL.BAND_KG+'kg）</span>')+((b.pauses||[]).length ? '<span>▒ 休止期間</span>' : '')+'<span>◯ 月末の計画値（%）</span></div>';
   if (!pts.length) h += '<div class="note">この期間の測定がまだありません。</div>';
   el.innerHTML = h;
   Array.prototype.forEach.call($('rTabs').querySelectorAll('button'), function(btn){ btn.onclick = function(){ S.range = btn.getAttribute('data-r'); renderChart(); }; });
+}
+
+
+function renderMilestones(){
+  var V = S.V, el = $('msCard');
+  if (!V || !V.built || (V.plan && V.plan.phase === 'maintain')) { el.style.display = 'none'; return; }
+  el.style.display = '';
+  var b = V.built, today = V.today, t = PL.toDays(today), n = V.now;
+  var months = {}; (V.months || []).forEach(function(r){ months[r.month] = r; });
+  var rows = [{ label: '開始（'+md(b.startDate)+'）', date: b.startDate, kind: 'start' }];
+  monthEndsOf(b).forEach(function(ds){ rows.push({ label: ds === b.deadline ? 'ゴール（'+md(ds)+'）' : mdw(ds)+'（月末）', date: ds, kind: ds === b.deadline ? 'goal' : 'month' }); });
+  var todayRow = { label: '今日（'+mdw(today)+'）', date: today, kind: 'today' };
+  var ins = 0; rows.forEach(function(r, i){ if (PL.toDays(r.date) <= t) ins = i + 1; });
+  if (t > PL.toDays(b.startDate) && t < PL.toDays(b.deadline)) rows.splice(ins, 0, todayRow);
+  var h = '<h3>ゴールまでの経過目標</h3><div class="tblwrap"><table class="tbl" style="min-width:430px"><tr><th>時点</th><th>体脂肪率</th><th>体重</th><th>脂肪量</th><th>ここまでに落とす脂肪</th><th>実績</th></tr>';
+  rows.forEach(function(r){
+    var a = planAt(b, r.date), act = '<span class="mut">－</span>', dd = PL.toDays(r.date);
+    if (r.kind === 'today' && n) act = f1(n.fat)+'%<small>直近7日平均</small>';
+    else if (r.kind === 'start') act = f1(b.baseFat)+'%<small>基準</small>';
+    else if (dd <= t) { var m = months[PL.monthOf(r.date)]; if (m && m.fat != null) act = f1(m.fat)+'%<small>その月の平均</small>'; }
+    h += '<tr'+(r.kind === 'today' ? ' class="cur"' : '')+(r.kind === 'goal' ? ' style="font-weight:700"' : '')+'><td>'+r.label+'</td>'
+      + '<td class="num">'+f1(a.fat)+'%</td><td class="num">'+f1(a.weight)+'kg</td><td class="num">'+f1(a.fatMass)+'kg</td>'
+      + '<td class="num">'+(a.lost > 0 ? '−'+f1(a.lost)+'kg' : '－')+'</td><td class="num">'+act+'</td></tr>';
+  });
+  h += '</table></div><div class="note">除脂肪量（'+f1(b.leanKg)+'kg）を維持して、脂肪だけを落とす計画です。'+(b.shape === 'ease' ? '前半は週'+f2(b.weeklyLossKg1)+'kg、終盤（最後の約'+b.phase2Days+'日）は週'+f2(b.weeklyLossKg2)+'kgへ緩めます。' : '一定のペース（週'+f2(b.weeklyLossKg)+'kg）です。')+(b.pauses && b.pauses.length ? '休止期間の間は減らさず、その分ほかの週で取り戻します。' : '')+'実績は体組成の記録から。月末の行は、その月の平均と比べてください（ずれは週の平均で判断）。</div>';
+  el.innerHTML = h;
 }
 
 /* ---- 日・週・月 ---- */
@@ -244,8 +327,13 @@ function renderSettings(){
       + '<div class="plan-row"><span>基準（開始後7日の平均）</span><b>'+f1(b.baseFat)+'%・'+f1(b.baseWeight)+'kg・脂肪'+f1(b.baseFatMass)+'kg</b></div>'
       + '<div class="plan-row"><span>目標体重（除脂肪量を維持）</span><b>'+f1(b.targetWeight)+'kg</b></div>'
       + '<div class="plan-row"><span>落とす脂肪</span><b>'+f1(b.toLoseKg)+'kg（約'+comma(b.toLoseKg * PL.KCAL_PER_KG)+'kcal）</b></div>'
-      + '<div class="plan-row"><span>週あたり／1日の赤字</span><b>'+f2(b.weeklyLossKg)+'kg（体重の'+f2(b.weeklyLossPct)+'%）／'+comma(b.deficitKcalPerDay)+'kcal</b></div>';
-    if (b.aggressive) h += '<div class="banner warn" style="margin-top:10px">このペースは体重の1%/週を超えています。筋肉が落ちやすいので、期限を延ばすことをおすすめします。</div>';
+      + (V.plan && V.plan.phase === 'maintain' ? '' : '<div class="plan-row"><span>週あたり／1日の赤字</span><b>'+f2(b.weeklyLossKg)+'kg（体重の'+f2(b.weeklyLossPct)+'%）／'+comma(b.deficitKcalPerDay)+'kcal</b></div>');
+    var pp = V.plan || {};
+    h += '<div class="plan-row"><span>いまの局面</span><b>'+(pp.phase === 'maintain' ? '維持期' : '減量期')+(pp.floorFat ? '（最低体脂肪率 '+f1(pp.floorFat)+'%）' : '')+'</b></div>';
+    if (pp.phase !== 'maintain') h += '<div class="plan-row"><span>減量ペースの形</span><b>'+(b.shape === 'ease' ? '終盤を緩やかに（前半 週'+f2(b.weeklyLossKg1)+'kg → 終盤 週'+f2(b.weeklyLossKg2)+'kg）' : '一定のペース')+'</b></div>';
+    var pz = b.pauses || [];
+    if (pp.phase !== 'maintain') h += '<div class="plan-row"><span>休止期間</span><b>'+(pz.length ? pz.map(function(x){ return md(x.from)+'〜'+md(x.to)+(x.reason ? '（'+esc(x.reason)+'）' : ''); }).join('、') : 'なし')+'</b></div><div class="hint" style="margin:2px 0 6px">休止期間の追加・取り消しは、コーチの「相談」で「年末年始は休みたい」のように頼むと、変更案が出ます（確認して反映）。</div>';
+    if (b.aggressive && pp.phase !== 'maintain') h += '<div class="banner warn" style="margin-top:10px">このペースは体重の1%/週を超えています。筋肉が落ちやすいので、期限を延ばすことをおすすめします。</div>';
   }
   h += '<div class="rowbtns"><button class="btn small" id="setBtn">'+(p.startDate ? '設定を変更' : '計画を設定する')+'</button></div>';
   h += '<div class="note">基準線は「開始日からの7日間に測った日」の平均で決まり、7日が過ぎると固定されます。体組成は1日に何回測っても日平均で扱い、測る時間は生活のリズムで構いません（同じ条件で測る日が多いほど、傾向が安定します）。</div>';
@@ -261,11 +349,14 @@ function openSettings(){
   $('sWeekly').value = p.weeklyLossKg || PL.DEFAULTS.weeklyLossKg;
   $('sDeadline').value = toInputDate(p.deadline || '');
   $('sAct').value = p.activity || PL.DEFAULTS.activity;
+  $('sShape').value = p.shape === 'linear' ? 'linear' : 'ease';
+  $('sPhase').value = p.phase === 'maintain' ? 'maintain' : 'cut';
+  $('sFloor').value = p.floorFat || '';
   $('setModal').classList.add('open');
 }
 $('sClose').onclick = $('sCancel').onclick = function(){ $('setModal').classList.remove('open'); };
 $('sSave').onclick = function(){
-  var req = { goalFat: $('sGoal').value, startDate: fromInputDate($('sStart').value), weeklyLossKg: $('sWeekly').value, deadline: fromInputDate($('sDeadline').value), activity: $('sAct').value };
+  var req = { goalFat: $('sGoal').value, startDate: fromInputDate($('sStart').value), weeklyLossKg: $('sWeekly').value, deadline: fromInputDate($('sDeadline').value), activity: $('sAct').value, shape: $('sShape').value, phase: $('sPhase').value, floorFat: $('sFloor').value };
   $('sSave').disabled = true;
   KT.call('planSet', req).then(function(d){
     S.plan = d; S.ai = null; $('sSave').disabled = false; $('setModal').classList.remove('open');

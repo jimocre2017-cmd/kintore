@@ -636,6 +636,7 @@ var KT = (function () {
     planSet: function (p) { return api('planSet', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
     planAdvise: function () { return api('planAdvise', [], 120000).then(function (r) { return r; }, onlineOnly); },
     planApply: function (p) { return api('planApply', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
+    planPauseApply: function (p) { return api('planPauseApply', [p], 30000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
 
     getInitData: function () {
       var cached = LS.get('kt_init', null);
@@ -717,6 +718,21 @@ var KT = (function () {
       }, onlineOnly);
     },
 
+    // カウンセリングシート（初回の聞き取り＋3か月ごとの見直し）。保存はオンラインの時だけ。状態は端末に控える
+    counselGet: function () { return api('counselGet', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, function () { return LS.get('kt_counsel', null); }); },
+    counselSave: function (p) { return api('counselSave', [p], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
+    counselSkip: function () { return api('counselSkip', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
+
+    // 種目の表示オン／オフ（種目マスタの「有効」列）。オンラインの時だけ
+    exerciseListAll: function () { return api('exerciseListAll', [], 30000).then(function (r) { return r; }, onlineOnly); },
+    setExercisesActive: function (ids, active) {
+      return api('setExercisesActive', [ids, active], 60000).then(function (r) {
+        var view = cur(); if (view) view.exercises = r.exercises;
+        schedule(500);
+        return r;
+      }, onlineOnly);
+    },
+
     updateExerciseTags: function (id, tags) {
       return api('updateExerciseTags', [id, tags]).then(function (r) {
         var view = cur(); view.exercises = r.exercises;
@@ -736,6 +752,15 @@ var KT = (function () {
     aiDeleteProgram: function (tag) {
       return api('aiDeleteProgram', [tag], 60000).then(function (r) { return sync().then(function () { return r; }, function () { return r; }); }, onlineOnly);
     },
+
+    // 総合コーチ（食事・運動・体組成・目標と期限をまとめて診断）。オンラインの時だけ。直近の結果は端末に控える
+    coachJudge: function () {
+      return api('coachJudge', [], 150000).then(function (r) { LS.set('kt_coach_last', { t: Date.now(), res: r }); return r; }, onlineOnly);
+    },
+    coachAsk: function (req) { return api('coachAsk', [req], 150000).then(function (r) { return r; }, onlineOnly); },
+    coachChart: function () { return api('coachChartGet', [], 30000).then(function (r) { LS.set('kt_coach_chart', r); return r; }, function (e) { var c = LS.get('kt_coach_chart', null); if (c) return c; return onlineOnly(e); }); },
+    coachChartSet: function (text) { return api('coachChartSet', [text], 30000).then(function (r) { LS.set('kt_coach_chart', r); return r; }, onlineOnly); },
+    coachLast: function () { return Promise.resolve(LS.get('kt_coach_last', null)); },
 
     // YKトレーニング：メニューはルールで端末が決める。AIの解説とフェーズ保存はオンラインの時だけ
     ykAdvise: function (req) {
