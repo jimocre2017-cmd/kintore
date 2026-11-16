@@ -10,6 +10,8 @@
 <link rel="apple-touch-icon" href="icon-192.png">
 <style>
 :root{
+  --nk:#4b5563; --np:#2a78d6; --nf:#8e5bd0; --nc:#16a3a3;
+  --zy:#f2c230; --zg:#2fa866; --zr:#e0483f;
   --bg:#f4f4f2; --surface:#ffffff; --surface-2:#f0efec; --line:#e2e1dc;
   --ink:#141413; --ink-2:#55544f; --ink-3:#8a8983;
   --accent:#2a78d6; --accent-ink:#ffffff; --accent-soft:#e3eefb;
@@ -18,6 +20,7 @@
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
+    --nk:#9aa3b2; --np:#5aa0f0; --nf:#b08be8; --nc:#3cc6c6; --zy:#d9ac1f; --zg:#3fb57a; --zr:#e66767;
     --bg:#121211; --surface:#1c1c1a; --surface-2:#262624; --line:#34332f;
     --ink:#f5f4ef; --ink-2:#c3c2b7; --ink-3:#8f8e86;
     --accent:#3987e5; --accent-ink:#ffffff; --accent-soft:#1d2d44;
@@ -178,6 +181,21 @@ header .sp{margin-left:auto}
 .gauge .fl{position:absolute;left:0;top:0;bottom:0;background:var(--accent);border-radius:0 7px 7px 0}
 .gauge .fl.over{background:var(--danger)}.gauge .fl.good{background:var(--good)}.gauge .fl.warn{background:var(--warn)}
 .gauge .tg{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px;background:var(--ink);box-shadow:0 0 0 1px var(--surface)}
+.gauge{height:22px;border-radius:8px}
+.gauge .z{opacity:1}
+.gauge .z.under{background:color-mix(in srgb,var(--zy) 45%,transparent)}
+.gauge .z.ok{background:color-mix(in srgb,var(--zg) 40%,transparent)}
+.gauge .z.over{background:color-mix(in srgb,var(--zr) 40%,transparent)}
+.gauge .fl,.gauge .fl.over{top:8px;bottom:8px;border-radius:0 3px 3px 0;background:var(--nc0,var(--ink))}
+.gauge .nd{position:absolute;top:0;bottom:0;width:3px;margin-left:-1.5px;background:var(--ink);box-shadow:0 0 0 1px var(--surface)}
+.gauge .tg{width:0;border-left:2px dashed var(--ink-3);background:none;box-shadow:none;margin-left:0}
+.macro .nm i.dot{display:inline-block;width:10px;height:10px;border-radius:3px;background:var(--nc0);margin-right:6px;vertical-align:0}
+.zst{font-size:12px;font-weight:700;margin:2px 0}
+.zst.under{color:#9a7400}.zst.ok{color:var(--good)}.zst.over{color:var(--danger)}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .zst.under{color:var(--zy)}}
+.zlegend,.splitleg{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:var(--ink-3);margin:2px 0 10px}
+.zlegend i,.splitleg i{display:inline-block;width:12px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
+.splitleg{font-size:12px;color:var(--ink-2);margin:4px 0 0}
 .macro .nm,.wb .nm{font-size:14px;font-weight:600;color:var(--ink)}
 .macro .t .big{font-size:22px;color:var(--ink)}.macro .sub,.wb .sub{font-size:12px;color:var(--ink-3)}
 .macro .gl,.wb .gl{display:flex;justify-content:space-between;gap:8px;font-size:12px;color:var(--ink-2)}.macro .gl b{color:var(--ink);font-weight:700}
@@ -361,8 +379,9 @@ function renderMsg(){
   $('msg').innerHTML = h;
 }
 var MACRO = [['kcal','カロリー','kcal',10,'limit'],['protein','たんぱく質','g',1,'reach'],['fat','脂質','g',1,'limit']];
+var NCOL = { kcal: 'var(--nk)', protein: 'var(--np)', fat: 'var(--nf)', carbs: 'var(--nc)' };
 function fmtN(x, unit){ return unit === 'kcal' ? Math.round(x).toLocaleString('ja-JP') : ML.r1(x); }
-function macroRow(label, v, goal, unit, lo, hi, plan, kind){
+function macroRow(label, v, goal, unit, lo, hi, plan, kind, key){
   var tgt = plan ? plan.target : (goal || 0), ref = tgt || goal || 0;
   var loE = lo > 0 ? lo : (ref ? ref * 0.9 : 0), hiE = hi > 0 ? hi : (ref ? ref * 1.1 : 0);
   var st = ML.judge(v, lo, hi, ref);
@@ -372,20 +391,22 @@ function macroRow(label, v, goal, unit, lo, hi, plan, kind){
   if (ref || lo || hi) {
     zones = '<i class="z under" style="left:0;width:'+pc(loE)+'%"></i><i class="z ok" style="left:'+pc(loE)+'%;width:'+(pc(hiE) - pc(loE)).toFixed(1)+'%"></i><i class="z over" style="left:'+pc(hiE)+'%;right:0"></i>';
   }
-  var fill = '<i class="fl'+(st === 'over' ? ' over' : '')+'" style="width:'+pc(v)+'%"></i>';
+  var fill = '<i class="fl" style="width:'+pc(v)+'%"></i><i class="nd" style="left:'+pc(v)+'%"></i>';
   var mk = tgt ? '<i class="tg" style="left:'+pc(tgt)+'%"></i>' : '';
   var msg = '';
   if (tgt) {
     if (kind === 'reach') msg = st === 'over' ? '上限を超えています' : v >= tgt ? '目標に届きました' : 'あと <b>'+fmtN(tgt - v, unit)+unit+'</b> 摂ると目標';
     else msg = v > hiE ? '上限を <b>'+fmtN(v - hiE, unit)+unit+'</b> 超えています' : v > tgt ? '目標を <b>'+fmtN(v - tgt, unit)+unit+'</b> 超過（上限まであと '+fmtN(hiE - v, unit)+unit+'）' : 'あと <b>'+fmtN(tgt - v, unit)+unit+'</b> 食べられます';
   }
+  var zm = '';
+  if (st) zm = st === 'under' ? '黄：まだ足りない（範囲内まであと '+fmtN(loE - v, unit)+unit+'）' : st === 'over' ? '赤：多すぎ（範囲の上限を '+fmtN(v - hiE, unit)+unit+' 超過）' : '緑：範囲内（上限まであと '+fmtN(hiE - v, unit)+unit+'）';
   var adj = plan && plan.diff ? '<div class="adj">目安 '+goal+unit+' から '+(plan.diff > 0 ? '+' : '')+plan.diff+unit+' 調整（今週の収支から）'+(plan.clamp ? '・'+(plan.clamp === 'hi' ? '上限' : '下限')+'で止めています' : '')+'</div>' : '';
-  return '<div class="macro"><div class="t"><span class="nm">'+label+'</span><span><b class="num big">'+fmtN(v, unit)+'</b> '+unit+(tgt ? '　<span class="sub">今日の目標 '+fmtN(tgt, unit)+unit+'</span>' : '')+'</span></div>'
+  return '<div class="macro" style="--nc0:'+(NCOL[key]||'var(--ink)')+'"><div class="t"><span class="nm"><i class="dot"></i>'+label+'</span><span><b class="num big">'+fmtN(v, unit)+'</b> '+unit+(tgt ? '　<span class="sub">今日の目標 '+fmtN(tgt, unit)+unit+'</span>' : '')+'</span></div>'
     + '<div class="gauge">'+zones+fill+mk+'</div>'
-    + '<div class="gl"><span>'+msg+'</span>'+(ref ? '<span class="sub">目標内 '+fmtN(loE, unit)+'〜'+fmtN(hiE, unit)+unit+'</span>' : '')+'</div>'+adj+'</div>';
+    + (zm ? '<div class="zst '+st+'">'+zm+'</div>' : '') + '<div class="gl"><span>'+msg+'</span>'+(ref ? '<span class="sub">目標内 '+fmtN(loE, unit)+'〜'+fmtN(hiE, unit)+unit+'</span>' : '')+'</div>'+adj+'</div>';
 }
 function macroRows(d, g, t, date){
-  return MACRO.map(function(c){ var k = c[0]; return macroRow(c[1], t[k], g[k], c[2], g[k+'Min'], g[k+'Max'], ML.weekPlan(d.logs, date, g[k], g[k+'Min'], g[k+'Max'], k, c[3]), c[4]); }).join('');
+  return MACRO.map(function(c){ var k = c[0]; return macroRow(c[1], t[k], g[k], c[2], g[k+'Min'], g[k+'Max'], ML.weekPlan(d.logs, date, g[k], g[k+'Min'], g[k+'Max'], k, c[3]), c[4], k); }).join('');
 }
 function renderDay(){
   var d = S.data, t = ML.dayTotal(d.logs, S.date), g = d.goals || {};
@@ -397,10 +418,11 @@ function renderDay(){
     }
   } else {
     h += macroRows(d, g, t, S.date)
-      + '<div class="macro"><div class="t"><span class="nm">炭水化物</span><span><b class="num big">'+t.carbs+'</b> g</span></div></div>';
+      + macroRow('炭水化物', t.carbs, 0, 'g', 0, 0, null, 'limit', 'carbs');
+    h += '<div class="zlegend"><span><i style="background:var(--zy);opacity:.7"></i>足りない</span><span><i style="background:var(--zg);opacity:.7"></i>範囲内</span><span><i style="background:var(--zr);opacity:.7"></i>多すぎ</span><span>黒い線＝いまの値／点線＝今日の目標</span></div>';
     h += adviceHtml(d, g, t);
     var sp = ML.energySplit(t);
-    if (sp) h += '<div class="t" style="font-size:12px;color:var(--ink-3)">エネルギー比　たんぱく質 '+sp.protein+'%・脂質 '+sp.fat+'%・炭水化物 '+sp.carbs+'%</div><div class="split"><i style="width:'+sp.protein+'%;background:#1a9e5c"></i><i style="width:'+sp.fat+'%;background:#d98a1f"></i><i style="width:'+sp.carbs+'%;background:#2a78d6"></i></div>';
+    if (sp) h += '<div class="t" style="font-size:12px;color:var(--ink-3)">エネルギー比（たんぱく質・脂質・炭水化物）</div><div class="split"><i style="width:'+sp.protein+'%;background:var(--np)"></i><i style="width:'+sp.fat+'%;background:var(--nf)"></i><i style="width:'+sp.carbs+'%;background:var(--nc)"></i></div><div class="splitleg"><span><i style="background:var(--np)"></i>たんぱく質 '+sp.protein+'%</span><span><i style="background:var(--nf)"></i>脂質 '+sp.fat+'%</span><span><i style="background:var(--nc)"></i>炭水化物 '+sp.carbs+'%</span></div>';
   }
   if (!g.kcal && !g.protein && !g.kcalMin && !g.kcalMax && !g.proteinMin && !g.proteinMax) h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">下の「1日の目標を設定」で目標を入れると、達成率と、下限・上限の範囲が表示されます。</div>';
   $('dayCard').innerHTML = h;

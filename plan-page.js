@@ -173,67 +173,171 @@ function planAt(b, date){
   return { date: date, fat: PL.plannedFatPct(b, date), fatMass: fm, weight: b.leanKg + fm, lost: Math.max(0, b.baseFatMass - fm) };
 }
 
+var CH = { zoom: null, cur: null, ptrs: {}, g: null, bound: false, ctx: null, raf: 0 };
+function chRedraw(){ if (CH.raf) return; CH.raf = requestAnimationFrame(function(){ CH.raf = 0; renderChart(); }); }
+function chFull(){
+  var V = S.V, b = V.built, t = PL.toDays(V.today), maint = V.plan && V.plan.phase === 'maintain';
+  return { a: PL.toDays(b.startDate), b: Math.max(maint ? t + 14 : PL.toDays(b.deadline), t) };
+}
+function chSet(a, bb){
+  var f = chFull(), span = Math.min(Math.max(bb - a, 5), f.b - f.a);
+  a = Math.min(Math.max(a, f.a), f.b - span);
+  CH.zoom = (span >= f.b - f.a - 0.01) ? null : { a: a, b: a + span };
+  if (!CH.zoom && S.range !== 'all') { S.range = 'all'; }
+}
+function chZoomBy(factor, center){
+  var c = CH.ctx; if (!c) return;
+  var span = c.d1 - c.d0, ns = span * factor;
+  if (center == null) center = (c.d0 + c.d1) / 2;
+  var a = center - (center - c.d0) * (ns / span);
+  chSet(a, a + ns);
+}
+function chDayAt(clientX){
+  var c = CH.ctx, svg = $('chartCard').querySelector('svg'); if (!c || !svg) return null;
+  var r = svg.getBoundingClientRect(), sx = (clientX - r.left) / r.width * c.W;
+  return { day: c.d0 + (sx - c.pl) / (c.W - c.pl - c.pr) * (c.d1 - c.d0), sx: sx };
+}
+function chBind(){
+  if (CH.bound) return; CH.bound = true;
+  var el = $('chartCard');
+  function inWrap(e){ return e.target.closest && e.target.closest('.chwrap'); }
+  el.addEventListener('pointerdown', function(e){
+    if (!inWrap(e)) return;
+    CH.ptrs[e.pointerId] = { x: e.clientX, y: e.clientY, t: e.pointerType };
+    try { el.setPointerCapture(e.pointerId); } catch (x) {}
+    var ids = Object.keys(CH.ptrs);
+    if (ids.length === 2 && CH.ctx) {
+      var p = CH.ptrs[ids[0]], q = CH.ptrs[ids[1]], m = chDayAt((p.x + q.x) / 2);
+      CH.g = { dist: Math.max(10, Math.hypot(p.x - q.x, p.y - q.y)), a: CH.ctx.d0, b: CH.ctx.d1, anchor: m ? m.day : (CH.ctx.d0 + CH.ctx.d1) / 2 };
+    } else if (ids.length === 1) {
+      CH.g = null; var d = chDayAt(e.clientX); if (d) { CH.cur = Math.round(d.day); chRedraw(); }
+    }
+  });
+  el.addEventListener('pointermove', function(e){
+    var p = CH.ptrs[e.pointerId], c = CH.ctx;
+    if (!p) { if (e.pointerType === 'mouse' && inWrap(e) && c) { var h = chDayAt(e.clientX); if (h) { CH.cur = Math.round(h.day); chRedraw(); } } return; }
+    var ids = Object.keys(CH.ptrs), prevX = p.x;
+    p.x = e.clientX; p.y = e.clientY;
+    if (!c) return;
+    if (ids.length >= 2 && CH.g) {
+      var a = CH.ptrs[ids[0]], b = CH.ptrs[ids[1]], dist = Math.max(10, Math.hypot(a.x - b.x, a.y - b.y)), mid = chDayAt((a.x + b.x) / 2); if (!mid) return;
+      var span0 = CH.g.b - CH.g.a, ns = span0 * CH.g.dist / dist, frac = (mid.sx - c.pl) / (c.W - c.pl - c.pr);
+      chSet(CH.g.anchor - frac * ns, CH.g.anchor - frac * ns + ns); CH.cur = null; chRedraw();
+    } else if (e.pointerType === 'mouse' && e.buttons && CH.zoom) {
+      var svg = el.querySelector('svg'), w = svg.getBoundingClientRect().width * (c.W - c.pl - c.pr) / c.W, dd = -(e.clientX - prevX) / w * (c.d1 - c.d0);
+      chSet(c.d0 + dd, c.d1 + dd); chRedraw();
+    } else { var d = chDayAt(e.clientX); if (d) { CH.cur = Math.round(d.day); chRedraw(); } }
+  });
+  function up(e){ delete CH.ptrs[e.pointerId]; if (Object.keys(CH.ptrs).length < 2) CH.g = null; }
+  el.addEventListener('pointerup', up); el.addEventListener('pointercancel', up);
+  el.addEventListener('pointerleave', function(e){ if (e.pointerType === 'mouse' && inWrap(e) && !e.buttons) { CH.cur = null; chRedraw(); } });
+  el.addEventListener('wheel', function(e){
+    if (!inWrap(e) || !CH.ctx) return; e.preventDefault();
+    var d = chDayAt(e.clientX); chZoomBy(e.deltaY > 0 ? 1.25 : 0.8, d ? d.day : null); chRedraw();
+  }, { passive: false });
+  el.addEventListener('dblclick', function(e){ if (inWrap(e)) { CH.zoom = null; chRedraw(); } });
+  el.addEventListener('click', function(e){
+    var z = e.target.closest && e.target.closest('[data-z]'); if (!z || !CH.ctx) return;
+    var k = z.getAttribute('data-z'), c = CH.ctx, span = c.d1 - c.d0;
+    if (k === 'in') chZoomBy(0.6); else if (k === 'out') chZoomBy(1.6); else if (k === 'reset') { CH.zoom = null; CH.cur = null; }
+    else if (k === 'l') chSet(c.d0 - span * 0.3, c.d1 - span * 0.3); else if (k === 'r') chSet(c.d0 + span * 0.3, c.d1 + span * 0.3);
+    chRedraw();
+  });
+}
+
 function renderChart(){
   var V = S.V, el = $('chartCard');
   if (!V || !V.built) { el.style.display = 'none'; return; }
   el.style.display = '';
+  chBind();
   var b = V.built, today = V.today, map = PL.bodyDays(S.body ? S.body.logs : []);
-  var h = '<h3>計画ラインと実績（体脂肪率）</h3><div class="tabs" id="rTabs">'+[['30','30日'],['90','90日'],['all','開始〜期限']].map(function(r){ return '<button data-r="'+r[0]+'"'+(r[0]===S.range?' class="on"':'')+'>'+r[1]+'</button>'; }).join('')+'</div>';
+  var h = '<h3>計画ラインと実績（体脂肪率）</h3><div class="tabs" id="rTabs">'+[['30','30日'],['90','90日'],['all','開始〜期限']].map(function(r){ return '<button data-r="'+r[0]+'"'+(r[0]===S.range&&!CH.zoom?' class="on"':'')+'>'+r[1]+'</button>'; }).join('')+'</div>';
   var maint = V.plan && V.plan.phase === 'maintain', st = PL.toDays(b.startDate), dl = maint ? PL.toDays(today) + 14 : PL.toDays(b.deadline), t = PL.toDays(today), d0, d1;
   if (S.range === 'all') { d0 = st; d1 = Math.max(dl, t); } else { var n = +S.range; d0 = Math.max(st, t - n + 1); d1 = Math.max(d0 + 6, Math.min(dl, t + 7)); }
-  var pts = [], mas = [], lo = 1e9, hi = -1e9, d;
-  for (d = d0; d <= Math.min(d1, t); d++) {
-    var ds = PL.fromDays(d), x = map[ds];
-    if (x && x.fat != null) { pts.push({ d: d, v: x.fat, n: x.count }); lo = Math.min(lo, x.fat); hi = Math.max(hi, x.fat); }
-    var m = movingAvg(map, ds); if (m != null) mas.push({ d: d, v: m });
+  if (CH.zoom) { d0 = CH.zoom.a; d1 = CH.zoom.b; }
+  var span = Math.max(1, d1 - d0), d, i0 = Math.floor(d0) - 1, i1 = Math.ceil(d1) + 1;
+  var pts = [], mas = [], lo = 1e9, hi = -1e9;
+  for (d = i0; d <= Math.min(i1, t); d++) {
+    if (d < st - 14) continue;
+    var ds = PL.fromDays(d), x = map[ds], vis = d >= d0 && d <= d1;
+    if (x && x.fat != null) { pts.push({ d: d, v: x.fat, n: x.count }); if (vis) { lo = Math.min(lo, x.fat); hi = Math.max(hi, x.fat); } }
+    var m = movingAvg(map, ds); if (m != null) { mas.push({ d: d, v: m }); if (vis) { lo = Math.min(lo, m); hi = Math.max(hi, m); } }
   }
-  var planPts = [], step = Math.max(1, Math.round((d1 - d0) / 40));
-  for (d = d0; d <= d1; d += step) { planPts.push({ d: d, v: PL.plannedFatPct(b, PL.fromDays(d)) }); }
-  planPts.push({ d: d1, v: PL.plannedFatPct(b, PL.fromDays(d1)) });
+  var planPts = [], step = Math.max(1, Math.round((i1 - i0) / 40));
+  for (d = i0; d <= i1; d += step) { planPts.push({ d: d, v: PL.plannedFatPct(b, PL.fromDays(d)) }); }
+  planPts.push({ d: i1, v: PL.plannedFatPct(b, PL.fromDays(i1)) });
   if (maint) planPts = [];
-  planPts.forEach(function(p){ lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); });
+  planPts.forEach(function(p){ if (p.d >= d0 - step && p.d <= d1 + step) { lo = Math.min(lo, p.v); hi = Math.max(hi, p.v); } });
   var fl = V.plan && V.plan.floorFat > 0 ? V.plan.floorFat : 0;
   if (maint) { if (fl) { lo = Math.min(lo, fl); hi = Math.max(hi, fl + PL.MAINT_BAND); } if (!isFinite(lo) || lo > hi) { lo = (fl || b.goalFat) - 1; hi = (fl || b.goalFat) + 2; } }
-  else { lo = Math.min(lo, b.goalFat); hi = Math.max(hi, b.baseFat); }
-  var padv = Math.max(0.5, (hi - lo) * 0.1); lo -= padv; hi += padv;
-  var W = 640, H = 230, pl = 40, pr = 10, pt = 12, pb = 26, span = Math.max(1, d1 - d0);
+  else if (!CH.zoom) { lo = Math.min(lo, b.goalFat); hi = Math.max(hi, b.baseFat); }
+  else if (!isFinite(lo) || lo > hi) { lo = b.goalFat; hi = b.baseFat; }
+  if (hi - lo < 0.4) { var mid0 = (hi + lo) / 2; lo = mid0 - 0.2; hi = mid0 + 0.2; }
+  var padv = Math.max(0.2, (hi - lo) * 0.1); lo -= padv; hi += padv;
+  var W = 640, H = 240, pl = 40, pr = 10, pt = 12, pb = 28;
   function X(dd){ return pl + (W - pl - pr) * (dd - d0) / span; }
   function Y(v){ return pt + (H - pt - pb) * (1 - (v - lo) / (hi - lo)); }
-  var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="体脂肪率の計画と実績">';
-  for (var i = 0; i <= 3; i++) { var gv = lo + (hi - lo) * i / 3, gy = Y(gv); s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(1)+'</text>'; }
-  // 休止期間の網掛け
+  CH.ctx = { d0: d0, d1: d1, W: W, pl: pl, pr: pr };
+  function path(a){ return a.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' '); }
+  var dec = (hi - lo) < 3 ? 2 : 1;
+  var s = '<svg class="chart" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="体脂肪率の計画と実績"><defs><clipPath id="chclip"><rect x="'+pl+'" y="'+pt+'" width="'+(W-pl-pr)+'" height="'+(H-pt-pb)+'"/></clipPath></defs>';
+  for (var i = 0; i <= 4; i++) { var gv = lo + (hi - lo) * i / 4, gy = Y(gv); s += '<line class="gl" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy+'" y2="'+gy+'"/><text x="'+(pl-4)+'" y="'+(gy+3)+'" text-anchor="end">'+gv.toFixed(dec)+'</text>'; }
+  s += '<g clip-path="url(#chclip)">';
   (b.pauses || []).forEach(function(pz){
     var a = Math.max(d0, PL.toDays(pz.from)), z = Math.min(d1, PL.toDays(pz.to)); if (z < a) return;
     s += '<rect class="pause" x="'+X(a).toFixed(1)+'" y="'+pt+'" width="'+Math.max(2, X(z + 1) - X(a)).toFixed(1)+'" height="'+(H-pt-pb)+'"><title>休止 '+md(pz.from)+'〜'+md(pz.to)+(pz.reason ? '（'+pz.reason+'）' : '')+'</title></rect>';
   });
-  // 許容バンド：計画ラインの上下 ±BAND_KG（脂肪量）を体脂肪率に直して帯にする
   if (!maint && planPts.length > 1) {
     var up = planPts.map(function(p){ var fm = PL.plannedFatMass(b, PL.fromDays(p.d)) + PL.BAND_KG; return { d: p.d, v: fm / (b.leanKg + fm) * 100 }; });
     var dn = planPts.map(function(p){ var fm = Math.max(0, PL.plannedFatMass(b, PL.fromDays(p.d)) - PL.BAND_KG); return { d: p.d, v: fm / (b.leanKg + fm) * 100 }; }).reverse();
-    s += '<path class="band" d="'+up.concat(dn).map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+' Z"/>';
+    s += '<path class="band" d="'+path(up.concat(dn))+' Z"/>';
   }
-  // 維持期：最低体脂肪率〜許容帯の上限
   if (maint && fl) { var fy = Y(fl), uy = Y(fl + PL.MAINT_BAND); s += '<rect class="band" x="'+pl+'" y="'+uy.toFixed(1)+'" width="'+(W-pl-pr)+'" height="'+(fy-uy).toFixed(1)+'"/><line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+fy.toFixed(1)+'" y2="'+fy.toFixed(1)+'"/><text x="'+(pl+4)+'" y="'+(fy+11).toFixed(1)+'" class="goaltx">最低 '+f1(fl)+'%</text>'; }
-  // 目標の体脂肪率の横線
   if (!maint && b.goalFat >= lo && b.goalFat <= hi) { var gy2 = Y(b.goalFat); s += '<line class="goal" x1="'+pl+'" x2="'+(W-pr)+'" y1="'+gy2+'" y2="'+gy2+'"/><text x="'+(pl+4)+'" y="'+(gy2-4)+'" class="goaltx">目標 '+f1(b.goalFat)+'%</text>'; }
-  // 月末の経過目標（計画ライン上の印と数値）
   var msAll = (maint ? [] : monthEndsOf(b)).filter(function(ds){ var dd = PL.toDays(ds); return dd >= d0 && dd <= d1; });
-  msAll.forEach(function(ds, i){
+  msAll.forEach(function(ds){
     var dd = PL.toDays(ds), v = PL.plannedFatPct(b, ds), mx = X(dd), my = Y(v), last = ds === b.deadline;
     s += '<line class="mk" x1="'+mx.toFixed(1)+'" x2="'+mx.toFixed(1)+'" y1="'+pt+'" y2="'+(H-pb)+'"/>'
       + '<circle class="mkdot" cx="'+mx.toFixed(1)+'" cy="'+my.toFixed(1)+'" r="3.5"><title>'+mdw(ds)+' 計画 '+f1(v)+'%</title></circle>'
-      + '<text class="mktx" x="'+Math.min(W-pr, mx).toFixed(1)+'" y="'+(my-7).toFixed(1)+'" text-anchor="'+(last || mx > W - 40 ? 'end' : 'middle')+'">'+f1(v)+'</text>'
-      + '<text x="'+mx.toFixed(1)+'" y="'+(H-12)+'" text-anchor="'+(last ? 'end' : 'middle')+'" class="mkdate">'+md(ds)+'</text>';
+      + '<text class="mktx" x="'+Math.min(W-pr, mx).toFixed(1)+'" y="'+(my-7).toFixed(1)+'" text-anchor="'+(last || mx > W - 40 ? 'end' : 'middle')+'">'+f1(v)+'</text>';
   });
-  if (planPts.length) s += '<path class="plan" d="'+planPts.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
-  pts.forEach(function(p){ s += '<circle class="pt" cx="'+X(p.d).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3"><title>'+mdw(PL.fromDays(p.d))+' '+f1(p.v)+'%（'+p.n+'回測定の平均）</title></circle>'; });
-  if (mas.length > 1) s += '<path class="ma" d="'+mas.map(function(p, i){ return (i?'L':'M')+X(p.d).toFixed(1)+' '+Y(p.v).toFixed(1); }).join(' ')+'"/>';
-  if (t >= d0 && t <= d1) s += '<line class="now" x1="'+X(t)+'" x2="'+X(t)+'" y1="'+pt+'" y2="'+(H-pb)+'"/><text x="'+X(t)+'" y="'+(H-12)+'" text-anchor="'+(t - d0 > span * 0.85 ? 'end' : 'middle')+'">今日</text>';
-  s += '<text x="'+pl+'" y="'+(H-2)+'">'+md(PL.fromDays(d0))+'</text><text x="'+(W-pr)+'" y="'+(H-2)+'" text-anchor="end">'+md(PL.fromDays(d1))+'</text></svg>';
-  h += s + '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span>'+(maint ? '<span><i style="border-color:var(--good);opacity:.5"></i>最低〜許容帯</span>' : '<span><i style="border-color:var(--good);opacity:.35;border-top-width:6px"></i>許容幅（±'+PL.BAND_KG+'kg）</span>')+((b.pauses||[]).length ? '<span>▒ 休止期間</span>' : '')+'<span>◯ 月末の計画値（%）</span></div>';
+  if (planPts.length) s += '<path class="plan" d="'+path(planPts)+'"/>';
+  pts.forEach(function(p){ s += '<circle class="pt" cx="'+X(p.d).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="3"/>'; });
+  if (mas.length > 1) s += '<path class="ma" d="'+path(mas)+'"/>';
+  if (t >= d0 && t <= d1) s += '<line class="now" x1="'+X(t)+'" x2="'+X(t)+'" y1="'+pt+'" y2="'+(H-pb)+'"/>';
+  s += '</g>';
+  // 下の日付目盛り（表示範囲に応じて5つ）
+  for (var k = 0; k <= 4; k++) { var td = Math.round(d0 + span * k / 4); s += '<text x="'+X(td).toFixed(1)+'" y="'+(H-14)+'" text-anchor="'+(k === 0 ? 'start' : k === 4 ? 'end' : 'middle')+'" class="mkdate">'+md(PL.fromDays(td))+'</text>'; }
+  msAll.forEach(function(ds){ if (ds === b.deadline) return; s += '<text x="'+X(PL.toDays(ds)).toFixed(1)+'" y="'+(H-2)+'" text-anchor="middle" class="mkdate">'+md(ds)+'</text>'; });
+  if (t >= d0 && t <= d1) s += '<text x="'+X(t)+'" y="'+(H-2)+'" text-anchor="'+(t - d0 > span * 0.85 ? 'end' : 'middle')+'">今日</text>';
+  // なぞった日の十字線・値の札・情報パネル
+  var info = '<div class="chinfo muted">グラフをなぞると、その日の数値が出ます。2本指で拡大・縮小（PCはホイール、ダブルタップで戻す）</div>';
+  if (CH.cur != null && CH.cur >= d0 - 0.5 && CH.cur <= d1 + 0.5) {
+    var cd = CH.cur, cds = PL.fromDays(cd), cx = X(cd), pv = maint ? null : PL.plannedFatPct(b, cds);
+    var pw = maint ? null : b.leanKg + PL.plannedFatMass(b, cds), mv = cd <= t ? movingAvg(map, cds) : null, me = cd <= t ? map[cds] : null, mf = me && me.fat != null ? me.fat : null;
+    var prim = mv != null ? mv : mf != null ? mf : pv;
+    s += '<line class="cross" x1="'+cx.toFixed(1)+'" x2="'+cx.toFixed(1)+'" y1="'+pt+'" y2="'+(H-pb)+'"/>';
+    if (pv != null) s += '<circle class="cdot plan" cx="'+cx.toFixed(1)+'" cy="'+Y(pv).toFixed(1)+'" r="4.5"/>';
+    if (mf != null) s += '<circle class="cdot meas" cx="'+cx.toFixed(1)+'" cy="'+Y(mf).toFixed(1)+'" r="4.5"/>';
+    if (mv != null) s += '<circle class="cdot ma" cx="'+cx.toFixed(1)+'" cy="'+Y(mv).toFixed(1)+'" r="5"/>';
+    if (prim != null) { var py = Y(prim); s += '<line class="cross" x1="'+pl+'" x2="'+cx.toFixed(1)+'" y1="'+py.toFixed(1)+'" y2="'+py.toFixed(1)+'"/><rect class="tag" x="0" y="'+(py-8).toFixed(1)+'" width="'+(pl-2)+'" height="16" rx="4"/><text class="tagtx" x="'+((pl-2)/2)+'" y="'+(py+3.5).toFixed(1)+'" text-anchor="middle">'+prim.toFixed(dec)+'</text>'; }
+    var tx = Math.min(Math.max(cx, pl + 26), W - pr - 26);
+    s += '<rect class="tag" x="'+(tx-26).toFixed(1)+'" y="'+(H-pb+1)+'" width="52" height="14" rx="4"/><text class="tagtx" x="'+tx.toFixed(1)+'" y="'+(H-pb+11.5)+'" text-anchor="middle">'+md(cds)+'</text>';
+    var diff = (mv != null && pv != null) ? mv - pv : null;
+    info = '<div class="chinfo"><b>'+mdw(cds)+'</b>'
+      + (pv != null ? '<span class="c-plan">計画 <b>'+f1(pv)+'%</b>'+(pw != null ? '（体重 '+f1(pw)+'kg）' : '')+'</span>' : (fl ? '<span class="c-plan">最低 <b>'+f1(fl)+'%</b></span>' : ''))
+      + (mv != null ? '<span class="c-ma">7日平均 <b>'+f1(mv)+'%</b></span>' : '')
+      + (mf != null ? '<span class="c-meas">その日の測定 <b>'+f1(mf)+'%</b>（'+me.count+'回）</span>' : (cd <= t ? '<span class="muted">測定なし</span>' : '<span class="muted">未来</span>'))
+      + (diff != null ? '<span class="'+(diff > 0.05 ? 'c-bad' : 'c-ok')+'">計画との差 <b>'+(diff > 0 ? '+' : '')+f1(diff)+'pt</b>'+(diff > 0.05 ? '（計画より高い）' : diff < -0.05 ? '（計画より低い＝先行）' : '（計画どおり）')+'</span>' : '')
+      + '</div>';
+  }
+  s += '</svg>';
+  var ctl = '<div class="chctl"><button type="button" data-z="l" aria-label="左へ">◀</button><button type="button" data-z="out" aria-label="縮小">－</button><button type="button" data-z="in" aria-label="拡大">＋</button><button type="button" data-z="r" aria-label="右へ">▶</button><button type="button" data-z="reset">全体</button><span class="muted">'+(CH.zoom ? '拡大中：'+md(PL.fromDays(Math.round(d0)))+'〜'+md(PL.fromDays(Math.round(d1))) : '')+'</span></div>';
+  h += ctl + info + '<div class="chwrap">' + s + '</div>';
+  h += '<div class="legend"><span><i style="border-color:var(--good);border-top-style:dashed"></i>計画</span><span><i style="border-color:var(--accent)"></i>実績の7日平均</span><span>● 測った日の平均</span>'+(maint ? '<span><i style="border-color:var(--good);opacity:.5"></i>最低〜許容帯</span>' : '<span><i style="border-color:var(--good);opacity:.35;border-top-width:6px"></i>許容幅（±'+PL.BAND_KG+'kg）</span>')+((b.pauses||[]).length ? '<span>▒ 休止期間</span>' : '')+'<span>◯ 月末の計画値（%）</span></div>';
   if (!pts.length) h += '<div class="note">この期間の測定がまだありません。</div>';
   el.innerHTML = h;
-  Array.prototype.forEach.call($('rTabs').querySelectorAll('button'), function(btn){ btn.onclick = function(){ S.range = btn.getAttribute('data-r'); renderChart(); }; });
+  Array.prototype.forEach.call($('rTabs').querySelectorAll('button'), function(btn){ btn.onclick = function(){ S.range = btn.getAttribute('data-r'); CH.zoom = null; CH.cur = null; renderChart(); }; });
 }
 
 
