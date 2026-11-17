@@ -179,4 +179,22 @@ t('coachAsk：維持期テーマがあり、判定は最低体脂肪率・期限
   delete props.PLAN_PHASE; delete props.PLAN_FLOOR_FAT;
 });
 
+t('coachAsk：使い方テーマは説明書と開いている画面を渡す。ほかのテーマには説明書を渡さない', function () {
+  sandbox.gemini_ = function (system, user) { calls.push({ system: system, user: user }); return { answer: 'a', points: [], nextSteps: [], followups: [], dataNote: '' }; };
+  calls.length = 0;
+  var G = require('../guide.js');
+  sandbox._req = { topic: 'howto', question: '1セットの記録のしかたは？', page: 'meal.html', manual: G.manual() };
+  var r = run('coachAsk(_req)');
+  assert.strictEqual(r.topic, 'howto'); assert.strictEqual(r.topicLabel, 'アプリの使い方');
+  var c = calls[calls.length - 1];
+  assert.ok(/アプリの使い方/.test(c.system) && /manual/.test(c.system));
+  assert.ok(c.user.indexOf('# アプリの説明書（manual）') >= 0 && c.user.indexOf('＋ セット記録') >= 0);
+  assert.ok(c.user.indexOf('いま開いている画面（page）：meal.html') >= 0);
+  assert.strictEqual(run('coachTopics()')[0].key, 'howto');
+  sandbox._req = { topic: 'meal', question: '脂質が多い', manual: G.manual() };
+  run('coachAsk(_req)');
+  assert.ok(calls[calls.length - 1].user.indexOf('# アプリの説明書') < 0);
+  sandbox.gemini_ = geminiStub; delete sandbox._req;
+});
+
 console.log('\n' + n + ' 件すべて成功');

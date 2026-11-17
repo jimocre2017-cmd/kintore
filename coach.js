@@ -116,6 +116,7 @@
 
   /* ---------- 相談（チャット） ---------- */
   var TOPICS = [
+    ['howto', 'アプリの使い方', 'このアプリの使い方を、初心者向けに教えて'],
     ['meal', '食事の見直し', 'データを見て、食事を見直すポイントを教えて'],
     ['plan', '減量・バルクのプラン', '今の状態から、目標に向けたプランを相談したい'],
     ['stall', '停滞の原因', '最近、体重や体脂肪率が思うように動かない。原因の候補を教えて'],
@@ -200,7 +201,9 @@
     busy = true; var sent = text; draft = '';
     renderChat(sent);
     var history = chat.slice(-3).map(function (m) { return { q: m.question, a: m.answer }; });
-    KT.call('coachAsk', { topic: topic, question: sent, history: history }).then(function (r) {
+    var req = { topic: topic, question: sent, history: history, page: pageName() };
+    if ((topic === 'howto' || topic === 'free') && window.KTGuide) req.manual = window.KTGuide.manual(); // 使い方の質問に答えられるよう、説明書（guide.js）を渡す
+    KT.call('coachAsk', req).then(function (r) {
       busy = false; chat.push(r); saveChat(); topic = 'free'; if (tab === 'ask') renderChat();
     }).catch(function (e) {
       busy = false; draft = sent; if (tab === 'ask') renderChat(null, (e && e.message) || '相談に失敗しました');
@@ -224,7 +227,15 @@
       else run();
     });
   }
-  function close() { root.classList.remove('on'); }
+  function close() { root.classList.remove('on'); if (!busy) topic = 'free'; }
+  function pageName() { var f = String(location.pathname || '').split('/').pop(); return f || 'index.html'; }
+
+  // 使い方ガイド（guide.js）から呼ぶ：相談タブをテーマ付きで開く
+  window.KTCoach = {
+    open: function (t) { if (!root) return; root.classList.add('on'); setTab(t === 'ask' ? 'ask' : 'judge'); },
+    prefill: function (t, text) { if (!root) return; topic = t || 'free'; draft = text || ''; root.classList.add('on'); setTab('ask'); var q = $('coachQ'); if (q) q.focus(); },
+    ask: function (t, text) { if (!root) return; root.classList.add('on'); setTab('ask'); topic = t || 'free'; ask(text); }
+  };
 
   function init() {
     css();

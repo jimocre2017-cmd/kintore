@@ -474,6 +474,7 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <script src="cardio-lib.js"></script>
 <script src="api.js"></script>
 <script src="coach.js"></script>
+<script src="guide.js"></script>
 <script src="yk-lib.js"></script>
 <script src="counsel-lib.js"></script>
 <script>
@@ -1462,6 +1463,8 @@ $('csSkip').addEventListener('click', function(){
   call('counselSkip').then(function(){ $('csModal').classList.remove('open'); renderList(); toast('不要にしました。必要になったら一覧の下の「カウンセリングシート」から答えられます'); }).catch(function(e){ toast(e.message, true); });
 });
 function counselBoot(){
+  // 初回の使い方ガイドが開いている間は待ち、閉じてからカウンセリングシートを出す
+  if (window.KTGuide && KTGuide.isTourOpen()) { KTGuide.afterTour(function(){ setTimeout(counselBoot, 400); }); return; }
   call('counselGet').then(function(c){
     if (!c) return;
     if (APP.data) renderList();

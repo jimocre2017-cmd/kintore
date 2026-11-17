@@ -238,6 +238,8 @@ var ASK_HEAD = ['日時', 'テーマ', '質問', '回答（JSON）'];
 
 // テーマ：キー → [表示名, 質問が空のときの既定の質問, AIへの指示]
 var ASK_TOPICS = {
+  howto: ['アプリの使い方', 'このアプリの使い方を、初心者向けに教えて',
+    '操作方法の質問には、manual（アプリの説明書）だけを根拠に答える。どの画面で・どのボタンを・どの順で押すかを、ボタンの名前を「」で囲んで番号付きの手順（1. 2. 3.）で示す。page（本人がいま開いている画面）があれば、その画面から始まる手順にする。説明書に無い機能・ボタンは作らず「その機能は説明書に見当たりません」と言う。筋トレやアプリが初めての人向けに、専門用語は用語の説明を添える。記録データは「まだ体組成の記録が無いので、まず〜」のように、次にやることを決める参考にだけ使う。nextSteps には、本人が今すぐ試せる操作を入れる。'],
   meal: ['食事の見直し', '直近の食事の記録を見て、目標に向けて見直すポイントを教えて',
     '摂取カロリー・たんぱく質・脂質の比率・記録の抜けを meal と mealsLast3Days から読み、足りない栄養と、身近な食品・コンビニ・外食での具体的な置き換えを出す。食べる量を極端に減らす提案はしない。'],
   plan: ['減量・バルクアップのプラン', '今の状態から、目標に向けたプランを相談したい',
@@ -256,9 +258,9 @@ var ASK_TOPICS = {
     'meal.averagePerLoggedDay.protein と plan.adjust.protein（または body.plan.proteinGramsPerDay）の目安を比べ、不足なら1日の中でどこで足すか（朝・間食・夕食）を、身近な食品とグラム数で具体的に示す。サプリは記録に無いので推測しない。'],
   maintain: ['維持期（最低体脂肪率の確保）', '最低体脂肪率を割らずに維持するための、食事と運動の考え方を教えて',
     'goal.phase・goal.floorFatPct・plan.adjust.floor（currentFat・upperFat・marginPct）・plan.adjust.status を読む。維持期は「最低体脂肪率〜許容帯の上限」に収めるのが目標。食事は維持カロリー（plan.adjust.tdee）を中心に、たんぱく質の目安と、増減の調整幅（±200kcal・週単位）を示す。運動は筋トレの量と強度を維持して筋肉を守り、有酸素は健康維持・調整用として控えめに。最低体脂肪率を割りそうなら、食事を増やすことと有酸素を減らすことを先に勧める。減量期に最低体脂肪率へ到達していれば、維持期への切り替えを勧める（切り替えは本人が計画の設定で行う）。'],
-  free: ['自由相談', '', '質問に直接答える。データで答えられる部分は数値を引用し、データに無いことは「記録に無いので分からない」と言う。']
+  free: ['自由相談', '', '質問に直接答える。データで答えられる部分は数値を引用し、データに無いことは「記録に無いので分からない」と言う。アプリの操作方法を聞かれたら、manual（アプリの説明書）に沿って、ボタンの名前つきの手順で答える。']
 };
-var ASK_ORDER = ['meal', 'plan', 'maintain', 'stall', 'eatout', 'training', 'condition', 'body', 'protein', 'free'];
+var ASK_ORDER = ['howto', 'meal', 'plan', 'maintain', 'stall', 'eatout', 'training', 'condition', 'body', 'protein', 'free'];
 
 function askSystem_(topic) {
   return [
@@ -334,7 +336,8 @@ function coachTopics() {
 
 /**
  * 相談する
- * @param {Object} req { topic:テーマのキー, question:質問（テーマ指定で空なら既定の質問）, history:[{q, a}]（直近の会話、最大3件） }
+ * @param {Object} req { topic:テーマのキー, question:質問（テーマ指定で空なら既定の質問）, history:[{q, a}]（直近の会話、最大3件）,
+ *   page:いま開いている画面のファイル名（任意）, manual:アプリの説明書（任意・howto と free のときだけ使う。端末の guide.js が作る） }
  */
 function coachAsk(req) {
   req = req || {};
@@ -342,12 +345,16 @@ function coachAsk(req) {
   var q = planStr_(req.question, 500) || ASK_TOPICS[topic][1];
   if (q.length < 2) throw new Error('相談したいことを入力するか、テーマを選んでください');
   var hist = (req.history || []).slice(-3).map(function (h) { return { question: planStr_(h && h.q, 300), answer: planStr_(h && h.a, 500) }; });
+  // 説明書（guide.js が作る）と、いま開いている画面。使い方の質問に答えるときに使う
+  var manual = (topic === 'howto' || topic === 'free') ? planStr_(req.manual, 9000) : '';
+  var page = planStr_(req.page, 40);
   var data = coachData_();
   if (!data.body && !data.meal && !(data.training && (data.training.last28Days.strengthDays || data.training.last28Days.cardioDays))) {
     // 記録が無くても、一般的な質問には答える（その旨を dataNote に出させる）
     data.noRecords = true;
   }
-  var user = '# 相談\nテーマ：' + ASK_TOPICS[topic][0] + '\n質問：' + q + '\n\n# 会話の履歴（古い順）\n' + JSON.stringify(hist) + '\n\n# 記録データ（JSON）\n' + JSON.stringify(data);
+  var user = '# 相談\nテーマ：' + ASK_TOPICS[topic][0] + '\n質問：' + q + (page ? '\nいま開いている画面（page）：' + page : '') + '\n\n# 会話の履歴（古い順）\n' + JSON.stringify(hist) +
+    (manual ? '\n\n# アプリの説明書（manual）\n' + manual : '') + '\n\n# 記録データ（JSON）\n' + JSON.stringify(data);
   var res = gemini_(askSystem_(topic), user, askSchema_());
   var out = {
     topic: topic, topicLabel: ASK_TOPICS[topic][0], question: q,
