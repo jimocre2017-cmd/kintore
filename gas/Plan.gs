@@ -79,9 +79,25 @@ function planLatestAdvice_() {
   } catch (e) { return null; }
 }
 
+/** 直近7日（今日を含む）の胸・脚のセット数。YKトレーニングと同じ数え方（メイン1・付随0.5）。マスタープランの「今週のバランス」用 */
+function roadmapSets7_(today) {
+  try {
+    var from = addDays_(today, -6), by = {}, hist = [];
+    getLogs_(from, today).forEach(function (l) {
+      var k = l.date + '|' + l.exId;
+      if (!by[k]) { by[k] = { d: l.date, e: l.exId, n: 0 }; hist.push(by[k]); }
+      by[k].n++;
+    });
+    var D = YkLib.deficits({ cfg: YkLib.configFrom(getSettings_()), hist: hist, todaySets: {}, today: today, exercises: getExercises_(true), parts: getParts_() });
+    var out = {};
+    D.areas.forEach(function (a) { out[a.key] = a.done; });
+    return { chest: out.chest || 0, legs: out.legs || 0 };
+  } catch (e) { return null; }
+}
+
 function planGet() {
   var today = today_();
-  return { today: today, plan: planSettings_(), defaultStart: PlanLib.nextMonday(today), targets: planTargets_(), latest: planLatestAdvice_() };
+  return { today: today, plan: planSettings_(), defaultStart: PlanLib.nextMonday(today), targets: planTargets_(), latest: planLatestAdvice_(), sets7: roadmapSets7_(today) };
 }
 
 function planSetDate_(v, label, allowEmpty) {

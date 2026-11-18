@@ -58,7 +58,7 @@ function rmMealAvg(today){
   var from = PL.addDays(today, -6), days = PL.mealDays(S.meal.logs.filter(function(l){ return l.date >= from && l.date <= today; })), ks = Object.keys(days).filter(function(k){ return days[k].complete; });
   if (!ks.length) return null;
   function avg(f){ return ks.reduce(function(a, k){ return a + days[k][f]; }, 0) / ks.length; }
-  return { kcal: avg('kcal'), protein: avg('protein'), fat: avg('fat'), days: ks.length };
+  return { kcal: avg('kcal'), protein: avg('protein'), fat: avg('fat'), carbs: avg('carbs'), days: ks.length };
 }
 function rmRange(r, u){ return r ? r.min + '〜' + r.max + (u || '') : '－'; }
 function rmCtx(today){
@@ -93,6 +93,16 @@ function renderRoadmap(){
       var pr = RoadmapLib.progress(p, st), mc = RoadmapLib.mealCheck(p, avg);
       if (pr.length) h += '<div style="margin-top:8px">'+pr.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num">'+(x.now == null ? '－' : f1(x.now))+' → '+f1(x.goal)+x.unit+(x.gap == null ? '' : '（あと '+sg(x.gap)+(x.reached ? '・到達' : '')+'）')+'</span></div>'; }).join('')+'</div>';
       if (mc.length) h += '<div style="margin-top:8px"><div class="note" style="margin:0 0 2px">直近7日の食事の平均（記録が揃った'+avg.days+'日分）</div>'+mc.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num '+(x.state === 'in' ? 'neg' : 'pos')+'">'+f1(x.avg)+x.unit+'（'+x.min+'〜'+x.max+'：'+(x.state === 'in' ? '範囲内' : x.state === 'under' ? '少ない' : '多い')+'）</span></div>'; }).join('')+'</div>';
+      var bl = RoadmapLib.balance(p, { meal: avg, sets: S.plan ? S.plan.sets7 : null, cardio: S.cardioC ? RoadmapLib.cardioCheck(p, S.cardioC.logs || [], today) : null });
+      if (bl.items.length) {
+        h += '<div style="margin-top:12px"><div class="note" style="margin:0 0 4px"><b>今週のバランス</b>（直近7日。やり過ぎ・やらな過ぎの判定）　'+(bl.under ? '足りない '+bl.under+'　' : '')+(bl.over ? 'やり過ぎ '+bl.over+'　' : '')+(!bl.under && !bl.over && !bl.nodata ? 'すべてちょうど' : '')+'</div>'
+          + bl.items.map(function(x){
+            var lab = x.state === 'in' ? 'ちょうど' : x.state === 'under' ? '足りない' : x.state === 'over' ? 'やり過ぎ' : '記録なし';
+            var cls = x.state === 'in' ? 'good' : x.state === 'nodata' ? '' : (x.state === 'over' ? 'bad' : 'warn');
+            var rng = x.min != null ? '（'+x.min+'〜'+x.max+x.unit+(x.key === 'chest' || x.key === 'legs' ? '、上限の+20%まで可' : '')+'）' : '';
+            return '<div class="row" style="flex-wrap:wrap"><span>'+esc(x.label)+'</span><span class="num">'+(x.value == null ? '－' : f1(x.value)+x.unit)+rng+' <span class="chip '+cls+'">'+lab+'</span></span>'+(x.advice ? '<div class="note" style="width:100%;margin:2px 0 4px">'+esc(x.advice)+'</div>' : '')+'</div>';
+          }).join('')+'</div>';
+      }
       h += '<div class="rowbtns"><button class="btn small primary" id="rmApply"'+(S.rmBusy ? ' disabled' : '')+'>この期の食事目標を反映</button></div><div class="note">食事画面の目安・下限・上限を、上の範囲の中央と両端に書き換えます。'+(p.carbs ? 'たんぱく質・脂質はいまの値のままです。' : '')+'</div>';
     }
     h += '</div>';
@@ -556,7 +566,7 @@ KT.onStatus(function(st){
   c.title = st.error ? st.error.message : '';
 });
 function reloadAll(){
-  return Promise.all([KT.call('bodyInit'), KT.call('mealInit'), KT.call('planInit')]).then(function(r){ S.body = r[0]; S.meal = r[1]; S.plan = r[2]; S.loadErr = null; render(); });
+  return Promise.all([KT.call('bodyInit'), KT.call('mealInit'), KT.call('planInit'), KT.call('cardioInit').catch(function(){ return null; })]).then(function(r){ S.body = r[0]; S.meal = r[1]; S.plan = r[2]; if (r[3]) S.cardioC = r[3]; S.loadErr = null; render(); });
 }
 $('syncChip').addEventListener('click', function(){
   var fl = KT.failed();
@@ -587,8 +597,8 @@ function healStaleCache(e){
 }
 function init(){
   if (!KT.configured()) { showSetup(); return; }
-  Promise.all([KT.call('bodyCached'), KT.call('mealCached'), KT.call('planCached')]).then(function(r){
-    if (r[0]) S.body = r[0]; if (r[1]) S.meal = r[1]; if (r[2]) S.plan = r[2];
+  Promise.all([KT.call('bodyCached'), KT.call('mealCached'), KT.call('planCached'), KT.call('cardioCached').catch(function(){ return null; })]).then(function(r){
+    if (r[0]) S.body = r[0]; if (r[1]) S.meal = r[1]; if (r[2]) S.plan = r[2]; if (r[3]) S.cardioC = r[3];
     if (S.body && S.plan) render();
   }, function(e){ healStaleCache(e); });
   reloadAll().catch(function(e){

@@ -89,7 +89,7 @@ var RoadmapLib = (function () {
   /* 直近の食事の平均が、フェーズの範囲に入っているか。avg＝{kcal, protein, fat}（記録が揃った日の平均） */
   function mealCheck(phase, avg) {
     var out = [];
-    [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].forEach(function (k) {
+    [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g'], ['carbs', '炭水化物', 'g']].forEach(function (k) {
       var r = phase[k[0]], v = avg ? avg[k[0]] : null;
       if (!r || v == null) return;
       out.push({ key: k[0], label: k[1], unit: k[2], avg: r1(v), min: r.min, max: r.max, state: v < r.min ? 'under' : v > r.max ? 'over' : 'in' });
@@ -116,6 +116,61 @@ var RoadmapLib = (function () {
       return { mode: 'frequency', min: c.perWeek.min, max: c.perWeek.max, days: n, state: n < c.perWeek.min ? 'under' : n > c.perWeek.max ? 'over' : 'in' };
     }
     return null;
+  }
+
+  /* ---- 今週のバランス：やり過ぎ・やらな過ぎを、期（第1期＝減量／第2期＝増量）ごとの助言つきで判定する。AIは使わない（ルールのみ） ---- */
+  var OVER_SETS = 1.2; // 筋トレのセット数は、上限のこの倍率までは「ちょうど」。超えたら「やり過ぎ」
+  var ADVICE = {
+    recomp: {
+      kcal:    { under: '食事が少なすぎます。赤字を広げすぎると筋量が落ちます。下限まで戻してください。', over: '食事が多めで、減量が進みにくい状態です。間食と脂質から調整してください。' },
+      protein: { under: 'たんぱく質が足りません。絞っている時期は最優先で補ってください（筋量を守るため）。', over: 'たんぱく質が多めです。カロリーの枠を圧迫していないか確認してください。' },
+      fat:     { under: '脂質が少なすぎます。下限は守ってください（満足感とホルモンのため）。', over: '脂質でカロリーの枠を使いすぎています。たんぱく質を優先し、脂質を減らしてください。' },
+      carbs:   { under: '', over: '' },
+      chest:   { under: '胸のセット数が足りません。気まぐれな日でも、まず胸から消化してください。', over: '胸のやり過ぎです。右肩の保護と回復を優先し、数日は減らしてください。' },
+      legs:    { under: '脚のセット数が足りません。スクワット・ブルガリアンを優先して貯金してください。', over: '脚のやり過ぎです。回復を優先し、数日は減らしてください。' },
+      cardio:  { under: '有酸素の記録がありません。時速5.0〜5.4kmで入れてください。', over: '時速が範囲より速い回があります。右足首・すねを守るため、5.0〜5.4kmに落としてください。' }
+    },
+    leanbulk: {
+      kcal:    { under: '食事が少なく、増量が進みません。下限まで増やしてください（炭水化物から）。', over: '食事が多すぎます。脂肪が付きやすくなるので、上限に収めてください。' },
+      protein:  { under: '', over: '' },
+      fat:      { under: '', over: '' },
+      carbs:   { under: '炭水化物が足りません。出力と回復のため、範囲の下限まで増やしてください。', over: '炭水化物が多めです。上限に収めてください。' },
+      chest:   { under: '', over: '' },
+      legs:    { under: '', over: '' },
+      cardio:  { under: '有酸素が少なすぎます。週1回は入れて、心肺と回復を保ってください。', over: '有酸素が多すぎます。回復と筋肥大を優先して、週1〜2回に減らしてください。' }
+    }
+  };
+  var BAL_LABEL = { kcal: ['カロリー', 'kcal'], protein: ['たんぱく質', 'g'], fat: ['脂質', 'g'], carbs: ['炭水化物', 'g'], chest: ['胸のセット数', 'セット'], legs: ['脚のセット数', 'セット'], cardio: ['有酸素', ''] };
+
+  /* d＝{meal:{kcal,protein,fat,carbs}|null（直近7日の平均）, sets:{chest,legs}|null（直近7日のセット数）, cardio:cardioCheck の結果|null}
+     戻り値 {items:[{key,label,unit,value,min,max,state:'under'|'in'|'over'|'nodata',advice}], under, in, over, nodata} */
+  function balance(phase, d) {
+    d = d || {};
+    var adv = ADVICE[phase.key] || {}, items = [];
+    function push(key, value, min, max, state) {
+      var lab = BAL_LABEL[key], a = adv[key] || {};
+      items.push({ key: key, label: lab[0], unit: lab[1], value: value == null ? null : r1(value), min: min, max: max, state: state, advice: state === 'under' || state === 'over' ? (a[state] || '') : '' });
+    }
+    ['kcal', 'protein', 'fat', 'carbs'].forEach(function (k) {
+      var r = phase[k]; if (!r) return;
+      var v = d.meal ? d.meal[k] : null;
+      push(k, v, r.min, r.max, v == null ? 'nodata' : v < r.min ? 'under' : v > r.max ? 'over' : 'in');
+    });
+    if (phase.sets) ['chest', 'legs'].forEach(function (k) {
+      var r = phase.sets[k]; if (!r) return;
+      var v = d.sets ? d.sets[k] : null;
+      push(k, v, r.min, r.max, v == null ? 'nodata' : v < r.min ? 'under' : v > r.max * OVER_SETS ? 'over' : 'in');
+    });
+    var c = d.cardio;
+    if (c && c.mode === 'speed') {
+      var fast = c.sessions.some(function (x) { return x.state === 'fast'; });
+      push('cardio', c.sessions.length, null, null, fast ? 'over' : c.sessions.length === 0 ? 'under' : 'in');
+    } else if (c && c.mode === 'frequency') {
+      push('cardio', c.days, c.min, c.max, c.state);
+    }
+    var out = { items: items, under: 0, 'in': 0, over: 0, nodata: 0 };
+    items.forEach(function (x) { out[x.state]++; });
+    return out;
   }
 
   /* 体脂肪率の直近7日平均（その日の体組成の日平均から）。測定が3日未満なら判断しない（体重計の体脂肪率は日々±1%ぶれるため）
@@ -161,10 +216,12 @@ var RoadmapLib = (function () {
       daily: { kcal: p.kcal, protein: p.protein, fat: p.fat, carbs: p.carbs },
       training: p.training, setsPerWeek: p.sets, cardio: p.cardio, cardioLast7Days: ctx && ctx.cardioLogs ? cardioCheck(p, ctx.cardioLogs, date) : null,
       targets: p.targets, progress: progress(p, state), mealCheck: mealCheck(p, avg),
+      weeklyBalance: balance(p, { meal: avg, sets: ctx && ctx.sets7 ? ctx.sets7 : null, cardio: ctx && ctx.cardioLogs ? cardioCheck(p, ctx.cardioLogs, date) : null }),
+      setsLast7Days: ctx && ctx.sets7 ? ctx.sets7 : null,
       rules: rm.rules
     };
   }
 
-  return { ROADMAP: ROADMAP, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, mealGoals: mealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, mealGoals: mealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;

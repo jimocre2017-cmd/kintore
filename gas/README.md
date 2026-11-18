@@ -279,7 +279,7 @@ Apps Script プロジェクトにある `Code.gs` の控えと、AIトレーナ�
 
 ## マスタープラン（2段階リコンプ＆リーンバルク）の導入手順
 
-1. 「＋」→「スクリプト」で `RoadmapLib` というファイルを作り、`RoadmapLib.gs` の内容を貼り付ける
+1. 「＋」→「スクリプト」で `RoadmapLib` と `YkLib` の2ファイルを作り、`RoadmapLib.gs`・`YkLib.gs` の内容をそれぞれ貼り付ける（`YkLib` は胸・脚のセット数の集計に使う）
 2. `Coach.gs`・`Plan.gs`・`Code.gs` を、このフォルダの内容に置き換える（総合コーチがロードマップを読む変更と、第2期へ進む／据え置くの選択を保存する `roadmapSet` の追加のみ）
 3. 「デプロイ」→「デプロイを管理」→ 新バージョンでデプロイ
 4. 数値・期間を直すときは `roadmap-lib.js` の `ROADMAP` だけを書き換え、`node tools/sync-planlib.js` で `RoadmapLib.gs` に同期する

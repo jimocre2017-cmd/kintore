@@ -136,7 +136,7 @@ function coachData_() {
   var roadmap = null;
   try {
     var lt = body && body.latest ? body.latest : null;
-    roadmap = RoadmapLib.brief(today, lt && lt.weight != null ? { weightKg: lt.weight, fatPct: lt.fat != null ? lt.fat : null, leanKg: lt.fat != null ? lt.weight * (1 - lt.fat / 100) : null } : {}, meal ? meal.averagePerLoggedDay : null, { fat7: RoadmapLib.fat7(bodyGet().logs, today), decision: pl.roadmapDecision, cardioLogs: cardioGet().logs });
+    roadmap = RoadmapLib.brief(today, lt && lt.weight != null ? { weightKg: lt.weight, fatPct: lt.fat != null ? lt.fat : null, leanKg: lt.fat != null ? lt.weight * (1 - lt.fat / 100) : null } : {}, meal ? meal.averagePerLoggedDay : null, { fat7: RoadmapLib.fat7(bodyGet().logs, today), decision: pl.roadmapDecision, cardioLogs: cardioGet().logs, sets7: roadmapSets7_(today) });
   } catch (e) { roadmap = null; }
   return {
     today: today, nowTime: now,
@@ -169,6 +169,7 @@ function coachSystem_() {
     '- 役割の分担：あなたの担当は「いま全体としてどうか・期限に間に合うか・今日やること」。来週の1日の目標カロリーを決める（変更を提案する）のは減量計画画面、写真の見た目の評価は「体つき写真」の担当なので、それらは判断しない。必要なら「来週のカロリー調整は計画画面で」「見た目の変化は写真で」と一言だけ促す。',
     '- カルテ（chart）がある場合は、そこに書かれた痛み・既往・避けたい動作を最優先で守る。該当する部位に負担のかかる運動・強度を勧めず、勧める運動は負担の少ない代替にする。カルテに無い痛みを推測しない。痛みが悪化・長引いている記述があれば、無理をさせず専門家への相談を促す。',
     '- roadmap（本人が決めたマスタープラン：2段階リコンプ＆リーンバルク）があれば、それを全体の枠組みとして読む。今の期（nowPhase）の食事の範囲（daily）・トレーニングの軸・目標（targets）・実践ルール（rules）に対して、progress（目標との差）と mealCheck（直近の食事の平均が範囲の内か外か）をそのまま引用して判断する。範囲や目標を変えない・別の数値を提案しない。期の切り替えは日付では行わず、第1期の体脂肪率目標に直近7日平均で届いたら本人が「第2期へ進む」か「いまのプランを据え置く」かを選ぶ（switchRule・reachedFirstPhaseGoal・userChoice・waitingForUserChoice）。waitingForUserChoice が true なら、判断を促すことを今日やることの先頭に入れ、どちらを選んでもよいが、据え置くと第1期の食事（減量の赤字）が続くことを一言添える。選択を代わりに決めない。',
+    '- roadmap.weeklyBalance は、食事・胸と脚のセット数・有酸素について「足りない（under）／ちょうど（in）／やり過ぎ（over）」を期ごとに判定済みのもの。state と advice をそのまま使い、やり過ぎ・足りないの両方を同じ重さで扱う。減量期（第1期）の不足は筋量低下、増量期（第2期）の不足は増量が進まないこと、という意味の違いを踏まえて言う。判定を変えない。',
     '- 診断・医療的断定をしない。強い疲労・痛み・体調不良の記録があれば無理をさせない。',
     '- 日本語。1文は短く。専門用語は避ける。',
     '',

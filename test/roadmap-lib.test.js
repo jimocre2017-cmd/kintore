@@ -80,4 +80,23 @@ t('有酸素：第1期は時速の範囲、第2期は週の回数', function () 
   assert.strictEqual(f.mode, 'frequency'); assert.strictEqual(f.days, 3); assert.strictEqual(f.state, 'over');
   assert.strictEqual(R.cardioCheck(R.ROADMAP.phases[1], [], '2026/11/19').state, 'under');
 });
+t('今週のバランス：第1期（減量）', function () {
+  var P0 = R.ROADMAP.phases[0];
+  var b = R.balance(P0, { meal: { kcal: 1500, protein: 125, fat: 60, carbs: 150 }, sets: { chest: 13, legs: 4 }, cardio: { mode: 'speed', sessions: [{ state: 'fast' }] } });
+  var st = {}; b.items.forEach(function (x) { st[x.key] = x.state; });
+  assert.deepStrictEqual(st, { kcal: 'under', protein: 'in', fat: 'over', chest: 'over', legs: 'under', cardio: 'over' });
+  assert.strictEqual(b.under, 2); assert.strictEqual(b.over, 3); assert.strictEqual(b['in'], 1);
+  assert.ok(b.items[0].advice.indexOf('筋量') >= 0);               // 減量期の食事不足は筋量低下の助言
+  assert.strictEqual(R.balance(P0, { sets: { chest: 12, legs: 9.6 } }).items.filter(function (x) { return x.key === 'chest' || x.key === 'legs'; }).every(function (x) { return x.state === 'in'; }), true); // 上限の+20%まではちょうど
+  assert.strictEqual(R.balance(P0, { sets: { chest: 12.1, legs: 9.7 } }).over, 2);
+  assert.strictEqual(R.balance(P0, {}).nodata, 5); // カロリー・たんぱく質・脂質・胸・脚（有酸素はデータなしなら項目に出さない）
+});
+t('今週のバランス：第2期（増量）は同じ「少ない」でも助言が変わる', function () {
+  var P1 = R.ROADMAP.phases[1];
+  var b = R.balance(P1, { meal: { kcal: 1700, carbs: 200 }, sets: null, cardio: { mode: 'frequency', min: 1, max: 2, days: 4, state: 'over' } });
+  var st = {}; b.items.forEach(function (x) { st[x.key] = x.state; });
+  assert.deepStrictEqual(st, { kcal: 'under', carbs: 'under', cardio: 'over' });
+  assert.ok(b.items[0].advice.indexOf('増量') >= 0);
+  assert.notStrictEqual(b.items[0].advice, R.balance(R.ROADMAP.phases[0], { meal: { kcal: 1500 } }).items[0].advice);
+});
 console.log(n + ' 件OK');
