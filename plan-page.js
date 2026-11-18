@@ -65,6 +65,12 @@ function rmCtx(today){
   var pl = (S.plan && S.plan.plan) || {};
   return { fat7: RoadmapLib.fat7((S.body && S.body.logs) || [], today), decision: pl.roadmapDecision || '' };
 }
+function rmFfmiRow(goal, st){
+  var logs = (S.body && S.body.logs) || [], ht = 0, i, now = null;
+  for (i = logs.length - 1; i >= 0; i--) if (logs[i].height) { ht = logs[i].height; break; }
+  if (typeof FfmiLib !== 'undefined' && ht && st && st.weightKg != null && st.fatPct != null) { var v = FfmiLib.ffmi(st.weightKg, st.fatPct, ht); if (v != null) now = FfmiLib.r1(FfmiLib.normalized(v, ht)); }
+  return '<div class="note" style="margin:6px 0 0">参考：いまの補正後FFMI <b class="num">'+(now == null ? '－' : f1(now))+'</b> → '+f1(goal)+'（除脂肪量の目標と対になる指標。体組成計の推定値なので目安です）</div>';
+}
 function renderRoadmap(){
   var el = $('roadmapCard'); if (!el || typeof RoadmapLib === 'undefined') return;
   var RM = RoadmapLib.ROADMAP, today = (S.body && S.body.today) || KT.today(), ctx = rmCtx(today), R = RoadmapLib.resolve(today, ctx);
@@ -89,6 +95,7 @@ function renderRoadmap(){
       + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
       + '<div>'+(p.carbs ? '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>' : '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>')+'</div></div>';
     h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+    if (p.targets && p.targets.ffmiAdj) h += rmFfmiRow(p.targets.ffmiAdj, st);
     if (now) {
       var pr = RoadmapLib.progress(p, st), mc = RoadmapLib.mealCheck(p, avg);
       if (pr.length) h += '<div style="margin-top:8px">'+pr.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num">'+(x.now == null ? '－' : f1(x.now))+' → '+f1(x.goal)+x.unit+(x.gap == null ? '' : '（あと '+sg(x.gap)+(x.reached ? '・到達' : '')+'）')+'</span></div>'; }).join('')+'</div>';
