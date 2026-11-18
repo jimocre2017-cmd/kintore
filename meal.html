@@ -258,7 +258,7 @@ header .sp{margin-left:auto}
 <div class="wrap" id="app">
   <div id="msg"></div>
   <section class="card" id="dayCard"><div class="loading">読み込み中…</div></section>
-  <section class="actions" style="display:flex;gap:8px"><button class="btn" id="camBtn" style="flex:0 0 auto" aria-label="写真ですぐ記録">📷</button><button class="btn primary wide" id="addBtn" style="flex:1">＋ 食事を記録（AIが栄養を見積もります）</button></section>
+  <section class="actions" style="display:flex;gap:8px"><button class="btn" id="camBtn" style="flex:0 0 auto" aria-label="写真ですぐ記録">📷</button><button class="btn" id="picBtn" style="flex:0 0 auto" aria-label="手持ちの写真を選んで記録">🖼</button><button class="btn primary wide" id="addBtn" style="flex:1">＋ 食事を記録（AIが栄養を見積もります）</button></section>
   <section class="card hist" id="listCard"></section>
   <section class="card" id="weekCard"></section>
   <section class="card"><button class="btn" style="width:100%" id="askBtn">💬 食事の相談（外食・飲み会など）</button></section>
@@ -286,8 +286,9 @@ header .sp{margin-left:auto}
     <div class="est" id="mrOut" style="margin:8px 0 6px">肉の重さを入れると、使う液の量が出ます。</div>
     <button class="btn small" id="mrAdd" type="button" style="display:none">結果を「食べたもの」に追記</button>
     <div class="hint">ジモカフェのマリネ液は約12%（水・ワイン各2L、塩600g）。目標は肉と液を合わせた全体の濃度で、均一になったときの値です。</div></details>
-  <div class="rowbtns" style="margin:-4px 0 8px"><button class="btn primary small" id="fPhotoBtn" type="button" style="flex:1">📷 写真で見積もる</button><button class="btn small" id="fEst" style="flex:1">🤖 文章で見積もる</button></div>
+  <div class="rowbtns" style="margin:-4px 0 8px"><button class="btn primary small" id="fPhotoBtn" type="button" style="flex:1">📷 撮影して見積もる</button><button class="btn small" id="fPickBtn" type="button" style="flex:1">🖼 写真を選ぶ</button><button class="btn small" id="fEst" style="flex:1">🤖 文章で見積もる</button></div>
   <input type="file" id="fPhoto" accept="image/*" capture="environment" style="display:none">
+  <input type="file" id="fPhotoFile" accept="image/*" style="display:none">
   <div class="hint" id="fPhotoHint" style="margin:0 0 10px">撮るとすぐ見積もります。写真はAIに送るだけで、保存しません。</div>
   <div class="est" id="fEstBox" style="display:none"></div>
   <div class="fgrid">
@@ -558,7 +559,7 @@ function openForm(id){
   var box = $('fEstBox');
   if (ex && ex.items) { box.style.display = ''; box.innerHTML = '<b>前回の見積もり</b><div style="white-space:pre-wrap">'+esc(ex.items)+'</div>'+(ex.note?'<div class="conf">'+esc(ex.note)+'</div>':''); }
   else { box.style.display = 'none'; box.innerHTML = ''; }
-  $('fEst').textContent = '🤖 文章で見積もる'; $('fPhotoBtn').textContent = '📷 写真で見積もる'; $('fPhotoBtn').disabled = false; $('fEst').disabled = false;
+  $('fEst').textContent = '🤖 文章で見積もる'; $('fPhotoBtn').textContent = '📷 撮影して見積もる'; $('fPhotoBtn').disabled = false; $('fEst').disabled = false;
   $('fPhotoHint').textContent = '撮るとすぐ見積もります。写真はAIに送るだけで、保存しません。';
   $('fMulBox').style.display = 'none'; $('fFoodName').value = ''; renderFoodChips();
   $('fDel').style.display = ex ? '' : 'none'; $('fSave').style.gridColumn = ex ? '' : '1 / -1';
@@ -568,6 +569,7 @@ function openForm(id){
 function closeForm(){ $('formModal').classList.remove('open'); S.form = null; }
 $('addBtn').onclick = function(){ openForm(null); };
 $('camBtn').onclick = function(){ openForm(null); $('fPhoto').click(); }; // 撮影画面を直接開く（1タップ）
+$('picBtn').onclick = function(){ openForm(null); $('fPhotoFile').click(); }; // 手持ちの写真（ギャラリー・添付）から選ぶ
 /* ---- 食事の相談 ---- */
 var ASK_SAMPLES = [
   ['外食・会食', '今日は夜に外食（会食）があります。お酒は飲みません。たくさん食べたいのですが、どうしたらいいですか？'],
@@ -672,12 +674,13 @@ function renderQuestions(f, qs){
   };
 }
 $('fPhotoBtn').onclick = function(){ if (S.form && !S.form.busy) $('fPhoto').click(); };
-$('fPhoto').onchange = function(){
+$('fPickBtn').onclick = function(){ if (S.form && !S.form.busy) $('fPhotoFile').click(); };
+$('fPhoto').onchange = $('fPhotoFile').onchange = function(){
   var file = this.files && this.files[0], f = S.form; this.value = '';
   if (!file || !f) return;
   f.qa = []; f.photo = null;
   $('fPhotoBtn').textContent = '写真を準備中…';
-  shrinkPhoto(file).then(function(b64){ if (S.form !== f) return; f.photo = b64; photoRun(f); }, function(){ $('fPhotoBtn').textContent = '📷 写真で見積もる'; toast('写真を読み込めませんでした。もう一度撮影してください', true); });
+  shrinkPhoto(file).then(function(b64){ if (S.form !== f) return; f.photo = b64; photoRun(f); }, function(){ $('fPhotoBtn').textContent = '📷 撮影して見積もる'; toast('写真を読み込めませんでした。もう一度撮影してください', true); });
 };
 function num(i){ var s = $(i).value.trim(); return s === '' ? 0 : Number(s); }
 $('fSave').onclick = function(){
