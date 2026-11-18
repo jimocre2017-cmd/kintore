@@ -599,6 +599,8 @@ var KT = (function () {
     mealEstimate: function (req) { return api('mealEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
     // 食事の相談（AIを使うのでオンラインのみ）
     mealAsk: function (req) { return api('mealAsk', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    // 食事の写真 → 栄養の見積もり（確信度が低いときは質問つき）。オンラインのみ
+    mealPhotoEstimate: function (req) { return api('mealPhotoEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
     mealReview: function (req) { return api('mealReview', [req], 120000).then(function (r) { return r; }, onlineOnly); },
     mealSave: function (entry) {
       entry = clone(entry); entry.id = entry.id || uuid();
@@ -725,6 +727,11 @@ var KT = (function () {
     // カウンセリングシート（初回の聞き取り＋3か月ごとの見直し）。保存はオンラインの時だけ。状態は端末に控える
     counselGet: function () { return api('counselGet', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, function () { return LS.get('kt_counsel', null); }); },
     counselSave: function (p) { return api('counselSave', [p], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
+    // 性別・年齢（FFMIを同性・同年代と比べる）と、体組成の保存直後の「今の評価」
+    profileGet: function () { return api('profileGet', [], 30000).then(function (r) { LS.set('kt_profile', r); return r; }, function () { return LS.get('kt_profile', null); }); },
+    profileCached: function () { return Promise.resolve(LS.get('kt_profile', null)); },
+    profileSet: function (p) { return api('profileSet', [p], 30000).then(function (r) { LS.set('kt_profile', r); return r; }, onlineOnly); },
+    bodyNowEval: function () { return api('bodyNowEval', [], 90000).then(function (r) { return r; }, onlineOnly); },
     counselSkip: function () { return api('counselSkip', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
 
     // 種目の表示オン／オフ（種目マスタの「有効」列）。オンラインの時だけ

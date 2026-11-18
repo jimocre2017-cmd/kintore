@@ -32,6 +32,7 @@ function counselSave(p) {
   pr.setProperty('COUNSEL_CHART', chart);
   pr.setProperty('COUNSEL_AT', today_());
   pr.deleteProperty('COUNSEL_SKIP');
+  if (p.profile && (p.profile.sex || p.profile.age)) profileSet(p.profile);
   return counselGet();
 }
 
@@ -39,4 +40,27 @@ function counselSave(p) {
 function counselSkip() {
   PropertiesService.getScriptProperties().setProperty('COUNSEL_SKIP', today_());
   return counselGet();
+}
+
+/**
+ * 性別・年齢（FFMIを同性・同年代と比べるのに使う）。カウンセリングシートの回答か、体組成画面の入力から保存する。
+ * 年齢は「入力した日」の年齢として保存し、経過年数ぶん自動で加算する。
+ */
+function profileGet() {
+  var sex = counselProp_('PROFILE_SEX'), age = Number(counselProp_('PROFILE_AGE')) || null, at = counselProp_('PROFILE_AT');
+  if (age && at) age += Math.floor((toDays_(today_()) - toDays_(at)) / 365.25);
+  return { sex: sex === 'M' || sex === 'F' ? sex : '', age: age, setOn: at || null };
+}
+
+/** {sex:'M'|'F', age:数字}。空の項目は変更しない */
+function profileSet(p) {
+  p = p || {};
+  var pr = PropertiesService.getScriptProperties(), cur = profileGet();
+  var sex = p.sex === 'M' || p.sex === 'F' ? p.sex : '';
+  var age = Math.round(Number(p.age));
+  if (p.age !== undefined && p.age !== null && p.age !== '' && !(age >= 10 && age <= 100)) throw new Error('年齢は10〜100の数字で入力してください');
+  if (sex) pr.setProperty('PROFILE_SEX', sex);
+  if (age >= 10 && age <= 100) { pr.setProperty('PROFILE_AGE', String(age)); pr.setProperty('PROFILE_AT', today_()); }
+  else if (!cur.setOn && sex) pr.setProperty('PROFILE_AT', today_());
+  return profileGet();
 }
