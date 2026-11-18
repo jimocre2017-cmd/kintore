@@ -166,6 +166,7 @@ header .sp{margin-left:auto}
     <button class="btn wide" id="manBtn">＋ 手動で追加（持ち歩けなかった時など）</button>
   </section>
   <section class="card rec" id="rec" style="display:none"></section>
+  <section class="card" id="rmCard" style="display:none"></section>
   <section class="card" id="calCard"><div class="loading">読み込み中…</div></section>
   <section class="card" id="anCard"></section>
   <section class="card hist" id="histCard"></section>
@@ -220,6 +221,7 @@ header .sp{margin-left:auto}
 <script src="coach.js"></script>
 <script src="guide.js"></script>
 <script src="cardio-lib.js"></script>
+<script src="roadmap-lib.js"></script>
 <script>
 var CL = CardioLib;
 var $ = function (id) { return document.getElementById(id); };
@@ -249,7 +251,31 @@ function render(){
   $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
   if (!S.cal) S.cal = { y: +dt[0], m: +dt[1] };
   if (!S.an.anchor) S.an.anchor = d.today;
-  renderMsg(); renderStats(); renderCal(); renderAn(); renderHist();
+  renderMsg(); renderStats(); renderRm(); renderCal(); renderAn(); renderHist();
+}
+/* マスタープランの有酸素：第1期＝時速の範囲を守れているか／第2期＝週の回数。期は計画画面での選択（据え置き・進む）に従う */
+function rmCtx(d){
+  var pl = (S.planC && S.planC.plan) || {}, logs = (S.bodyC && S.bodyC.logs) || [];
+  return { fat7: RoadmapLib.fat7(logs, d.today), decision: pl.roadmapDecision || '' };
+}
+function renderRm(){
+  var el = $('rmCard'); if (!el || typeof RoadmapLib === 'undefined' || !S.data) return;
+  var d = S.data, R = RoadmapLib.resolve(d.today, rmCtx(d)), p = R.phase, c = RoadmapLib.cardioCheck(p, d.logs, d.today);
+  if (!c) { el.style.display = 'none'; return; }
+  var h = '<h3>マスタープラン：有酸素（'+esc(p.label)+'）</h3>';
+  if (c.mode === 'speed') {
+    h += '<div style="font-size:14px;line-height:1.7">時速 <b class="num">'+c.min+'〜'+c.max+' km</b> を厳守。母趾球・小趾球・踵の3点接地で、スピード競争はしない（右足首・すねの保護）。</div>';
+    if (!c.sessions.length) h += '<div class="empty" style="padding:10px 0">直近7日の有酸素の記録はありません。</div>';
+    else h += c.sessions.map(function(x){
+      var lb = x.state === 'in' ? '範囲内' : x.state === 'fast' ? '速すぎ' : x.state === 'slow' ? '遅め' : '時速なし（距離か時間が未入力）';
+      return '<div class="num" style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)"><span>'+md(x.date)+'　'+esc(x.type)+(x.km ? '　'+fmtKm(x.km)+'km' : '')+'</span><span style="color:'+(x.state === 'in' ? 'var(--good)' : x.state ? 'var(--danger)' : 'var(--ink-3)')+'">'+(x.speed != null ? x.speed+' km/h　' : '')+lb+'</span></div>';
+    }).join('');
+    if (c.outside) h += '<div class="note">直近7日で範囲から外れた回が '+c.outside+' 回あります。次回は時速を '+c.min+'〜'+c.max+' に合わせてください。</div>';
+  } else {
+    h += '<div style="font-size:14px;line-height:1.7">有酸素は週 <b class="num">'+c.min+'〜'+c.max+' 回</b>に減らし、回復と筋肥大を最優先にします。</div>'
+      + '<div class="note">直近7日：'+c.days+'日（'+(c.state === 'in' ? '範囲内' : c.state === 'over' ? '多め' : '少なめ')+'）</div>';
+  }
+  el.innerHTML = h; el.style.display = '';
 }
 function renderMsg(){
   var h = '';
@@ -777,6 +803,8 @@ function init(){
     if (!S.rec) setTimeout(function(){ Rec.openSave(Rec.build(saved, saved.endAt || Date.now())); }, 400);
   }
   renderRec();
+  KT.call('planCached').then(function(v){ S.planC = v; renderRm(); }, function(){});
+  KT.call('bodyCached').then(function(v){ S.bodyC = v; renderRm(); }, function(){});
   KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } }, function(e){ healStaleCache(e); });
   KT.call('cardioInit').then(function(v){ S.data = v; S.loadErr = null; render(); }, function(e){
     if (healStaleCache(e)) return;
