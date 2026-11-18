@@ -47,7 +47,7 @@ function render(){
 /* ---- マスタープラン（2段階リコンプ＆リーンバルク）：いまの期・目標との差・食事の平均・食事目標への反映 ---- */
 function rmState(){
   var logs = (S.body && S.body.logs) || [], last = null, i;
-  for (i = logs.length - 1; i >= 0; i--) { if (logs[i].weight != null) { last = logs[i]; break; } }
+  for (i = 0; i < logs.length; i++) { if (logs[i].weight != null && (!last || logs[i].date > last.date)) last = logs[i]; }
   if (!last) return {};
   var st = { weightKg: last.weight, fatPct: last.fat != null ? last.fat : null, leanKg: null };
   if (last.fat != null) st.leanKg = last.weight * (1 - last.fat / 100);
@@ -67,7 +67,7 @@ function rmCtx(today){
 }
 function rmFfmiRow(goal, st){
   var logs = (S.body && S.body.logs) || [], ht = 0, i, now = null;
-  for (i = logs.length - 1; i >= 0; i--) if (logs[i].height) { ht = logs[i].height; break; }
+  var hd = ''; for (i = 0; i < logs.length; i++) if (logs[i].height && logs[i].date > hd) { ht = logs[i].height; hd = logs[i].date; }
   if (typeof FfmiLib !== 'undefined' && ht && st && st.weightKg != null && st.fatPct != null) { var v = FfmiLib.ffmi(st.weightKg, st.fatPct, ht); if (v != null) now = FfmiLib.r1(FfmiLib.normalized(v, ht)); }
   return '<div class="note" style="margin:6px 0 0">参考：いまの補正後FFMI <b class="num">'+(now == null ? '－' : f1(now))+'</b> → '+f1(goal)+'（除脂肪量の目標と対になる指標。体組成計の推定値なので目安です）</div>';
 }
