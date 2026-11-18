@@ -75,7 +75,7 @@
     var v = VERDICT[r.verdict] || VERDICT.unknown, h = '';
     h += '<span class="vd" style="background:' + v[1] + '">' + esc(v[0]) + '</span>';
     h += '<div class="hl">' + esc(r.headline) + '</div>';
-    h += '<div class="meta">' + esc(r.createdAt || '') + (stale ? '（前回の診断）' : '') + '</div>';
+    h += '<div class="meta">' + esc(r.createdAt || '') + (stale ? '（前回の診断）' : '') + (r.cached ? '（今日すでに出した診断を再表示。記録が変わっていないので、AIは使っていません）' : '') + '</div>';
     h += fmtFacts(r.facts);
     h += '<div class="sec"><b>目標と期限</b><p>' + esc(r.goalCheck) + '</p></div>';
     h += '<div class="sec"><b>食事</b><p>' + esc(r.meal) + '</p></div>';
@@ -94,21 +94,28 @@
   function show(body, err) {
     $('coachBody').innerHTML = body + (err ? '<div class="err">' + esc(err) + '</div>' : '');
   }
-  function goBtn(label) { return '<button class="go" id="coachGo">' + label + '</button>'; }
-  function bindGo() { var b = $('coachGo'); if (b) b.addEventListener('click', run); }
+  // force：同じ記録でもAIで作り直す（Geminiの利用回数を使う）。ふつうのボタンは、記録が変わっていなければ保存済みの診断を出す
+  function goBtn(label, cached) {
+    return '<button class="go" id="coachGo">' + label + '</button>' +
+      (cached ? '<button class="go" id="coachForce" style="margin-left:8px;background:transparent;color:var(--ink-2,#55544f);border:1px solid var(--line,#e2e1dc)">それでもAIで作り直す</button>' : '');
+  }
+  function bindGo() {
+    var b = $('coachGo'); if (b) b.addEventListener('click', function () { run(false); });
+    var f = $('coachForce'); if (f) f.addEventListener('click', function () { run(true); });
+  }
 
-  function run() {
+  function run(force) {
     if (busy) { show('<div class="busy">別の処理が終わるまでお待ちください…</div>'); return; }
     busy = true;
     show('<div class="busy">記録を読んで診断しています…（10〜30秒）</div>');
-    KT.call('coachJudge').then(function (r) {
-      busy = false; if (tab !== 'judge') return; show(resultHtml(r, false) + goBtn('もう一度診断する')); bindGo();
+    KT.call('coachJudge', { force: !!force }).then(function (r) {
+      busy = false; if (tab !== 'judge') return; show(resultHtml(r, false) + goBtn('最新の記録で診断し直す', !!r.cached)); bindGo();
       var bx = root.querySelector('.coachbox'); if (bx) bx.scrollTop = 0;
     }).catch(function (e) {
       busy = false; if (tab !== 'judge') return;
       KT.call('coachLast').then(function (c) {
         var msg = (e && e.message) || '診断に失敗しました';
-        if (c && c.res) show(resultHtml(c.res, true) + goBtn('もう一度診断する'), msg); else show(goBtn('診断する'), msg);
+        if (c && c.res) show(resultHtml(c.res, true) + goBtn('最新の記録で診断し直す'), msg); else show(goBtn('診断する'), msg);
         bindGo();
       });
     });
@@ -223,7 +230,7 @@
   }
   function openJudge() {
     KT.call('coachLast').then(function (c) {
-      if (c && c.res && Date.now() - c.t < FRESH_MS) { show(resultHtml(c.res, false) + goBtn('もう一度診断する')); bindGo(); }
+      if (c && c.res && Date.now() - c.t < FRESH_MS) { show(resultHtml(c.res, false) + goBtn('最新の記録で診断し直す')); bindGo(); }
       else run();
     });
   }

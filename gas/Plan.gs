@@ -209,7 +209,7 @@ function planStr_(v, max) { return String(v || '').replace(/\r\n?/g, '\n').trim(
 function planArr_(v, n, max) { return (v || []).map(function (x) { return planStr_(x, max); }).filter(function (x) { return x; }).slice(0, n); }
 
 /** 次週のカロリー調整案：数値は PlanLib で確定し、Gemini は文章にする。履歴シートに保存する */
-function planAdvise() {
+function planAdvise(req) {
   var v = planView_();
   if (!v.configured) throw new Error('先に「計画の設定」で目標の体脂肪率と開始日を決めてください');
   if (v.noBody || !v.adjust) throw new Error('体組成の記録がまだありません');
@@ -228,7 +228,8 @@ function planAdvise() {
       now: v.now ? { fatPct: PlanLib.r1(v.now.fat), plannedFatPct: PlanLib.r1(v.now.plannedFat), gapKg: PlanLib.r2(v.now.gapKg), remainingKg: PlanLib.r1(v.now.remainingKg) } : null,
       weeks: v.weeks.slice(-3), meals7: meals7
     };
-    var res = gemini_(planAdviceSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), planAdviceSchema_());
+    var advUser = '# 記録データ（JSON）\n' + JSON.stringify(data);
+    var res = aiCached_('planAdv', { u: advUser }, !!(req && req.force), function () { return gemini_(planAdviceSystem_(), advUser, planAdviceSchema_()); }); // 同じ日・同じ記録なら保存済みの提案を使う
     advice = {
       headline: planStr_(res.headline, 200), summary: planStr_(res.summary, 600), whyTarget: planStr_(res.whyTarget, 400),
       actions: (res.actions || []).slice(0, 4).map(function (a) { return { title: planStr_(a.title, 60), detail: planStr_(a.detail, 300) }; }),

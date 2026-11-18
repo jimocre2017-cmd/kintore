@@ -322,7 +322,9 @@ function mealEstimate(req) {
   var foodTxt = foods.length ? '\n\n登録済みの品目（1回分の栄養）：\n' + foods.map(function (f) {
     return '- ' + f.name + '：' + f.kcal + 'kcal、たんぱく質' + f.protein + 'g、脂質' + f.fat + 'g、炭水化物' + f.carbs + 'g' + (f.text ? '（内容：' + f.text.replace(/\n/g, ' ').slice(0, 120) + '）' : '');
   }).join('\n') : '';
-  var res = gemini_(mealEstimateSystem_(), '区分：' + type + '\n食事の内容：\n' + text + foodTxt, mealEstimateSchema_());
+  var estUser = '区分：' + type + '\n食事の内容：\n' + text + foodTxt;
+  // 同じ日に同じ内容を見積もるときは、保存済みの結果を使う（req.force で作り直し）
+  var res = aiCached_('mealEst', { u: estUser }, !!req.force, function () { return gemini_(mealEstimateSystem_(), estUser, mealEstimateSchema_()); });
   var out = mealNormalize_(res);
   if (!out.items.length) throw new Error(out.note || '食事の内容から栄養を見積もれませんでした。食べたものをもう少し具体的に書いてください');
   out.items.forEach(function (it) { it.line = it.name + (it.amount ? '（' + it.amount + '）' : '') + ' ' + it.kcal + 'kcal P' + it.protein + ' F' + it.fat + ' C' + it.carbs; });
@@ -383,7 +385,8 @@ function mealAsk(req) {
     + '\n\n今日これまでに食べたもの：\n' + (eaten.join('\n') || '（まだ記録なし）')
     + (w ? '\n\n直近7日（記録した日だけ）：平均 ' + w.averagePerLoggedDay.kcal + 'kcal、たんぱく質' + w.averagePerLoggedDay.protein + 'g、脂質' + w.averagePerLoggedDay.fat + 'g、脂質エネルギー比' + w.fatEnergyPercent + '%' : '')
     + (sug && sug.protein ? '\n\n体組成からの目安：たんぱく質 約' + sug.protein + 'g' + (sug.cutKcal ? '、減量なら約' + sug.cutKcal + 'kcal' : '') : '');
-  var res = gemini_(mealAskSystem_(), ctx + '\n\n## 相談\n' + q, mealAskSchema_());
+  var askUser = ctx + '\n\n## 相談\n' + q;
+  var res = aiCached_('mealAsk', { u: askUser }, !!req.force, function () { return gemini_(mealAskSystem_(), askUser, mealAskSchema_()); });
   var secs = (res.sections || []).slice(0, 6).map(function (s) {
     return { title: String(s.title || '').slice(0, 30), points: (s.points || []).slice(0, 8).map(function (x) { return String(x).slice(0, 200); }) };
   }).filter(function (s) { return s.points.length; });
@@ -446,7 +449,8 @@ function mealReview(req) {
   var partial = date === today_() && !!c.partial;
   var ctx = '日付：' + date + (partial ? '（まだ1日の途中）' : '（1日が終わった／過去の日）') + '\n\n目標：\n' + (lines.join('\n') || '（目標未設定）')
     + '\n\nここまでの合計：' + Math.round(tot.kcal) + 'kcal、たんぱく質' + n(tot.protein) + 'g、脂質' + n(tot.fat) + 'g、炭水化物' + n(tot.carbs) + 'g\n\n食事の記録：\n' + rec.join('\n\n');
-  var res = gemini_(mealReviewSystem_(), ctx, mealReviewSchema_());
+  // コメント生成は軽量モデル。同じ日・同じ記録なら保存済みの分析を使う（req.force で作り直し）
+  var res = aiCached_('mealReview', { u: ctx }, !!req.force, function () { return gemini_(mealReviewSystem_(), ctx, mealReviewSchema_(), null, { lite: true }); });
   function arr(a, max) { return (a || []).slice(0, max).map(function (x) { return String(x).slice(0, 220); }).filter(function (x) { return x; }); }
   var out = { summary: String(res.summary || '').slice(0, 400), causes: arr(res.causes, 4), actions: arr(res.actions, 5), nextMeal: String(res.nextMeal || '').slice(0, 300) };
   if (!out.summary && !out.actions.length) throw new Error('分析を作れませんでした。もう一度お試しください');

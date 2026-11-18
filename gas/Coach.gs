@@ -194,11 +194,21 @@ function coachSchema_() {
 
 var COACH_VERDICTS = ['on_track', 'slightly_behind', 'behind', 'ahead', 'unknown'];
 
-/** ワンクリックの総合診断。結果を履歴シートに残して返す */
-function coachJudge() {
+/**
+ * ワンクリックの総合診断。結果を履歴シートに残して返す。
+ * 同じ日に同じ記録なら、Gemini を呼ばずに保存済みの診断を返す（cached:true）。req.force=true で作り直す。
+ * キャッシュの照合には、毎回変わる nowTime と、診断のたびに変わる previous を含めない
+ */
+function coachJudge(req) {
   var data = coachData_();
   var tr0 = data.training, hasTrain = tr0 && (tr0.last28Days.strengthDays || tr0.last28Days.cardioDays);
   if (!data.body && !data.meal && !hasTrain) throw new Error('記録がまだありません。体組成・食事・運動のどれかを記録してから使ってください');
+  var keyData = JSON.parse(JSON.stringify(data));
+  delete keyData.nowTime; delete keyData.previous;
+  return aiCached_('coach', keyData, !!(req && req.force), function () { return coachJudgeRun_(data); });
+}
+
+function coachJudgeRun_(data) {
   var res = gemini_(coachSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), coachSchema_());
   var out = {
     verdict: COACH_VERDICTS.indexOf(res.verdict) >= 0 ? res.verdict : 'unknown',
@@ -355,7 +365,11 @@ function coachAsk(req) {
   }
   var user = '# 相談\nテーマ：' + ASK_TOPICS[topic][0] + '\n質問：' + q + (page ? '\nいま開いている画面（page）：' + page : '') + '\n\n# 会話の履歴（古い順）\n' + JSON.stringify(hist) +
     (manual ? '\n\n# アプリの説明書（manual）\n' + manual : '') + '\n\n# 記録データ（JSON）\n' + JSON.stringify(data);
-  var res = gemini_(askSystem_(topic), user, askSchema_());
+  // 使い方の質問は軽量モデル。同じ日・同じ質問・同じ記録なら保存済みの回答を使う（req.force で作り直し）
+  var keyData = JSON.parse(JSON.stringify(data)); delete keyData.nowTime; delete keyData.previous;
+  var res = aiCached_('ask', { topic: topic, q: q, page: page, hist: hist, manual: manual, data: keyData }, !!req.force, function () {
+    return gemini_(askSystem_(topic), user, askSchema_(), null, { lite: topic === 'howto' });
+  });
   var out = {
     topic: topic, topicLabel: ASK_TOPICS[topic][0], question: q,
     answer: planStr_(res.answer, 1500), points: planArr_(res.points, 4, 200), nextSteps: planArr_(res.nextSteps, 3, 250),

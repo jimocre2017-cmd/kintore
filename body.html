@@ -445,27 +445,33 @@ function renderPlan(){
 }
 
 
-/* ---- 今の評価（保存直後の一言） ---- */
-function nowEval(){
+/* ---- 今の評価（ボタンを押したときだけ。保存のたびには呼ばない＝Geminiの利用回数を節約） ---- */
+// force：同じ測定でもAIで作り直す。ふつうは、同じ日・同じ測定なら保存済みの評価を再表示する（AIは使わない）
+function nowEval(force){
   S.now = { loading: true }; renderNow();
-  var t0 = Date.now();
-  KT.sync().then(function(){ return KT.call('bodyNowEval'); }).then(function(r){ S.now = r; renderNow(); }, function(er){
+  KT.sync().then(function(){ return KT.call('bodyNowEval', { force: !!force }); }).then(function(r){ S.now = r; renderNow(); }, function(er){
     S.now = { error: er.offline ? 'オフラインのため、今の評価はできません（記録は保存されています）' : (/^不明な操作/.test(er.message) ? '今の評価を使うには、サーバー側の更新が必要です（gas/README.md の「今の評価・写真の見積もり」）' : '今の評価を取得できませんでした：' + er.message) }; renderNow();
   });
 }
 function renderNow(){
   var c = $('nowCard'), n = S.now;
-  if (!n) { c.style.display = 'none'; c.innerHTML = ''; return; }
   c.style.display = '';
-  var h = '<h3>今の評価</h3>';
-  if (n.loading) h += '<div class="loading">いまの測定を評価しています…</div>';
-  else if (n.error) h += '<div class="empty">'+esc(n.error)+'</div>';
-  else {
+  var h = '<h3>今の評価</h3>', btn = '';
+  if (n && n.loading) h += '<div class="loading">いまの測定を評価しています…</div>';
+  else if (n && n.error) { h += '<div class="empty">'+esc(n.error)+'</div>'; btn = '<button class="btn small" id="nowBtn">もう一度ためす</button>'; }
+  else if (n) {
     var col = n.tone === 'good' ? 'var(--good)' : (n.tone === 'watch' ? 'var(--danger)' : 'var(--ink-2)'), lb = n.tone === 'good' ? '良い方向' : (n.tone === 'watch' ? '注意' : 'ぶれの範囲');
     h += '<div style="border-left:4px solid '+col+';padding:4px 0 4px 10px;line-height:1.7"><b style="color:'+col+'">'+lb+'</b>　'+esc(n.comment)+'</div>'
-      + '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">測定の直後にAIが、直近の平均・4週の傾向・目標をふまえて評価します（'+esc(n.at||'')+'）。全体の評価は筋トレ画面の「総合コーチ」で。</div>';
+      + '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">直近の平均・4週の傾向・目標をふまえたAIの評価です（'+esc(n.at||'')+(n.cached ? '・同じ測定の評価を再表示。AIは使っていません' : '')+'）。全体の評価は筋トレ画面の「総合コーチ」で。</div>';
+    btn = '<button class="btn small" id="nowBtn">測り直したので評価し直す</button>' + (n.cached ? '<button class="btn small" id="nowForce" style="margin-left:8px">それでもAIで作り直す</button>' : '');
+  } else {
+    h += '<div class="hint" style="font-size:12px;color:var(--ink-3)">測ったあと、ボタンを押したときだけAIが評価します（保存しただけでは呼びません）。</div>';
+    btn = '<button class="btn small" id="nowBtn">今の評価を見る</button>';
   }
+  if (btn && !(n && n.loading)) h += '<div class="rowbtns" style="margin-top:8px">'+btn+'</div>';
   c.innerHTML = h;
+  var b = $('nowBtn'); if (b) b.onclick = function(){ nowEval(false); };
+  var f = $('nowForce'); if (f) f.onclick = function(){ nowEval(true); };
 }
 
 /* ---- FFMI：同性・同年代の分布との比較 ---- */
@@ -644,7 +650,7 @@ $('fSave').onclick = function(){
   }
   if (e.bmi === '' && e.weight !== '' && e.height !== '') e.bmi = BL.bmi(e.weight, e.height);
   ['weight','fat','muscle','bmi','bmr','visceral','height'].forEach(function(k){ e[k] = e[k] === '' ? null : e[k]; });
-  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); if (e.weight != null && !e.exclude && date === S.data.today) nowEval(); }, function(er){ toast(er.message, true); });
+  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); S.now = null; renderNow(); }, function(er){ toast(er.message, true); });
 };
 $('fDel').onclick = function(){
   if (!confirm('この測定を削除しますか？')) return;

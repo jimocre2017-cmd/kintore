@@ -32,6 +32,7 @@ var sandbox = {
   toDays_: function (s) { var p = s.split('/'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); },
   addDays_: function (s, n) { var d = new Date((sandbox.toDays_(s) + n) * 86400000); return d.getUTCFullYear() + '/' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '/' + ('0' + d.getUTCDate()).slice(-2); },
   aiModelUsed_: 'fake-model',
+  aiCached_: function (kind, key, force, fn) { return fn(); }, // キャッシュなし（AiTrainer.gs の代わり）
   gemini_: function (system, user, schema) {
     calls.push({ system: system, user: user });
     return { headline: '来週は1日' + JSON.parse(user.split('\n')[1]).adjust.target + 'kcalで進めます', summary: 'まとめ', whyTarget: '理由', actions: [{ title: 'a', detail: 'b' }], foodSwaps: ['x'], watch: [], nextCheck: 'n' };
