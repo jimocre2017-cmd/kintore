@@ -41,7 +41,81 @@ function render(){
   S.V = view();
   var today = (S.body && S.body.today) || KT.today();
   $('dateLbl').textContent = today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(today)+'）';
-  renderMsg(); renderHero(); renderAdjust(); renderChart(); renderMilestones(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
+  renderMsg(); renderHero(); renderRoadmap(); renderAdjust(); renderChart(); renderMilestones(); renderDays(); renderWeeks(); renderMonths(); renderSettings();
+}
+
+/* ---- マスタープラン（2段階リコンプ＆リーンバルク）：いまの期・目標との差・食事の平均・食事目標への反映 ---- */
+function rmState(){
+  var logs = (S.body && S.body.logs) || [], last = null, i;
+  for (i = logs.length - 1; i >= 0; i--) { if (logs[i].weight != null) { last = logs[i]; break; } }
+  if (!last) return {};
+  var st = { weightKg: last.weight, fatPct: last.fat != null ? last.fat : null, leanKg: null };
+  if (last.fat != null) st.leanKg = last.weight * (1 - last.fat / 100);
+  return st;
+}
+function rmMealAvg(today){
+  if (!S.meal || !S.meal.logs) return null;
+  var from = PL.addDays(today, -6), days = PL.mealDays(S.meal.logs.filter(function(l){ return l.date >= from && l.date <= today; })), ks = Object.keys(days).filter(function(k){ return days[k].complete; });
+  if (!ks.length) return null;
+  function avg(f){ return ks.reduce(function(a, k){ return a + days[k][f]; }, 0) / ks.length; }
+  return { kcal: avg('kcal'), protein: avg('protein'), fat: avg('fat'), days: ks.length };
+}
+function rmRange(r, u){ return r ? r.min + '〜' + r.max + (u || '') : '－'; }
+function rmCtx(today){
+  var pl = (S.plan && S.plan.plan) || {};
+  return { fat7: RoadmapLib.fat7((S.body && S.body.logs) || [], today), decision: pl.roadmapDecision || '' };
+}
+function renderRoadmap(){
+  var el = $('roadmapCard'); if (!el || typeof RoadmapLib === 'undefined') return;
+  var RM = RoadmapLib.ROADMAP, today = (S.body && S.body.today) || KT.today(), ctx = rmCtx(today), R = RoadmapLib.resolve(today, ctx);
+  var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'</h3>';
+  var first = RM.phases[0], f7 = ctx.fat7;
+  h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
+  if (R.needChoice) {
+    h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
+      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
+      + '<div class="note">据え置くと、食事は第1期の範囲（1,660〜1,800kcal）のままなので、減量の赤字が続きます。いつでも選び直せます。</div></div>';
+  } else if (R.decision === 'hold') {
+    h += '<div class="banner warn" style="margin-top:10px">いまのプラン（第1期）を据え置いています。<div class="rowbtns"><button class="btn small primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期へ進む</button></div></div>';
+  } else if (R.decision === 'advance') {
+    h += '<div class="banner info" style="margin-top:10px">第2期に進んでいます。<div class="rowbtns"><button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>第1期に戻す</button></div></div>';
+  } else if (R.overdue) {
+    h += '<div class="banner warn" style="margin-top:10px">第1期の期限（'+md(first.to)+'）を過ぎましたが、体脂肪率 '+first.targets.fatPct+'% にはまだ届いていません。期限の見直しは総合コーチに相談できます。</div>';
+  }
+  RM.phases.forEach(function(p, i){
+    var now = R.index === i;
+    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
+    h += '<div class="kvs"><div>カロリー<b class="num">'+rmRange(p.kcal)+'</b></div>'
+      + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
+      + '<div>'+(p.carbs ? '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>' : '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>')+'</div></div>';
+    h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+    if (now) {
+      var pr = RoadmapLib.progress(p, st), mc = RoadmapLib.mealCheck(p, avg);
+      if (pr.length) h += '<div style="margin-top:8px">'+pr.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num">'+(x.now == null ? '－' : f1(x.now))+' → '+f1(x.goal)+x.unit+(x.gap == null ? '' : '（あと '+sg(x.gap)+(x.reached ? '・到達' : '')+'）')+'</span></div>'; }).join('')+'</div>';
+      if (mc.length) h += '<div style="margin-top:8px"><div class="note" style="margin:0 0 2px">直近7日の食事の平均（記録が揃った'+avg.days+'日分）</div>'+mc.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num '+(x.state === 'in' ? 'neg' : 'pos')+'">'+f1(x.avg)+x.unit+'（'+x.min+'〜'+x.max+'：'+(x.state === 'in' ? '範囲内' : x.state === 'under' ? '少ない' : '多い')+'）</span></div>'; }).join('')+'</div>';
+      h += '<div class="rowbtns"><button class="btn small primary" id="rmApply"'+(S.rmBusy ? ' disabled' : '')+'>この期の食事目標を反映</button></div><div class="note">食事画面の目安・下限・上限を、上の範囲の中央と両端に書き換えます。'+(p.carbs ? 'たんぱく質・脂質はいまの値のままです。' : '')+'</div>';
+    }
+    h += '</div>';
+  });
+  h += '<h3 style="margin-top:14px">今日からの実践ルール</h3><ul>'+RM.rules.map(function(x){ return '<li style="font-size:13px;line-height:1.7;color:var(--ink-2)">'+esc(x)+'</li>'; }).join('')+'</ul></div>';
+  el.innerHTML = h;
+  var b = $('rmApply'); if (b) b.onclick = rmApply;
+  var a = $('rmAdvance'); if (a) a.onclick = function(){ rmDecide('advance'); };
+  var o = $('rmHold'); if (o) o.onclick = function(){ rmDecide('hold'); };
+  var k = $('rmBack'); if (k) k.onclick = function(){ rmDecide(''); };
+}
+function rmDecide(d){
+  if (S.rmBusy) return;
+  S.rmBusy = true; renderRoadmap();
+  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。「この期の食事目標を反映」で食事の範囲も切り替えられます' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
+    function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
+}
+function rmApply(){
+  var today = (S.body && S.body.today) || KT.today(), c = RoadmapLib.resolve(today, rmCtx(today));
+  if (S.rmBusy) return;
+  var g = RoadmapLib.mealGoals(c.phase);
+  S.rmBusy = true; renderRoadmap();
+  KT.call('mealSetGoals', g).then(function(){ S.rmBusy = false; return KT.call('mealInit').catch(function(){ return S.meal; }); }).then(function(m){ if (m) S.meal = m; render(); toast('食事の目標に反映しました'); }, function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 
 function renderMsg(){

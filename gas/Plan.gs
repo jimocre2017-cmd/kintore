@@ -32,6 +32,17 @@ function planPausesRead_() {
   try { return PlanLib.cleanPauses(JSON.parse(PropertiesService.getScriptProperties().getProperty('PLAN_PAUSES') || '[]')); } catch (e) { return []; }
 }
 
+/** マスタープランの選択：''＝未選択／'advance'＝第2期へ進む／'hold'＝いまのプラン（第1期）を据え置く */
+function roadmapDecisionRead_() {
+  var v = PropertiesService.getScriptProperties().getProperty('ROADMAP_DECISION');
+  return v === 'advance' || v === 'hold' ? v : '';
+}
+function roadmapSet(d) {
+  var v = d === 'advance' || d === 'hold' ? d : '';
+  PropertiesService.getScriptProperties().setProperty('ROADMAP_DECISION', v);
+  return planGet();
+}
+
 function planSettings_() {
   var p = PropertiesService.getScriptProperties();
   var g = Number(p.getProperty('BODY_GOAL_FAT')) || 0;
@@ -44,7 +55,8 @@ function planSettings_() {
     shape: p.getProperty('PLAN_SHAPE') === 'linear' ? 'linear' : 'ease',
     pauses: planPausesRead_(),
     phase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
-    floorFat: Number(p.getProperty('PLAN_FLOOR_FAT')) || 0
+    floorFat: Number(p.getProperty('PLAN_FLOOR_FAT')) || 0,
+    roadmapDecision: roadmapDecisionRead_()
   };
 }
 

@@ -56,7 +56,7 @@ sandbox.bodyGet = function () { return { logs: B.daily(entries) }; };
 sandbox.mealGet = function () { return { logs: meals, goals: { kcal: Number(props.MEAL_GOAL_KCAL) || 0 } }; };
 var geminiStub = sandbox.gemini_;
 vm.createContext(sandbox);
-vm.runInContext(load('PlanLib.gs') + '\n' + load('Plan.gs') + '\n' + load('Coach.gs') + '\n' + load('AiTrainer.gs'), sandbox);
+vm.runInContext(load('PlanLib.gs') + '\n' + load('RoadmapLib.gs') + '\n' + load('Plan.gs') + '\n' + load('Coach.gs') + '\n' + load('AiTrainer.gs'), sandbox);
 sandbox.gemini_ = geminiStub; sandbox.aiModelUsed_ = 'fake-model'; // AiTrainer.gs の本物を読み込んだので、偽物に戻す
 var run = function (code) { return vm.runInContext(code, sandbox); };
 

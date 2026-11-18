@@ -833,6 +833,7 @@ function doPost(e) {
       planSet: planSet,
       planAdvise: planAdvise,
       planApply: planApply,
+      roadmapSet: typeof roadmapSet === 'function' ? roadmapSet : undefined,
       counselGet: typeof counselGet === 'function' ? counselGet : undefined,
       counselSave: typeof counselSave === 'function' ? counselSave : undefined,
       counselSkip: typeof counselSkip === 'function' ? counselSkip : undefined,

@@ -642,6 +642,7 @@ var KT = (function () {
     planSet: function (p) { return api('planSet', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
     planAdvise: function (req) { return api('planAdvise', [req || {}], 120000).then(function (r) { return r; }, onlineOnly); },
     planApply: function (p) { return api('planApply', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
+    roadmapSet: function (d) { return api('roadmapSet', [d], 30000).then(function (r) { LS.set('kt_plan', r); return r; }, onlineOnly); },
     planPauseApply: function (p) { return api('planPauseApply', [p], 30000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
 
     getInitData: function () {
