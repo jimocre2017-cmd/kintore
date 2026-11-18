@@ -11,6 +11,7 @@ var sb = {
     { id: 'c', date: '2026/11/13', time: '12:00', type: '昼食', text: '別の日', kcal: 700, protein: 30, fat: 20, carbs: 80, items: '' } ],
     suggest: { protein: 120, cutKcal: 1900 } }; },
   aiMeal_: function () { return { averagePerLoggedDay: { kcal: 2000, protein: 100, fat: 60 }, fatEnergyPercent: 27 }; },
+  aiCached_: function (kind, key, force, fn) { return fn(); }, // キャッシュなし（AiTrainer.gs の代わり）
   gemini_: function (sys, user) { calls.push({ sys: sys, user: user }); return sb.reply; }
 };
 vm.createContext(sb);

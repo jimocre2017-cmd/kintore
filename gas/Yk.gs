@@ -128,7 +128,7 @@ function ykAdvise(req) {
   try { body = aiBody_(today); } catch (e) { body = null; }
 
   var user = '# 今日のメニュー（確定済み）と充足度\n' + JSON.stringify({ today: today, plan: plan, readiness: readiness, body: body });
-  var res = gemini_(ykAdviseSystem_(), user, ykAdviseSchema_());
+  var res = aiCached_('yk', { u: user }, !!req.force, function () { return gemini_(ykAdviseSystem_(), user, ykAdviseSchema_()); }); // 同じ日・同じ入力なら保存済みの結果を使う
   var v = String((res.phase || {}).verdict || '');
   if (['keep_cut', 'consider_bulk', 'in_bulk'].indexOf(v) < 0) v = plan.phase === 'bulk' ? 'in_bulk' : 'keep_cut';
   // 準備度が足りない時にAIが増量期への移行を勧めても採用しない（ルールが先）

@@ -640,7 +640,7 @@ var KT = (function () {
       });
     },
     planSet: function (p) { return api('planSet', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
-    planAdvise: function () { return api('planAdvise', [], 120000).then(function (r) { return r; }, onlineOnly); },
+    planAdvise: function (req) { return api('planAdvise', [req || {}], 120000).then(function (r) { return r; }, onlineOnly); },
     planApply: function (p) { return api('planApply', [p], 60000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
     planPauseApply: function (p) { return api('planPauseApply', [p], 30000).then(function (d) { LS.set('kt_plan', d); return d; }, onlineOnly); },
 
@@ -731,7 +731,7 @@ var KT = (function () {
     profileGet: function () { return api('profileGet', [], 30000).then(function (r) { LS.set('kt_profile', r); return r; }, function () { return LS.get('kt_profile', null); }); },
     profileCached: function () { return Promise.resolve(LS.get('kt_profile', null)); },
     profileSet: function (p) { return api('profileSet', [p], 30000).then(function (r) { LS.set('kt_profile', r); return r; }, onlineOnly); },
-    bodyNowEval: function () { return api('bodyNowEval', [], 90000).then(function (r) { return r; }, onlineOnly); },
+    bodyNowEval: function (req) { return api('bodyNowEval', [req || {}], 90000).then(function (r) { return r; }, onlineOnly); },
     counselSkip: function () { return api('counselSkip', [], 30000).then(function (r) { LS.set('kt_counsel', r); return r; }, onlineOnly); },
 
     // 種目の表示オン／オフ（種目マスタの「有効」列）。オンラインの時だけ
@@ -765,8 +765,8 @@ var KT = (function () {
     },
 
     // 総合コーチ（食事・運動・体組成・目標と期限をまとめて診断）。オンラインの時だけ。直近の結果は端末に控える
-    coachJudge: function () {
-      return api('coachJudge', [], 150000).then(function (r) { LS.set('kt_coach_last', { t: Date.now(), res: r }); return r; }, onlineOnly);
+    coachJudge: function (req) {
+      return api('coachJudge', [req || {}], 150000).then(function (r) { LS.set('kt_coach_last', { t: Date.now(), res: r }); return r; }, onlineOnly);
     },
     coachAsk: function (req) { return api('coachAsk', [req], 150000).then(function (r) { return r; }, onlineOnly); },
     coachChart: function () { return api('coachChartGet', [], 30000).then(function (r) { LS.set('kt_coach_chart', r); return r; }, function (e) { var c = LS.get('kt_coach_chart', null); if (c) return c; return onlineOnly(e); }); },

@@ -431,23 +431,47 @@ function geminiKey_() {
 // 2026-10 時点：gemini-3.7 / 3.8-flash は Apps Script からの generateContent が応答しないことを確認したため外している
 var AI_MODEL_PREFS = ['gemini-3.6-flash', 'gemini-3.5-flash'];
 
-/** 使うモデル：GEMINI_MODEL が設定されていればそれ。無ければ AI_MODEL_PREFS → Flash 系の順で自動選択して記憶 */
-function aiModel_(exclude) {
-  var pr = PropertiesService.getScriptProperties();
-  var fixed = pr.getProperty('GEMINI_MODEL');
-  if (fixed) return { name: fixed.replace(/^models\//, ''), auto: false };
-  if (pr.getProperty('GEMINI_MODEL_AUTO')) pr.deleteProperty('GEMINI_MODEL_AUTO'); // 旧版の記憶を破棄
-  var cached = pr.getProperty('GEMINI_MODEL_PICK');
-  if (cached && cached !== exclude) return { name: cached, auto: true };
-
+/** generateContent が使える Gemini のモデル名一覧（画像・音声などは除く） */
+function aiModelNames_() {
   var res = UrlFetchApp.fetch(GEMINI_BASE + 'models?pageSize=1000', { headers: { 'x-goog-api-key': geminiKey_() }, muteHttpExceptions: true });
   if (res.getResponseCode() !== 200) throw new Error(aiHttpError_(res));
-  var models = (JSON.parse(res.getContentText()).models || []).filter(function (m) {
+  return (JSON.parse(res.getContentText()).models || []).filter(function (m) {
     var n = String(m.name || '');
     return (m.supportedGenerationMethods || []).indexOf('generateContent') >= 0 && /gemini/i.test(n) &&
-      !/image|tts|audio|live|embed|robot|computer|learnlm|gemma|transcribe|omni/i.test(n) && n.replace(/^models\//, '') !== exclude;
-  });
-  var names = models.map(function (m) { return String(m.name).replace(/^models\//, ''); });
+      !/image|tts|audio|live|embed|robot|computer|learnlm|gemma|transcribe|omni/i.test(n);
+  }).map(function (m) { return String(m.name).replace(/^models\//, ''); });
+}
+
+/**
+ * 使うモデル。lite=true は軽い処理（コメント生成・使い方の質問）用の Flash-Lite。
+ *  メイン：GEMINI_MODEL が設定されていればそれ。無ければ AI_MODEL_PREFS → Flash 系の順で自動選択して記憶
+ *  軽量　：GEMINI_MODEL_LITE が設定されていればそれ。無ければ名前に flash-lite を含む最新の安定版を自動選択して記憶。
+ *          見つからなければメインのモデルを使う
+ */
+function aiModel_(exclude, lite) {
+  var pr = PropertiesService.getScriptProperties();
+  if (lite) {
+    var fixedL = pr.getProperty('GEMINI_MODEL_LITE');
+    if (fixedL) return { name: fixedL.replace(/^models\//, ''), auto: false, lite: true };
+    var cachedL = pr.getProperty('GEMINI_MODEL_LITE_PICK');
+    if (cachedL && cachedL !== exclude) return { name: cachedL, auto: true, lite: true };
+    var litePick = '';
+    try {
+      var lites = aiModelNames_().filter(function (n) { return /flash-lite|lite/i.test(n) && n !== exclude; });
+      var sc = function (n) { return ((/preview|exp|latest|\d{2}-\d{2}/i.test(n) ? 0 : 1) * 1000) + Number((n.match(/gemini-(\d+(?:\.\d+)?)/) || [0, 0])[1]) * 10; };
+      lites.sort(function (a, b) { return sc(b) - sc(a); });
+      litePick = lites[0] || '';
+    } catch (e) { litePick = ''; }
+    if (litePick) { pr.setProperty('GEMINI_MODEL_LITE_PICK', litePick); return { name: litePick, auto: true, lite: true }; }
+    return aiModel_(exclude, false); // 軽量モデルが無い：メインで代用
+  }
+  var fixed = pr.getProperty('GEMINI_MODEL');
+  if (fixed) return { name: fixed.replace(/^models\//, ''), auto: false, lite: false };
+  if (pr.getProperty('GEMINI_MODEL_AUTO')) pr.deleteProperty('GEMINI_MODEL_AUTO'); // 旧版の記憶を破棄
+  var cached = pr.getProperty('GEMINI_MODEL_PICK');
+  if (cached && cached !== exclude) return { name: cached, auto: true, lite: false };
+
+  var names = aiModelNames_().filter(function (n) { return n !== exclude; });
   var name = AI_MODEL_PREFS.filter(function (n) { return names.indexOf(n) >= 0; })[0];
   if (!name) {
     var score = function (n) {
@@ -461,15 +485,41 @@ function aiModel_(exclude) {
   }
   if (!name) throw new Error('使える Gemini モデルが見つかりません（スクリプトプロパティ GEMINI_MODEL にモデル名を設定してください）');
   pr.setProperty('GEMINI_MODEL_PICK', name);
-  return { name: name, auto: true };
+  return { name: name, auto: true, lite: false };
+}
+
+/** 429 の中身：1日の上限か（待っても直らない）、何秒待てばよいか */
+function aiQuota_(res) {
+  var info = { daily: false, retrySec: 0 };
+  try {
+    var e = JSON.parse(res.getContentText()).error || {};
+    (e.details || []).forEach(function (d) {
+      var t = String(d['@type'] || '');
+      if (/QuotaFailure/.test(t)) (d.violations || []).forEach(function (v) { if (/PerDay/i.test(String(v.quotaId || '') + String(v.quotaMetric || ''))) info.daily = true; });
+      if (/RetryInfo/.test(t)) { var m = String(d.retryDelay || '').match(/([\d.]+)s/); if (m) info.retrySec = Math.ceil(Number(m[1])); }
+    });
+    if (/per\s*day|daily/i.test(String(e.message || ''))) info.daily = true;
+  } catch (err) {}
+  return info;
+}
+
+/** もう一方の層のモデル（メイン↔軽量）。モデルごとに上限が別なので、片方が上限のときの逃げ道になる */
+function aiAltModel_(model) {
+  try {
+    var alt = aiModel_('', !model.lite);
+    return alt && alt.name !== model.name ? alt : null;
+  } catch (e) { return null; }
 }
 
 // images（任意）：[{ mime, data(base64) }]。写真を見て答えさせるときに、文章の前に付ける
-function gemini_(system, user, schema, images) {
+// opts（任意）：{ lite:true } 軽い処理（コメント生成・使い方の質問）は Flash-Lite に回す
+//  429（混雑）は、待ち時間を空けて最大2回やり直す。1日の上限のときはやり直さず、もう一方のモデルに切り替える
+function gemini_(system, user, schema, images, opts) {
+  opts = opts || {};
   var key = geminiKey_();
-  var model = aiModel_();
-  var useSchema = true;
-  for (var attempt = 0; attempt < 3; attempt++) {
+  var model = aiModel_('', !!opts.lite);
+  var useSchema = true, tries = 0, srv = 0, rl = 0, swapped = false, quota = null, lastRes = null;
+  while (tries++ < 10) {
     var gen = { responseMimeType: 'application/json' };
     if (useSchema && schema) gen.responseSchema = schema;
     var parts = (images || []).map(function (im) { return { inlineData: { mimeType: im.mime, data: im.data } }; });
@@ -488,12 +538,26 @@ function gemini_(system, user, schema, images) {
       aiModelUsed_ = model.name;
       return aiParse_(JSON.parse(res.getContentText()));
     }
-    if (code === 404 && model.auto) { model = aiModel_(model.name); continue; } // 自動選択したモデルが廃止された
+    lastRes = res;
+    if (code === 404 && model.auto) { model = aiModel_(model.name, model.lite); continue; } // 自動選択したモデルが廃止された
     if (code === 400 && useSchema) { useSchema = false; continue; }              // スキーマ指定に非対応のモデル
-    if ((code === 503 || code === 500) && attempt < 2) { Utilities.sleep(2000 * (attempt + 1)); continue; } // 一時的な混雑：少し待って再試行
-    throw new Error(aiHttpError_(res));
+    if ((code === 503 || code === 500) && srv < 2) { srv++; Utilities.sleep(2000 * srv); continue; } // 一時的な混雑：少し待って再試行
+    if (code === 429) {
+      quota = aiQuota_(res);
+      if (!quota.daily && rl < 2) { // 毎分などの一時的な上限：間隔を空けてやり直す（5秒 → 10秒。Google の指定があればそれに従う。最大20秒）
+        rl++;
+        Utilities.sleep(Math.min(20, Math.max(quota.retrySec || 0, 5 * rl)) * 1000);
+        continue;
+      }
+      if (!swapped) { // 上限が続く：もう一方のモデル（軽量↔メイン）で1回だけ試す
+        swapped = true;
+        var alt = aiAltModel_(model);
+        if (alt) { model = alt; rl = 1; continue; }
+      }
+    }
+    break;
   }
-  throw new Error('Gemini の呼び出しに失敗しました');
+  throw new Error(aiHttpError_(lastRes, quota));
 }
 
 function aiParse_(j) {
@@ -506,10 +570,76 @@ function aiParse_(j) {
   throw new Error('Gemini の応答を読み取れませんでした。もう一度お試しください');
 }
 
-function aiHttpError_(res) {
+function aiHttpError_(res, quota) {
   var code = res.getResponseCode(), msg = '';
   try { msg = JSON.parse(res.getContentText()).error.message; } catch (e) { msg = res.getContentText().slice(0, 200); }
-  if (code === 429) return 'Gemini の利用上限に達しました。しばらく待ってからお試しください';
+  if (code === 429) {
+    var q = quota || aiQuota_(res);
+    return q.daily
+      ? 'Gemini の利用上限（1日の無料枠）に達しました。日本時間の夕方（17時ごろ）に回復します。急ぐ場合は Google AI Studio で課金を有効にしてください'
+      : 'Gemini の利用上限に達しました（短時間に使いすぎ）。1〜2分待ってからお試しください';
+  }
   if (code === 401 || code === 403) return 'Gemini の API キーが無効です（スクリプトプロパティ GEMINI_API_KEY を確認してください）';
   return 'Gemini エラー（' + code + '）：' + msg;
+}
+
+/* ============================================================
+ * AI の結果キャッシュ（シート「AIキャッシュ」）
+ *  同じ日・同じ入力なら、Gemini を呼ばずに保存済みの結果を返す（上限の節約）。
+ *  キャッシュまわりで失敗しても、そのまま通常どおり Gemini を呼ぶ（キャッシュは無くても動く）
+ * ============================================================ */
+
+var AI_CACHE_SHEET = 'AIキャッシュ';
+var AI_CACHE_HEAD = ['日時', 'キー', '種別', '結果（JSON）'];
+var AI_CACHE_MAX_ROWS = 400;
+
+function aiCacheSheet_() {
+  var ss = ss_(), sh = ss.getSheetByName(AI_CACHE_SHEET);
+  if (!sh) {
+    sh = ss.insertSheet(AI_CACHE_SHEET);
+    sh.getRange(1, 1, 1, AI_CACHE_HEAD.length).setValues([AI_CACHE_HEAD]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(4, 520);
+  }
+  return sh;
+}
+
+function aiHash_(obj) {
+  var raw = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, JSON.stringify(obj), Utilities.Charset.UTF_8);
+  return raw.map(function (b) { return ('0' + (b < 0 ? b + 256 : b).toString(16)).slice(-2); }).join('').slice(0, 32);
+}
+
+function aiCacheGet_(key) {
+  var sh = aiCacheSheet_(), last = sh.getLastRow();
+  if (last < 2) return null;
+  var from = Math.max(2, last - 199), rows = sh.getRange(from, 1, last - from + 1, AI_CACHE_HEAD.length).getValues();
+  for (var i = rows.length - 1; i >= 0; i--) {
+    if (rows[i][1] === key) { try { return JSON.parse(rows[i][3]); } catch (e) { return null; } }
+  }
+  return null;
+}
+
+function aiCachePut_(kind, key, value) {
+  var sh = aiCacheSheet_();
+  sh.appendRow([new Date(), key, kind, JSON.stringify(value).slice(0, 45000)]);
+  try { if (sh.getLastRow() > AI_CACHE_MAX_ROWS) sh.deleteRows(2, 200); } catch (e) {} // 古い順に消して肥大化を防ぐ
+}
+
+/**
+ * kind：種別名。keyObj：入力（時刻など毎回変わるものは入れない）。force：true ならキャッシュを使わず作り直す。
+ * fn：Gemini を呼んで結果（JSON にできる値）を返す関数。キャッシュは「当日分」だけ（キーに日付を含む）。
+ * 戻り値：キャッシュから返したときは cached:true が付く（オブジェクトのとき）
+ */
+function aiCached_(kind, keyObj, force, fn) {
+  var key = null;
+  try { key = kind + ':' + today_() + ':' + aiHash_(keyObj); } catch (e) { key = null; }
+  if (key && !force) {
+    try {
+      var hit = aiCacheGet_(key);
+      if (hit && typeof hit === 'object') { hit.cached = true; return hit; }
+    } catch (e2) {}
+  }
+  var out = fn();
+  if (key && out && typeof out === 'object') { try { aiCachePut_(kind, key, out); } catch (e3) {} }
+  return out;
 }

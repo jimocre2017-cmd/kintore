@@ -197,4 +197,28 @@ t('coachAsk：使い方テーマは説明書と開いている画面を渡す。
   sandbox.gemini_ = geminiStub; delete sandbox._req;
 });
 
+t('coachJudge：同じ日・同じ記録で押し直してもAIは呼ばない（履歴も増えない）。force なら作り直す。記録が変われば作り直す', function () {
+  var crypto = require('crypto');
+  sandbox.Utilities.computeDigest = function (a, str) { return Array.prototype.slice.call(crypto.createHash('sha256').update(str, 'utf8').digest()).map(function (b) { return b > 127 ? b - 256 : b; }); };
+  sandbox.Utilities.DigestAlgorithm = { SHA_256: 'x' }; sandbox.Utilities.Charset = { UTF_8: 'x' };
+  // 前のテストが空にした記録を、元に戻す
+  props.PLAN_DEADLINE = '2027/01/31'; sandbox._mealDays = 7;
+  sandbox.aiBody_ = function () { return { latest: { weight: 65.7 }, plan: null }; };
+  sandbox.aiMeal_ = function () { return { daysLogged: sandbox._mealDays, averagePerLoggedDay: { kcal: 1800, protein: 120, fat: 50, carbs: 200 } }; };
+  sandbox.getLogs_ = function () { return [{ date: '2026/11/21', aReps: 20, aSecs: 0 }]; };
+  sandbox.cardioLogsWithKcal_ = function () { return [{ date: '2026/11/22', km: 5, kcal: 300 }]; };
+  delete sheets['AIキャッシュ'];
+  var c0 = calls.length, h0 = sheets['総合コーチ履歴'].rows.length;
+  var a = run('coachJudge()');
+  assert.strictEqual(calls.length, c0 + 1); assert.ok(!a.cached);
+  var b = run('coachJudge()');       // 2回目：previous が変わっても、nowTime が違っても、記録が同じなら保存済み
+  assert.strictEqual(calls.length, c0 + 1, 'AIを呼ばない'); assert.strictEqual(b.cached, true); assert.strictEqual(b.headline, a.headline);
+  assert.strictEqual(sheets['総合コーチ履歴'].rows.length, h0 + 1, '履歴は増やさない');
+  sandbox._req = { force: true }; run('coachJudge(_req)');
+  assert.strictEqual(calls.length, c0 + 2, 'force は作り直す');
+  sandbox._mealDays = 3; run('coachJudge()');     // 記録が変わった（食事の記録日数）
+  assert.strictEqual(calls.length, c0 + 3, '記録が変われば呼ぶ');
+  sandbox._mealDays = 7; delete sandbox._req; sandbox.Utilities.computeDigest = undefined;
+});
+
 console.log('\n' + n + ' 件すべて成功');

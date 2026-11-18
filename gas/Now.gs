@@ -21,7 +21,8 @@ function nowEvalSystem_() {
   ].join('\n');
 }
 
-function bodyNowEval() {
+/** 体組成の「今の評価」。画面のボタンを押したときだけ呼ばれる（保存のたびには呼ばない）。req.force で作り直し */
+function bodyNowEval(req) {
   var today = today_(), body = aiBody_(today);
   if (!body) throw new Error('体組成の記録がまだありません');
   var pl = {};
@@ -31,10 +32,16 @@ function bodyNowEval() {
     goal: { goalFatPct: pl.goalFat || null, deadline: pl.deadline || null },
     body: body
   };
-  var res = gemini_(nowEvalSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), {
-    type: 'OBJECT', properties: { comment: { type: 'STRING' }, tone: { type: 'STRING', enum: ['good', 'neutral', 'watch'] } }, required: ['comment', 'tone']
+  // コメント生成は軽量モデル。同じ日・同じ測定なら、保存済みの評価を使う（ボタンを何度押しても Gemini は呼ばない）
+  var keyData = { today: data.today, goal: data.goal, body: body };
+  var res = aiCached_('now', keyData, !!(req && req.force), function () {
+    var r = gemini_(nowEvalSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), {
+      type: 'OBJECT', properties: { comment: { type: 'STRING' }, tone: { type: 'STRING', enum: ['good', 'neutral', 'watch'] } }, required: ['comment', 'tone']
+    }, null, { lite: true });
+    r.at = data.nowTime; // 評価した時刻も保存して、再表示のときに使う
+    return r;
   });
-  return { comment: planStr_(res.comment, 200), tone: ['good', 'neutral', 'watch'].indexOf(res.tone) >= 0 ? res.tone : 'neutral', at: Utilities.formatDate(new Date(), TZ, 'HH:mm') };
+  return { comment: planStr_(res.comment, 200), tone: ['good', 'neutral', 'watch'].indexOf(res.tone) >= 0 ? res.tone : 'neutral', at: res.at || Utilities.formatDate(new Date(), TZ, 'HH:mm'), cached: !!res.cached };
 }
 
 /* ---------------- 食事の写真 ---------------- */

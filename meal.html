@@ -478,7 +478,7 @@ $('dayCard').addEventListener('click', function(e){
   var b = e.target.closest('#revBtn'); if (!b || revBusy) return;
   var d = S.data, g = d.goals || {}, tg = dayTargets(d, g, S.date), t = ML.dayTotal(d.logs, S.date), key = revKey(t);
   revBusy = true; b.disabled = true; b.textContent = '分析中…（数秒かかります）';
-  KT.call('mealReview', { date: S.date, ctx: { targets: tg || {}, partial: S.date === d.today && new Date().getHours() < 20 } }).then(function(r){
+  KT.call('mealReview', { date: S.date, force: !!S.rev && S.rev.key === key, ctx: { targets: tg || {}, partial: S.date === d.today && new Date().getHours() < 20 } }).then(function(r){
     S.rev = { key: key, html: reviewHtml(r) };
     if (revKey(ML.dayTotal(S.data.logs, S.date)) === key && $('revOut')) $('revOut').innerHTML = S.rev.html;
   }, function(er){
