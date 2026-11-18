@@ -1441,7 +1441,7 @@ function csSave(){
   var btn = $('csNext'); btn.disabled = true; btn.textContent = '保存中…';
   var chart = CounselLib.compile(CS.ans, CS.eqAll, KT.today());
   var ch = CS.applyGear ? csGearChanges() : { on: [], off: [] };
-  call('counselSave', { answers: CS.ans, chart: chart }).then(function(){
+  call('counselSave', { answers: CS.ans, chart: chart, profile: CounselLib.profile(CS.ans) }).then(function(){
     var p = Promise.resolve(null);
     if (ch.on.length) p = p.then(function(){ return call('setExercisesActive', ch.on, true); });
     if (ch.off.length) p = p.then(function(){ return call('setExercisesActive', ch.off, false); });

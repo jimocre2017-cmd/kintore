@@ -25,6 +25,8 @@ var CounselLib = (function () {
     });
     return [
       { id: 'goal', title: '目的と運動の習慣', items: [
+        { id: 'sex', type: 'single', label: '性別（体の筋肉量の目安を、同性・同年代と比べるのに使います）', options: ['男性', '女性'] },
+        { id: 'age', type: 'text', label: '年齢（数字だけ。例：30）' },
         { id: 'purpose', type: 'single', label: 'いちばんの目的は？', options: PURPOSES },
         { id: 'exp', type: 'single', label: '筋トレの経験は？', options: ['初めて', '1年未満', '1年以上'] },
         { id: 'freq', type: 'single', label: '週に何回くらい運動できそう？', options: ['1〜2回', '3〜4回', '5回以上'] },
@@ -70,6 +72,8 @@ var CounselLib = (function () {
     var L = [];
     var one = function (id) { return ans[id] || ''; };
     var g = [];
+    if (one('sex')) g.push('性別：' + one('sex'));
+    if (profile(ans).age) g.push('年齢：' + profile(ans).age + '歳');
     if (one('purpose')) g.push('目的：' + one('purpose'));
     if (one('exp')) g.push('経験：' + one('exp'));
     if (one('freq')) g.push('頻度：週' + one('freq'));
@@ -109,6 +113,15 @@ var CounselLib = (function () {
     return t.length > 1800 ? t.slice(0, 1790) + '…' : t;
   }
 
+  /** 回答から性別・年齢を取り出す。sex は 'M'|'F'|''、age は 10〜100 の整数か null */
+  function profile(ans) {
+    ans = ans || {};
+    var sx = ans.sex === '男性' ? 'M' : ans.sex === '女性' ? 'F' : '';
+    var m = String(ans.age == null ? '' : ans.age).replace(/[０-９]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 65248); }).match(/\d{1,3}/);
+    var a = m ? parseInt(m[0], 10) : null;
+    return { sex: sx, age: a >= 10 && a <= 100 ? a : null };
+  }
+
   /** 見直しの時期か。updatedAt が無ければ初回 */
   function status(updatedAt, today, skipped) {
     if (skipped) return { state: 'skipped' };
@@ -132,6 +145,6 @@ var CounselLib = (function () {
     return parts.join(' ／ ');
   }
 
-  return { INTERVAL_DAYS: INTERVAL_DAYS, REGIONS: REGIONS, sections: sections, isShown: isShown, ynText: ynText, redFlags: redFlags, compile: compile, status: status, sectionSummary: sectionSummary, toDays: toDays };
+  return { INTERVAL_DAYS: INTERVAL_DAYS, REGIONS: REGIONS, sections: sections, isShown: isShown, ynText: ynText, redFlags: redFlags, compile: compile, profile: profile, status: status, sectionSummary: sectionSummary, toDays: toDays };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = CounselLib;

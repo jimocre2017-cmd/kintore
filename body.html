@@ -214,9 +214,11 @@ header .sp{margin-left:auto}
     </ul>
   </details></section>
   <section class="card" id="dayCard"></section>
+  <section class="card" id="nowCard" style="display:none"></section>
   <section class="card" id="chartCard"><div class="loading">読み込み中…</div></section>
   <section class="card" id="cmpCard"></section>
   <section class="card" id="planCard"></section>
+  <section class="card" id="ffmiCard"></section>
   <section class="card" id="histCard"></section>
 </div>
 
@@ -253,6 +255,7 @@ header .sp{margin-left:auto}
 <script src="coach.js"></script>
 <script src="guide.js"></script>
 <script src="body-lib.js"></script>
+<script src="ffmi-lib.js"></script>
 <script>
 var BL = BodyLib;
 var $ = function (id) { return document.getElementById(id); };
@@ -278,7 +281,7 @@ var FIELDS = [
   { k: 'bmr', label: '基礎代謝', unit: 'kcal', d: 0 },
   { k: 'visceral', label: '内臓脂肪', unit: '', d: 1, goalDown: true }
 ];
-var S = { tag: '', day: '', data: null, view: null, mode: 'single', field: 'weight', range: 90, form: null, loadErr: null };
+var S = { profile: null, gain: 0, ref: 'jp', now: null, tag: '', day: '', data: null, view: null, mode: 'single', field: 'weight', range: 90, form: null, loadErr: null };
 
 function latest(){ return S.view && S.view.logs.length ? S.view.logs[0] : null; }
 // 項目ごとに、記録がある最新の値
@@ -288,7 +291,7 @@ function render(){
   if (!S.data) return;
   S.view = { today: S.data.today, goalFat: S.data.goalFat, logs: S.tag ? BL.daily(S.data.entries || [], S.tag) : S.data.logs };
   $('dateLbl').textContent = S.data.today.replace(/^(\d+)\/0?(\d+)\/0?(\d+)$/, '$1年$2月$3日')+'（'+dowLbl(S.data.today)+'）';
-  renderMsg(); renderFilter(); renderDay(); renderStats(); renderChart(); renderCmp(); renderPlan(); renderHist();
+  renderMsg(); renderFilter(); renderDay(); renderStats(); renderChart(); renderNow(); renderCmp(); renderPlan(); renderFfmi(); renderHist();
 }
 function renderMsg(){
   var h = '';
@@ -441,6 +444,101 @@ function renderPlan(){
   $('goalBtn').onclick = function(){ $('gFat').value = d.goalFat || ''; $('goalModal').classList.add('open'); };
 }
 
+
+/* ---- 今の評価（保存直後の一言） ---- */
+function nowEval(){
+  S.now = { loading: true }; renderNow();
+  var t0 = Date.now();
+  KT.sync().then(function(){ return KT.call('bodyNowEval'); }).then(function(r){ S.now = r; renderNow(); }, function(er){
+    S.now = { error: er.offline ? 'オフラインのため、今の評価はできません（記録は保存されています）' : (/^不明な操作/.test(er.message) ? '今の評価を使うには、サーバー側の更新が必要です（gas/README.md の「今の評価・写真の見積もり」）' : '今の評価を取得できませんでした：' + er.message) }; renderNow();
+  });
+}
+function renderNow(){
+  var c = $('nowCard'), n = S.now;
+  if (!n) { c.style.display = 'none'; c.innerHTML = ''; return; }
+  c.style.display = '';
+  var h = '<h3>今の評価</h3>';
+  if (n.loading) h += '<div class="loading">いまの測定を評価しています…</div>';
+  else if (n.error) h += '<div class="empty">'+esc(n.error)+'</div>';
+  else {
+    var col = n.tone === 'good' ? 'var(--good)' : (n.tone === 'watch' ? 'var(--danger)' : 'var(--ink-2)'), lb = n.tone === 'good' ? '良い方向' : (n.tone === 'watch' ? '注意' : 'ぶれの範囲');
+    h += '<div style="border-left:4px solid '+col+';padding:4px 0 4px 10px;line-height:1.7"><b style="color:'+col+'">'+lb+'</b>　'+esc(n.comment)+'</div>'
+      + '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:6px">測定の直後にAIが、直近の平均・4週の傾向・目標をふまえて評価します（'+esc(n.at||'')+'）。全体の評価は筋トレ画面の「総合コーチ」で。</div>';
+  }
+  c.innerHTML = h;
+}
+
+/* ---- FFMI：同性・同年代の分布との比較 ---- */
+function heightNow(){ var L = S.view ? S.view.logs : []; for (var i = 0; i < L.length; i++) if (L[i].height) return L[i].height; return 0; }
+function normSvg(snap, refKey, gain){
+  var r = snap.refs.filter(function(x){ return x.key === refKey; })[0] || snap.refs[0];
+  var m = (heightNow()||164)/100, limRaw = snap.limit == null ? null : snap.limit - 6.3*(1.8-m);
+  var vals = [snap.now.raw, snap.target.raw].concat(limRaw == null ? [] : [limRaw]);
+  var lo = Math.min(r.mean - 3.5*r.sd, Math.min.apply(null, vals) - 0.8), hi = Math.max(r.mean + 3.5*r.sd, Math.max.apply(null, vals) + 0.8);
+  var W = 340, H = 150, pl = 8, pr = 8, pt = 22, pb = 26, N = 80, top = FfmiLib.pdf(r.mean, r.mean, r.sd);
+  function X(v){ return pl + (v-lo)/(hi-lo)*(W-pl-pr); }
+  function Y(d){ return pt + (1 - d/top*0.95)*(H-pt-pb); }
+  var pts = [], i, v;
+  for (i = 0; i <= N; i++) { v = lo + (hi-lo)*i/N; pts.push(X(v).toFixed(1)+','+Y(FfmiLib.pdf(v, r.mean, r.sd)).toFixed(1)); }
+  var base = (H-pb);
+  var out = '<svg viewBox="0 0 '+W+' '+H+'" style="width:100%;height:auto;display:block" role="img" aria-label="FFMIの分布">'
+    + '<polygon points="'+X(lo).toFixed(1)+','+base+' '+pts.join(' ')+' '+X(hi).toFixed(1)+','+base+'" fill="#2a78d6" fill-opacity=".14" stroke="#2a78d6" stroke-width="1.5"/>'
+    + '<line x1="'+pl+'" y1="'+base+'" x2="'+(W-pr)+'" y2="'+base+'" stroke="#999" stroke-width="1"/>'
+    + '<line x1="'+X(r.mean).toFixed(1)+'" y1="'+pt+'" x2="'+X(r.mean).toFixed(1)+'" y2="'+base+'" stroke="#999" stroke-dasharray="3 3"/>'
+    + '<text x="'+X(r.mean).toFixed(1)+'" y="'+(base+13)+'" font-size="10" text-anchor="middle" fill="#777">平均 '+r.mean+'</text>';
+  function mark(v, col, label, dy){ var x = X(v).toFixed(1); return '<line x1="'+x+'" y1="'+(pt-2)+'" x2="'+x+'" y2="'+base+'" stroke="'+col+'" stroke-width="2"/><text x="'+x+'" y="'+(pt-6-(dy||0))+'" font-size="11" font-weight="700" text-anchor="middle" fill="'+col+'">'+label+'</text>'; }
+  if (gain > 0) out += mark(snap.target.raw, '#1a9e5c', '目標 '+snap.target.ffmi, 0);
+  out += mark(snap.now.raw, '#d9534f', '今 '+snap.now.ffmi, gain > 0 && Math.abs(X(snap.target.raw) - X(snap.now.raw)) < 52 ? 12 : 0);
+  if (limRaw != null) out += '<line x1="'+X(limRaw).toFixed(1)+'" y1="'+(pt+10)+'" x2="'+X(limRaw).toFixed(1)+'" y2="'+base+'" stroke="#8e6bd1" stroke-width="1.5" stroke-dasharray="4 3"/><text x="'+X(limRaw).toFixed(1)+'" y="'+(pt+7)+'" font-size="10" text-anchor="end" fill="#8e6bd1">自然の上限目安 ▸</text>';
+  return out + '</svg>';
+}
+function renderFfmi(){
+  var c = $('ffmiCard'), d = S.view, w = lastOf('weight'), f = lastOf('fat'), ht = heightNow(), p = S.profile;
+  var h = '<h3>FFMI（筋肉の厚み）の位置</h3>';
+  if (!w || !f) { c.innerHTML = h + '<div class="empty">体重と体脂肪率の記録が必要です。</div>'; return; }
+  if (!ht) { c.innerHTML = h + '<div class="empty">身長の記録が必要です。「測定を記録」の身長欄に入れると計算できます。</div>'; return; }
+  if (!p || !p.sex || !p.age) {
+    c.innerHTML = h + '<div class="plan">同性・同年代の人と比べるため、性別と年齢を入れてください（カウンセリングシートでも入力できます）。</div>'
+      + '<div class="f2" style="margin-top:8px"><div class="f"><label>性別</label><select id="pfSex"><option value="">選択</option><option value="M">男性</option><option value="F">女性</option></select></div><div class="f"><label>年齢</label><input type="number" id="pfAge" inputmode="numeric" min="10" max="100" placeholder="例：30"></div></div>'
+      + '<div class="rowbtns"><button class="btn small primary" id="pfSave">保存して表示</button></div>';
+    $('pfSave').onclick = function(){
+      var sx = $('pfSex').value, ag = $('pfAge').value.trim();
+      if (!sx || !ag) { toast('性別と年齢を入れてください', true); return; }
+      KT.call('profileSet', { sex: sx, age: Number(ag) }).then(function(r){ S.profile = r; renderFfmi(); toast('保存しました'); }, function(er){ toast(er.message, true); });
+    };
+    return;
+  }
+  var snap = FfmiLib.snapshot({ weight: w.weight, fat: f.fat, height: ht, sex: p.sex, age: p.age, goalFat: d.goalFat || 0, gainKg: S.gain });
+  if (!snap) { c.innerHTML = h + '<div class="empty">計算できませんでした。体重・体脂肪率・身長を確認してください。</div>'; return; }
+  var ref = snap.now.vs.filter(function(x){ return x.key === S.ref; })[0] || snap.now.vs[0];
+  var refT = snap.target.vs.filter(function(x){ return x.key === S.ref; })[0];
+  h += '<div class="stats" style="margin:0 0 10px"><div class="stat"><b class="num">'+snap.now.ffmi+'</b><span>今のFFMI（補正 '+snap.now.norm+'）</span></div>'
+    + '<div class="stat"><b class="num">'+ref.rank.replace('上位 ','上位').replace('下から ','下から')+'</b><span>'+esc(ref.label)+'の'+(p.sex==='F'?'女性':'男性')+'・'+p.age+'歳前後</span></div></div>';
+  h += '<div class="tabs" id="refTabs">'+snap.now.vs.map(function(x){ return '<button data-k="'+x.key+'"'+(x.key===S.ref?' class="on"':'')+'>'+x.label+'</button>'; }).join('')+'</div>';
+  h += normSvg(snap, S.ref, S.gain);
+  h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin:2px 0 8px">'+esc(ref.note)+'（平均'+ref.mean+'・ばらつきSD '+ref.sd+'）</div>';
+  h += '<div style="overflow-x:auto"><table class="tbl"><thead><tr><th></th>'+snap.now.vs.map(function(x){ return '<th>'+x.label+'</th>'; }).join('')+'</tr></thead><tbody>'
+    + '<tr><td>今（'+snap.now.ffmi+'）</td>'+snap.now.vs.map(function(x){ return '<td class="num">'+x.rank+'</td>'; }).join('')+'</tr>'
+    + '<tr><td>目標（'+snap.target.ffmi+'）</td>'+snap.target.vs.map(function(x){ return '<td class="num">'+x.rank+'</td>'; }).join('')+'</tr></tbody></table></div>';
+  h += '<div class="plan" style="margin-top:8px">今の水準：<b>'+ref.level+'</b>。';
+  if (d.goalFat) h += '<br>目標：体脂肪率'+d.goalFat+'%（目標体重 約'+snap.goalWeight+'kg'+(S.gain>0?'、筋肉+'+S.gain+'kg込み':'、筋肉は今のまま')+'）。'
+    + (S.gain > 0 ? '目標のFFMIは<b>'+snap.target.ffmi+'</b>（'+esc(ref.label)+'で'+refT.rank+'）。' : '減量中は筋肉を維持するので、<b>FFMIは今のまま</b>です。脂肪が減るぶん、見た目と体脂肪率が目標に近づきます。');
+  h += '</div>';
+  h += '<div class="f" style="margin-top:8px"><label>目標に「筋肉を増やす」を足してみる：<b id="gainLbl">+'+S.gain+' kg</b></label><input type="range" id="gainR" min="0" max="6" step="0.5" value="'+S.gain+'" style="width:100%"></div>';
+  if (snap.limit != null) h += '<div class="plan" style="margin-top:4px">ナチュラル（薬物なし）の上限の目安は補正FFMI 約'+snap.limit+'。今は<b>'+snap.now.norm+'</b>で、あと <b>'+snap.limitGap+'</b>（筋肉量に換算して約<b>'+snap.toLimitKg+'kg</b>）。上限は目安で、超える人も届かない人もいます。</div>';
+  h += '<details class="guide" style="margin-top:10px"><summary>FFMIとは？ 数字の見方</summary><div style="font-size:13px;line-height:1.8;color:var(--ink-2)">'
+    + '<p><b>FFMI＝除脂肪体重（kg）÷ 身長（m）²</b>。体重から脂肪を除いた「筋肉・骨・水分・内臓」を、身長で割った指数です。体重やBMIと違い、脂肪が減っても筋肉が減っていなければ下がらないので、「筋肉がどれだけ付いているか」を見るのに向いています。</p>'
+    + '<p><b>補正FFMI</b>は、身長の違いをならした値（FFMI＋6.3×(1.8−身長m)）。背の低い人は補正すると少し上がります。上限の目安（25）との比較にだけ使います。</p>'
+    + '<p><b>目安</b>：一般の成人は、男性で約18〜19、女性で約15〜16が平均です。男性で20を超えるとよく鍛えている水準、22を超えると非常に高い水準（補正FFMIで25前後がナチュラルの上限付近）。女性は18を超えると非常に高い水準です。</p>'
+    + '<p><b>上位◯％</b>：同性・同年代の人を並べたとき、上から何％にいるか。グラフの山は人の分布で、真ん中が平均です。</p>'
+    + '<p><b>注意</b>：体組成計（BIA）の体脂肪率は±数％の誤差があり、水分量や食事・運動の直後でぶれます。体脂肪率が1%違うと、FFMIは約0.2動きます。数日の平均で見てください。日本の若い世代の全国データは見つからず、「日本」は韓国の年代別データでの代用、「世界」は欧州系の研究をもとにした推定です。あくまで概算の目安です。</p>'
+    + '<p style="font-size:11px;color:var(--ink-3)">出典：Kim 2026 Nutrients（韓国KNHANES）／Jin 2019 Clin Nutr（中国）／Schutz 2002（欧州系）／Kouri 1995（自然の上限）</p></div></details>';
+  c.innerHTML = h;
+  Array.prototype.forEach.call($('refTabs').children, function(b){ b.onclick = function(){ S.ref = b.getAttribute('data-k'); renderFfmi(); }; });
+  $('gainR').oninput = function(){ $('gainLbl').textContent = '+' + this.value + ' kg'; };
+  $('gainR').onchange = function(){ S.gain = Number(this.value); renderFfmi(); };
+}
+
 /* ---- 集計条件（測定のタイミングで絞る） ---- */
 function renderFilter(){
   var E = S.data.entries || [];
@@ -546,7 +644,7 @@ $('fSave').onclick = function(){
   }
   if (e.bmi === '' && e.weight !== '' && e.height !== '') e.bmi = BL.bmi(e.weight, e.height);
   ['weight','fat','muscle','bmi','bmr','visceral','height'].forEach(function(k){ e[k] = e[k] === '' ? null : e[k]; });
-  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); }, function(er){ toast(er.message, true); });
+  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); if (e.weight != null && !e.exclude && date === S.data.today) nowEval(); }, function(er){ toast(er.message, true); });
 };
 $('fDel').onclick = function(){
   if (!confirm('この測定を削除しますか？')) return;
@@ -600,6 +698,8 @@ function healStaleCache(e){
 function init(){
   if (!KT.configured()) { showSetup(); return; }
   KT.call('bodyCached').then(function(r){ if (r) { S.data = r; render(); } }, function(e){ healStaleCache(e); });
+  KT.call('profileCached').then(function(r){ if (r) { S.profile = r; if (S.data) render(); } });
+  KT.call('profileGet').then(function(r){ if (r) { S.profile = r; if (S.data) render(); } }, function(){});
   KT.call('bodyInit').then(function(r){ S.data = r; S.loadErr = null; render(); }, function(e){
     if (healStaleCache(e)) return;
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }

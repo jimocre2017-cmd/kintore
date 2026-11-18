@@ -809,6 +809,9 @@ function doPost(e) {
       cardioRoute: cardioRoute,
       // 体組成（Body.gs）
       bodyGet: bodyGet,
+      bodyNowEval: bodyNowEval,
+      profileGet: profileGet,
+      profileSet: profileSet,
       // 体つき写真（Photo.gs）
       photoGet: photoGet,
       photoSave: photoSave,
@@ -821,6 +824,7 @@ function doPost(e) {
       mealEstimate: mealEstimate,
       mealAsk: mealAsk,
       mealReview: mealReview,
+      mealPhotoEstimate: mealPhotoEstimate,
       // YKトレーニング（Yk.gs）
       ykAdvise: typeof ykAdvise === 'function' ? ykAdvise : undefined,
       ykSetPhase: typeof ykSetPhase === 'function' ? ykSetPhase : undefined,

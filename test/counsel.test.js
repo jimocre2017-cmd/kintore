@@ -98,4 +98,17 @@ t('AIへ渡すカルテ：手書き＋カウンセリングの前提メモ。手
   assert.ok(c.indexOf('右肩にインピンジメント') === 0 && c.indexOf('＜カウンセリングシートの回答＞') > 0 && c.indexOf('目的：脂肪を落とす') > 0);
   assert.strictEqual(run('coachChartGet()').text, '右肩にインピンジメント');
 });
+t('性別・年齢：回答から取り出す（全角数字も可）／サーバーに保存し、年数が経てば年齢が進む', function () {
+  assert.deepStrictEqual(C.profile({ sex: '女性', age: '２８' }), { sex: 'F', age: 28 });
+  assert.deepStrictEqual(C.profile({ sex: '男性', age: '30歳' }), { sex: 'M', age: 30 });
+  assert.deepStrictEqual(C.profile({ age: '5' }), { sex: '', age: null });
+  assert.ok(C.compile({ sex: '女性', age: '28' }, EQ, '2026/11/11').indexOf('性別：女性。年齢：28歳') >= 0);
+  props = {}; today = '2026/11/11';
+  run('counselSave({answers:{sex:"女性",age:"28"},chart:"x",profile:{sex:"F",age:28}})');
+  var pr = run('profileGet()'); assert.strictEqual(pr.sex, 'F'); assert.strictEqual(pr.age, 28);
+  today = '2028/11/12'; assert.strictEqual(run('profileGet()').age, 30); today = '2026/11/11';
+  assert.throws(function () { run('profileSet({sex:"M",age:5})'); }, /年齢/);
+  run('profileSet({sex:"M"})'); assert.strictEqual(run('profileGet()').sex, 'M'); assert.strictEqual(run('profileGet()').age, 28, '年齢だけ空なら変更しない');
+});
+
 console.log('\n' + n + ' 件すべて成功');

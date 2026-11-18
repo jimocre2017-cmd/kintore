@@ -258,7 +258,7 @@ header .sp{margin-left:auto}
 <div class="wrap" id="app">
   <div id="msg"></div>
   <section class="card" id="dayCard"><div class="loading">読み込み中…</div></section>
-  <section class="actions"><button class="btn primary wide" id="addBtn">＋ 食事を記録（AIが栄養を見積もります）</button></section>
+  <section class="actions" style="display:flex;gap:8px"><button class="btn" id="camBtn" style="flex:0 0 auto" aria-label="写真ですぐ記録">📷</button><button class="btn primary wide" id="addBtn" style="flex:1">＋ 食事を記録（AIが栄養を見積もります）</button></section>
   <section class="card hist" id="listCard"></section>
   <section class="card" id="weekCard"></section>
   <section class="card"><button class="btn" style="width:100%" id="askBtn">💬 食事の相談（外食・飲み会など）</button></section>
@@ -286,7 +286,9 @@ header .sp{margin-left:auto}
     <div class="est" id="mrOut" style="margin:8px 0 6px">肉の重さを入れると、使う液の量が出ます。</div>
     <button class="btn small" id="mrAdd" type="button" style="display:none">結果を「食べたもの」に追記</button>
     <div class="hint">ジモカフェのマリネ液は約12%（水・ワイン各2L、塩600g）。目標は肉と液を合わせた全体の濃度で、均一になったときの値です。</div></details>
-  <div class="rowbtns" style="margin:-4px 0 12px"><button class="btn primary small" id="fEst" style="flex:1">🤖 AIで栄養を見積もる</button></div>
+  <div class="rowbtns" style="margin:-4px 0 8px"><button class="btn primary small" id="fPhotoBtn" type="button" style="flex:1">📷 写真で見積もる</button><button class="btn small" id="fEst" style="flex:1">🤖 文章で見積もる</button></div>
+  <input type="file" id="fPhoto" accept="image/*" capture="environment" style="display:none">
+  <div class="hint" id="fPhotoHint" style="margin:0 0 10px">撮るとすぐ見積もります。写真はAIに送るだけで、保存しません。</div>
   <div class="est" id="fEstBox" style="display:none"></div>
   <div class="fgrid">
     <div class="f"><label>カロリー（kcal）</label><input type="number" id="fKcal" inputmode="numeric" step="1" min="0" max="6000"></div>
@@ -556,7 +558,8 @@ function openForm(id){
   var box = $('fEstBox');
   if (ex && ex.items) { box.style.display = ''; box.innerHTML = '<b>前回の見積もり</b><div style="white-space:pre-wrap">'+esc(ex.items)+'</div>'+(ex.note?'<div class="conf">'+esc(ex.note)+'</div>':''); }
   else { box.style.display = 'none'; box.innerHTML = ''; }
-  $('fEst').textContent = '🤖 AIで栄養を見積もる';
+  $('fEst').textContent = '🤖 文章で見積もる'; $('fPhotoBtn').textContent = '📷 写真で見積もる'; $('fPhotoBtn').disabled = false; $('fEst').disabled = false;
+  $('fPhotoHint').textContent = '撮るとすぐ見積もります。写真はAIに送るだけで、保存しません。';
   $('fMulBox').style.display = 'none'; $('fFoodName').value = ''; renderFoodChips();
   $('fDel').style.display = ex ? '' : 'none'; $('fSave').style.gridColumn = ex ? '' : '1 / -1';
   $('formModal').classList.add('open');
@@ -564,6 +567,7 @@ function openForm(id){
 }
 function closeForm(){ $('formModal').classList.remove('open'); S.form = null; }
 $('addBtn').onclick = function(){ openForm(null); };
+$('camBtn').onclick = function(){ openForm(null); $('fPhoto').click(); }; // 撮影画面を直接開く（1タップ）
 /* ---- 食事の相談 ---- */
 var ASK_SAMPLES = [
   ['外食・会食', '今日は夜に外食（会食）があります。お酒は飲みません。たくさん食べたいのですが、どうしたらいいですか？'],
@@ -593,6 +597,19 @@ $('aGo').onclick = function(){
   }).then(function(){ askBusy = false; $('aGo').disabled = false; $('aGo').textContent = '🤖 もう一度相談する'; });
 };
 $('fClose').onclick = closeForm;
+function showEst(f, r){
+  f.base = null; f.foodId = null; $('fMulBox').style.display = 'none'; renderFoodChips();
+  $('fKcal').value = r.total.kcal; $('fP').value = r.total.protein; $('fF').value = r.total.fat; $('fC').value = r.total.carbs;
+  f.items = r.items.map(function(it){ return it.line; }).join('\n'); f.note = '確からしさ：'+r.confidence+(r.note?'　'+r.note:'');
+  var box = $('fEstBox'); box.style.display = '';
+  box.innerHTML = r.items.map(function(it){ return '<div class="li"><span>'+esc(it.name)+(it.amount?'<small style="color:var(--ink-3)">（'+esc(it.amount)+'）</small>':'')+'</span><span class="num">'+it.kcal+'kcal　P'+it.protein+' F'+it.fat+' C'+it.carbs+'</span></div>'; }).join('')
+    + '<div class="conf">確からしさ：<b>'+esc(r.confidence)+'</b>'+(r.note?'　'+esc(r.note):'')+'　下の数値は直せます。</div>'
+    + '<div id="fQBox"></div>';
+}
+function errToast(e){
+  if (healStaleCache(e)) { toast('画面を更新します…'); return; }
+  toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : (/^不明な操作/.test(e.message) ? e.message+'（画面が古いようです。アプリを閉じて開き直してください）' : e.message), true);
+}
 $('fEst').onclick = function(){
   var f = S.form, text = $('fText').value.trim();
   if (!f || f.busy) return;
@@ -600,17 +617,67 @@ $('fEst').onclick = function(){
   f.busy = true; $('fEst').disabled = true; $('fEst').textContent = '見積もり中…（数秒かかります）';
   KT.call('mealEstimate', { text: text, type: f.type }).then(function(r){
     if (S.form !== f) return;
-    f.base = null; f.foodId = null; $('fMulBox').style.display = 'none'; renderFoodChips();
-    $('fKcal').value = r.total.kcal; $('fP').value = r.total.protein; $('fF').value = r.total.fat; $('fC').value = r.total.carbs;
-    f.items = r.items.map(function(it){ return it.line; }).join('\n'); f.note = '確からしさ：'+r.confidence+(r.note?'　'+r.note:'');
-    var box = $('fEstBox'); box.style.display = '';
-    box.innerHTML = r.items.map(function(it){ return '<div class="li"><span>'+esc(it.name)+(it.amount?'<small style="color:var(--ink-3)">（'+esc(it.amount)+'）</small>':'')+'</span><span class="num">'+it.kcal+'kcal　P'+it.protein+' F'+it.fat+' C'+it.carbs+'</span></div>'; }).join('')
-      + '<div class="conf">確からしさ：<b>'+esc(r.confidence)+'</b>'+(r.note?'　'+esc(r.note):'')+'　下の数値は直せます。</div>';
+    showEst(f, r);
     toast('見積もりました。内容を確認して保存してください');
-  }, function(e){
-    if (healStaleCache(e)) { toast('画面を更新します…'); return; }
-    toast(e.offline ? 'オフラインのため見積もれません。数値を直接入れて保存できます' : (/^不明な操作/.test(e.message) ? e.message+'（画面が古いようです。アプリを閉じて開き直してください）' : e.message), true);
-  }).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
+  }, errToast).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
+};
+
+/* ---- 写真で見積もる：撮影 → 縮小（端末側） → すぐ送信。確信度が低いときだけ質問 → 答えると見積もり直す。写真は保存しない ---- */
+var PHOTO_MAX = 896, PHOTO_Q = 0.72;
+function shrinkPhoto(file){
+  // 長辺PHOTO_MAXに縮小してJPEG化（スマホの数MBの写真を、数十〜百数十KBにして送信を速くする）
+  function draw(src, w, h){
+    var k = Math.min(1, PHOTO_MAX / Math.max(w, h)), cw = Math.max(1, Math.round(w * k)), ch = Math.max(1, Math.round(h * k));
+    var c = document.createElement('canvas'); c.width = cw; c.height = ch;
+    c.getContext('2d').drawImage(src, 0, 0, cw, ch);
+    return c.toDataURL('image/jpeg', PHOTO_Q).split(',')[1];
+  }
+  if (window.createImageBitmap) {
+    return createImageBitmap(file, { imageOrientation: 'from-image' }).then(function(b){ var d = draw(b, b.width, b.height); if (b.close) b.close(); return d; });
+  }
+  return new Promise(function(res, rej){
+    var u = URL.createObjectURL(file), im = new Image();
+    im.onload = function(){ try { res(draw(im, im.naturalWidth, im.naturalHeight)); } catch (e) { rej(e); } URL.revokeObjectURL(u); };
+    im.onerror = function(){ URL.revokeObjectURL(u); rej(new Error('写真を読み込めませんでした')); };
+    im.src = u;
+  });
+}
+function photoRun(f){
+  if (f.busy) return;
+  f.busy = true; $('fPhotoBtn').disabled = true; $('fEst').disabled = true;
+  var t0 = Date.now(), btn = $('fPhotoBtn'), tm = setInterval(function(){ btn.textContent = '見積もり中… '+Math.round((Date.now()-t0)/1000)+'秒'; }, 500);
+  btn.textContent = '見積もり中… 0秒';
+  KT.call('mealPhotoEstimate', { image: { mime: 'image/jpeg', data: f.photo }, type: f.type, text: $('fText').value.trim(), qa: f.qa || [] }).then(function(r){
+    if (S.form !== f) return;
+    showEst(f, r);
+    if (!$('fText').value.trim()) $('fText').value = r.items.map(function(it){ return it.name+(it.amount?'（'+it.amount+'）':''); }).join('、').slice(0, 300);
+    renderQuestions(f, r.questions || []);
+    var sec = Math.round((Date.now()-t0)/100)/10;
+    $('fPhotoHint').textContent = '見積もりました（'+sec+'秒）。'+((r.questions||[]).length ? '下の質問に答えると、見積もりが正確になります。' : '内容を確認して保存してください。');
+  }, errToast).then(function(){ clearInterval(tm); f.busy = false; btn.disabled = false; $('fEst').disabled = false; btn.textContent = '📷 撮り直す'; });
+}
+function renderQuestions(f, qs){
+  var box = $('fQBox'); if (!box) return;
+  f.pending = qs.map(function(q){ return { q: q.question, a: null }; });
+  if (!qs.length) { box.innerHTML = ''; return; }
+  box.innerHTML = '<div class="conf" style="margin-top:8px"><b>確かめたいこと（タップで答える）</b></div>' + qs.map(function(q, i){
+    return '<div style="margin:8px 0 2px;font-size:13px">'+esc(q.question)+'</div><div class="chips" data-q="'+i+'">'+q.options.map(function(o, j){ return '<button type="button" data-o="'+j+'">'+esc(o)+'</button>'; }).join('')+'</div>';
+  }).join('') + '<div class="hint" style="margin-top:6px">全部答えると自動で見積もり直します。答えずに、このまま数値を直して保存してもOKです。</div>';
+  box.onclick = function(ev){
+    var b = ev.target.closest('button[data-o]'); if (!b || f.busy) return;
+    var grp = b.parentNode, qi = +grp.getAttribute('data-q');
+    f.pending[qi].a = qs[qi].options[+b.getAttribute('data-o')];
+    Array.prototype.forEach.call(grp.children, function(x){ x.classList.toggle('on', x === b); });
+    if (f.pending.every(function(p){ return p.a; })) { f.qa = (f.qa || []).concat(f.pending); photoRun(f); }
+  };
+}
+$('fPhotoBtn').onclick = function(){ if (S.form && !S.form.busy) $('fPhoto').click(); };
+$('fPhoto').onchange = function(){
+  var file = this.files && this.files[0], f = S.form; this.value = '';
+  if (!file || !f) return;
+  f.qa = []; f.photo = null;
+  $('fPhotoBtn').textContent = '写真を準備中…';
+  shrinkPhoto(file).then(function(b64){ if (S.form !== f) return; f.photo = b64; photoRun(f); }, function(){ $('fPhotoBtn').textContent = '📷 写真で見積もる'; toast('写真を読み込めませんでした。もう一度撮影してください', true); });
 };
 function num(i){ var s = $(i).value.trim(); return s === '' ? 0 : Number(s); }
 $('fSave').onclick = function(){
