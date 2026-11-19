@@ -591,6 +591,9 @@ function renderDay(){
   };
 }
 
+// 上に固定されたヘッダーの下に隠れないよう、その高さ分ずらしてスクロールする
+function jumpTo(el){ if (!el) return; var hd = document.querySelector('header'), off = hd ? hd.offsetHeight + 8 : 8; window.scrollTo({ top: el.getBoundingClientRect().top + window.pageYOffset - off, behavior: 'smooth' }); }
+
 /* ---- 履歴（日ごとの平均） ---- */
 function renderHist(){
   var L = S.view.logs, cnt = {};
@@ -604,7 +607,7 @@ function renderHist(){
   });
   h += '</tbody></table></div>';
   $('histCard').innerHTML = h;
-  $('histCard').onclick = function(e){ var tr = e.target.closest('tr.row'); if (tr) { S.day = tr.getAttribute('data-d'); renderDay(); $('dayCard').scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
+  $('histCard').onclick = function(e){ var tr = e.target.closest('tr.row'); if (tr) { S.day = tr.getAttribute('data-d'); renderDay(); jumpTo($('dayCard')); } };
 }
 
 /* ---- 入力 ---- */
