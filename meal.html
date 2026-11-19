@@ -383,7 +383,7 @@ function renderMsg(){
   $('msg').innerHTML = h;
 }
 var MACRO = [['kcal','カロリー','kcal',10,'limit'],['protein','たんぱく質','g',1,'reach'],['fat','脂質','g',1,'limit'],['carbs','炭水化物','g',1,'range']];
-function riceTxt(c){ var r = ML.riceG(c); return r ? '白ご飯 約'+r+'g（茶碗'+(Math.round(r / ML.RICE_BOWL_G * 10) / 10)+'杯）' : ''; }
+function riceTxt(c){ var r = ML.riceG(c), p = ML.pastaG(c), f = ML.focacciaG(c); return r ? '白ご飯 約'+r+'g（茶碗'+(Math.round(r / ML.RICE_BOWL_G * 10) / 10)+'杯）／パスタ 乾麺で約'+p+'g／フォカッチャ 約'+f+'g' : ''; }
 var NCOL = { kcal: 'var(--nk)', protein: 'var(--np)', fat: 'var(--nf)', carbs: 'var(--nc)' };
 function fmtN(x, unit){ return unit === 'kcal' ? Math.round(x).toLocaleString('ja-JP') : ML.r1(x); }
 function macroRow(label, v, goal, unit, lo, hi, plan, kind, key){

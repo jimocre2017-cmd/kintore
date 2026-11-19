@@ -183,8 +183,13 @@ var MealLib = (function () {
 
   // 白ご飯（炊飯後・精白米）100g あたりの炭水化物 35.6g（日本食品標準成分表2020年版（八訂））。茶碗1杯＝150g
   var RICE_C_PER_G = 0.356, RICE_BOWL_G = 150;
+  // 主食ごとの炭水化物（100gあたり）：パスタ＝乾麺（八訂 スパゲッティ乾 約72g）、フォカッチャ＝市販・店の標準的な目安（約47g、商品で幅あり）
+  var PASTA_C_PER_G = 0.72, FOCACCIA_C_PER_G = 0.47;
+  function foodG(carbsG, perG) { return Math.max(0, Math.round(carbsG / perG / 5) * 5); }
+  function pastaG(carbsG) { return foodG(carbsG, PASTA_C_PER_G); }
+  function focacciaG(carbsG) { return foodG(carbsG, FOCACCIA_C_PER_G); }
   function riceG(carbsG) { return Math.max(0, Math.round(carbsG / RICE_C_PER_G / 5) * 5); }
 
-  return { carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  return { carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaG: focacciaG, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
