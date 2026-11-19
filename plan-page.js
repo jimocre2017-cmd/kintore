@@ -145,6 +145,18 @@ function renderMsg(){
   $('msg').innerHTML = h;
 }
 
+// 「開始 → 現在 → 目標」の3列。開始は計画の基準（開始後7日の平均で確定）、目標は目標体脂肪率に達したときの体重・脂肪量（除脂肪量は変わらない前提）
+function progressHtml(b, n, pre){
+  var prog = (b.baseFat != null && n.fat != null && b.baseFat > b.goalFat) ? Math.max(0, Math.min(100, (b.baseFat - n.fat) / (b.baseFat - b.goalFat) * 100)) : null;
+  var dl = b.deadline.split('/');
+  function row(lbl, a, c, g, u, d){ return '<div class="r"><span class="l">'+lbl+'</span><b class="num">'+(a == null ? '－' : a.toFixed(d))+'<small>'+u+'</small></b><b class="num now">'+(c == null ? '－' : c.toFixed(d))+'<small>'+u+'</small></b><b class="num goal">'+(g == null ? '－' : g.toFixed(d))+'<small>'+u+'</small></b></div>'; }
+  var h = '<div class="sng"><div class="r hd"><span class="l"></span><span>開始<br><small>'+md(b.startDate)+(pre ? '（暫定）' : '')+'</small></span><span class="now">現在<br><small>直近7日</small></span><span class="goal">目標<br><small>'+(+dl[1])+'/'+(+dl[2])+'ごろ</small></span></div>'
+    + row('体脂肪率', b.baseFat, n.fat, b.goalFat, '%', 1)
+    + row('体重', b.baseWeight, n.weight, b.targetWeight, 'kg', 1)
+    + row('脂肪の量', b.baseFatMass, n.fatMass, b.targetFatMass, 'kg', 1) + '</div>';
+  if (prog != null) h += '<div class="sngbar" title="開始から目標までの進み具合"><i style="width:'+prog.toFixed(0)+'%"></i></div><div class="sngtx">開始から目標まで、体脂肪率の <b class="num">'+prog.toFixed(0)+'%</b> まで進みました</div>';
+  return h;
+}
 function renderHero(){
   var V = S.V, el = $('heroCard');
   if (!V || !V.configured) {
@@ -163,6 +175,7 @@ function renderHero(){
   if (pre) h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">計画は '+mdw(b.startDate)+' から始まります。それまでの数値は基準線の暫定値で、開始後7日間に測った日の平均で確定します。</div>';
   else h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">今日の計画 '+f1(PL.plannedFatPct(b, V.today))+'% ／ ずれ <b class="num '+gapCls(gap, band)+'">'+sg(n.gapPct)+'%（脂肪 '+sg(gap)+'kg）</b></div>';
   var dl = b.deadline.split('/');
+  h += progressHtml(b, n, pre);
   h += '<div class="kv"><div><b class="num">'+f1(n.remainingKg)+'kg</b><span>目標 '+b.goalFat+'% まで落とす脂肪</span></div><div><b class="num">'+dl[0]+'/'+(+dl[1])+'/'+(+dl[2])+'</b><span>予定の到達日</span></div><div><b class="num">'+f2(b.weeklyLossKg)+'kg</b><span>週あたりの計画</span></div></div>';
   h += '<div class="note">体脂肪率は水分や食事で1日に±1%ほど動くため、判断は日ではなく週の平均で行います。測定数は直近7日で '+n.days+' 日分。</div>';
   el.innerHTML = h;

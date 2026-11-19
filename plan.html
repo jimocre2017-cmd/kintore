@@ -61,6 +61,17 @@ header .sp{margin-left:auto}
 .hero .big small{font-size:16px;font-weight:600;margin-left:2px}
 .chip{display:inline-block;border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;background:var(--surface-2);color:var(--ink-2)}
 .chip.good{background:var(--good-soft);color:var(--good)} .chip.bad{background:var(--danger-soft);color:var(--danger)} .chip.warn{background:var(--warn-soft);color:var(--warn)}
+.sng{margin:12px 0 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.sng .r{display:grid;grid-template-columns:76px repeat(3,1fr);align-items:center;padding:8px 10px;gap:4px;text-align:center}
+.sng .r+.r{border-top:1px solid var(--line)}
+.sng .l{text-align:left;font-size:12px;color:var(--ink-2);font-weight:700}
+.sng .hd{background:var(--surface-2);font-size:12px;font-weight:700;color:var(--ink-2)}
+.sng .hd small{font-weight:600}
+.sng b{font-size:17px}.sng b small{font-size:11px;font-weight:600;margin-left:1px;color:var(--ink-2)}
+.sng .now{color:var(--accent)}.sng .goal{color:var(--good)}
+.sng .hd .now,.sng .hd .goal{color:inherit}.sng .hd .now{color:var(--accent)}.sng .hd .goal{color:var(--good)}
+.sngbar{height:8px;border-radius:999px;background:var(--surface-2);margin-top:10px;overflow:hidden}.sngbar i{display:block;height:100%;background:var(--good);border-radius:999px}
+.sngtx{font-size:12px;color:var(--ink-2);margin-top:4px}
 .kv{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:12px 0 0}
 .kv div{background:var(--surface-2);border-radius:10px;padding:8px 10px}
 .kv b{display:block;font-size:17px}
