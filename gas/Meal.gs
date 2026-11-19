@@ -324,7 +324,7 @@ function mealEstimate(req) {
   }).join('\n') : '';
   var estUser = '区分：' + type + '\n食事の内容：\n' + text + foodTxt;
   // 同じ日に同じ内容を見積もるときは、保存済みの結果を使う（req.force で作り直し）
-  var res = aiCached_('mealEst', { u: estUser }, !!req.force, function () { return gemini_(mealEstimateSystem_(), estUser, mealEstimateSchema_()); });
+  var res = aiCached_('mealEst', { u: estUser }, !!req.force, function () { return gemini_(mealEstimateSystem_(), estUser, mealEstimateSchema_(), null, { fast: true }); });
   var out = mealNormalize_(res);
   if (!out.items.length) throw new Error(out.note || '食事の内容から栄養を見積もれませんでした。食べたものをもう少し具体的に書いてください');
   out.items.forEach(function (it) { it.line = it.name + (it.amount ? '（' + it.amount + '）' : '') + ' ' + it.kcal + 'kcal P' + it.protein + ' F' + it.fat + ' C' + it.carbs; });
