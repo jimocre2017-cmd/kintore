@@ -77,12 +77,16 @@ function renderRoadmap(){
   var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'<button type="button" class="tlink" data-term="diff">ⓘ 違いと意味</button></h3>';
   var first = RM.phases[0], f7 = ctx.fat7;
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
-  var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : 'first', dis = S.rmBusy ? ' disabled' : '';
-  h += '<div class="modesw"><div class="note" style="margin:8px 0 4px"><b>いまの道</b>（押すとすぐ切り替わります。第2期の中は「バルク」と「維持」を行き来でき、また減らしたいときは第1期へ）</div><div class="seg">'
-    + '<button type="button" class="'+(modeKey === 'first' ? 'on' : '')+'" id="rmGo1"'+dis+'>第1期<small>減量（リコンプ）</small></button>'
-    + '<button type="button" class="'+(modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期<small>バルク（増量）</small></button>'
-    + '<button type="button" class="'+(modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第2期<small>維持（現状維持）</small></button></div></div>';
-  if (R.needChoice) {
+  var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : 'first', dis = S.rmBusy ? ' disabled' : '', rec = !!(window.KTAdvice && KTAdvice.isOff());
+  var modeName = { first: '第1期（減量）', advance: '第2期 バルク', maintain: '第2期 維持' }[modeKey];
+  h += '<div class="modesw"><div class="note" style="margin:8px 0 4px"><b>いまのモード</b>（押すとすぐ切り替わります。「記録だけ」は助言・判定を止めて記録に集中するモードで、直前の道は覚えています）</div><div class="seg">'
+    + '<button type="button" class="'+(rec ? 'on' : '')+'" id="rmGoRec"'+dis+'>記録だけ<small>助言なし</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'first' ? 'on' : '')+'" id="rmGo1"'+dis+'>第1期<small>減量</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期<small>バルク</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第2期<small>維持</small></button></div></div>';
+  if (rec) {
+    h += '<div class="banner" style="margin-top:10px">記録だけのモードです（助言のポップアップ・切り替えの案内・今週の判定は止めています）。直前の道は「'+modeName+'」。上のボタンで、いつでも戻せます。</div>';
+  } else if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
       + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>維持期（現状維持）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
       + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／維持期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（1,660〜1,800kcal）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
@@ -110,7 +114,7 @@ function renderRoadmap(){
       if (pr.length) h += '<div style="margin-top:8px">'+pr.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num">'+(x.now == null ? '－' : f1(x.now))+' → '+f1(x.goal)+x.unit+(x.gap == null ? '' : '（あと '+sg(x.gap)+(x.reached ? '・到達' : '')+'）')+'</span></div>'; }).join('')+'</div>';
       if (mc.length) h += '<div style="margin-top:8px"><div class="note" style="margin:0 0 2px">直近7日の食事の平均（記録が揃った'+avg.days+'日分）</div>'+mc.map(function(x){ return '<div class="row"><span>'+esc(x.label)+'</span><span class="num '+(x.state === 'in' ? 'neg' : 'pos')+'">'+f1(x.avg)+x.unit+'（'+x.min+'〜'+x.max+'：'+(x.state === 'in' ? '範囲内' : x.state === 'under' ? '少ない' : '多い')+'）</span></div>'; }).join('')+'</div>';
       var bl = RoadmapLib.balance(p, { meal: avg, sets: S.plan ? S.plan.sets7 : null, cardio: S.cardioC ? RoadmapLib.cardioCheck(p, S.cardioC.logs || [], today) : null });
-      if (bl.items.length) {
+      if (!rec && bl.items.length) {
         h += '<div style="margin-top:12px"><div class="note" style="margin:0 0 4px"><b>今週のバランス</b>（直近7日。やり過ぎ・やらな過ぎの判定）　'+(bl.under ? '足りない '+bl.under+'　' : '')+(bl.over ? 'やり過ぎ '+bl.over+'　' : '')+(!bl.under && !bl.over && !bl.nodata ? 'すべてちょうど' : '')+'</div>'
           + bl.items.map(function(x){
             var lab = x.state === 'in' ? 'ちょうど' : x.state === 'under' ? '足りない' : x.state === 'over' ? 'やり過ぎ' : '記録なし';
@@ -131,9 +135,11 @@ function renderRoadmap(){
   var mp = $('rmMaintPlan'); if (mp) mp.onclick = rmMaintPlan;
   var o = $('rmHold'); if (o) o.onclick = function(){ rmDecide('hold'); };
   var k = $('rmBack'); if (k) k.onclick = function(){ rmDecide(''); };
-  var g1 = $('rmGo1'); if (g1) g1.onclick = function(){ if (modeKey !== 'first') rmDecide(''); };
-  var gb = $('rmGoBulk'); if (gb) gb.onclick = function(){ if (modeKey !== 'advance') rmDecide('advance'); };
-  var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ if (modeKey !== 'maintain') rmDecide('maintain'); };
+  function pick(key, val){ var was = rec; if (window.KTAdvice) KTAdvice.setOff(false); if (modeKey === key) { if (was) renderRoadmap(); return; } rmDecide(val); }
+  var gr = $('rmGoRec'); if (gr) gr.onclick = function(){ if (window.KTAdvice) { KTAdvice.setOff(true); renderRoadmap(); toast('記録だけのモードにしました'); } };
+  var g1 = $('rmGo1'); if (g1) g1.onclick = function(){ pick('first', ''); };
+  var gb = $('rmGoBulk'); if (gb) gb.onclick = function(){ pick('advance', 'advance'); };
+  var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ pick('maintain', 'maintain'); };
 }
 function rmDecide(d){
   if (S.rmBusy) return;
