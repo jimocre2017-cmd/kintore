@@ -227,15 +227,24 @@ function trackHtml(b, n){
 function progressHtml(b, n, pre){
   var dl = b.deadline.split('/'), ex = bodyExtra(b);
   var ffNow = ex.nf(n.weight, n.fat);
-  function row(lbl, a, c, g, u, d){ return '<div class="r"><span class="l">'+lbl+'</span><b class="num">'+(a == null ? '－' : a.toFixed(d))+'<small>'+u+'</small></b><b class="num now">'+(c == null ? '－' : c.toFixed(d))+'<small>'+u+'</small></b><b class="num goal">'+(g == null ? '－' : g.toFixed(d))+'<small>'+u+'</small></b></div>'; }
+  // better＝良い方向（'down'＝下がるほど良い／'up'＝上がるほど良い）。現在の下に「開始からの変化」、目標の下に「あと◯◯」を出す
+  function row(lbl, a, c, g, u, d, better){
+    var sub = '', rem = '';
+    if (!pre && a != null && c != null) {
+      var df = c - a, pc = a ? df / a * 100 : null, ok = better === 'down' ? df < 0 : df > 0;
+      sub = '<i class="'+(Math.abs(df) < Math.pow(10, -d) / 2 ? '' : ok ? 'ok' : 'ng')+'">'+sg(df, d)+(u === '%' ? 'pt' : u)+(pc != null ? '<br>'+sg(pc, 1)+'%' : '')+'</i>';
+    }
+    if (g != null && c != null) { var r = better === 'down' ? c - g : g - c; rem = '<i>'+(r <= 0 ? '達成' : 'あと '+r.toFixed(d)+u)+'</i>'; }
+    return '<div class="r"><span class="l">'+lbl+'</span><span class="c"><b class="num">'+(a == null ? '－' : a.toFixed(d))+'<small>'+u+'</small></b></span><span class="c now"><b class="num">'+(c == null ? '－' : c.toFixed(d))+'<small>'+u+'</small></b>'+sub+'</span><span class="c goal"><b class="num">'+(g == null ? '－' : g.toFixed(d))+'<small>'+u+'</small></b>'+rem+'</span></div>';
+  }
   var bg = chartBg(b, n);
   var h = '<div class="sngwrap">'+(bg ? '<div class="sngbg">'+bg+'</div>' : '')+'<div class="sng"><div class="r hd"><span class="l"></span><span>開始<br><small>'+md(b.startDate)+(pre ? '（暫定）' : '')+'</small></span><span class="now">現在<br><small>直近7日</small></span><span class="goal">目標<br><small>'+(+dl[1])+'/'+(+dl[2])+'ごろ</small></span></div>'
-    + row('体脂肪率', b.baseFat, n.fat, b.goalFat, '%', 1)
-    + row('体重', b.baseWeight, n.weight, b.targetWeight, 'kg', 1)
-    + row('脂肪の量', b.baseFatMass, n.fatMass, b.targetFatMass, 'kg', 1)
-    + row('骨格筋率', ex.muscle[0], ex.muscle[1], null, '%', 1)
-    + row('内臓脂肪', ex.visceral[0], ex.visceral[1], null, '', 1)
-    + row('FFMI（補正後）', ex.ffmiBase, ffNow, ex.ffmiGoal, '', 1) + '</div>'
+    + row('体脂肪率', b.baseFat, n.fat, b.goalFat, '%', 1, 'down')
+    + row('体重', b.baseWeight, n.weight, b.targetWeight, 'kg', 1, 'down')
+    + row('脂肪の量', b.baseFatMass, n.fatMass, b.targetFatMass, 'kg', 1, 'down')
+    + row('骨格筋率', ex.muscle[0], ex.muscle[1], null, '%', 1, 'up')
+    + row('内臓脂肪', ex.visceral[0], ex.visceral[1], null, '', 1, 'down')
+    + row('FFMI（補正後）', ex.ffmiBase, ffNow, ex.ffmiGoal, '', 1, 'up') + '</div>'
     + (bg ? '<div class="sngx"><span>▲ 開始 '+md(b.startDate)+'</span><span>背景：脂肪の量の進み 0〜100%（実線＝実績／点線＝計画）</span><span>目標日 '+md(b.deadline)+' ▲</span></div>' : '') + '</div>';
   h += '<div class="sngtx">FFMIの開始以降の平均：<b class="num">'+(ex.ffmiAvg == null ? '－' : ex.ffmiAvg.toFixed(1))+'</b>'+(ex.ffmiDays ? '（'+ex.ffmiDays+'日分）' : '')+'　／　骨格筋率・内臓脂肪レベルに目標はありません（推移を見る指標です）</div>';
   h += trackHtml(b, n);
