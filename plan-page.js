@@ -181,10 +181,23 @@ function renderHero(){
   el.innerHTML = h;
 }
 
+// 維持期：開始（維持期に入る前の基準）→ 現在 → 守る範囲（最低ライン〜許容帯の上限）。体重の範囲は除脂肪量が変わらない前提で換算
+function maintainProgressHtml(b, n, p, up){
+  if (!b || !p.floorFat) return '';
+  var wAt = function(f){ return b.leanKg ? b.leanKg / (1 - f / 100) : null; };
+  var rng = function(a, c, d, u){ return a == null || c == null ? '－' : a.toFixed(d)+'<small>'+u+'</small>〜<br>'+c.toFixed(d)+'<small>'+u+'</small>'; };
+  var v = function(x, u){ return x == null ? '－' : x.toFixed(1)+'<small>'+u+'</small>'; };
+  var inside = n.fat != null && n.fat >= p.floorFat && n.fat <= up;
+  return '<div class="sng"><div class="r hd"><span class="l"></span><span>開始<br><small>'+md(b.startDate)+'</small></span><span class="now">現在<br><small>直近7日</small></span><span class="goal">守る範囲<br><small>最低〜上限</small></span></div>'
+    + '<div class="r"><span class="l">体脂肪率</span><b class="num">'+v(b.baseFat, '%')+'</b><b class="num now">'+v(n.fat, '%')+'</b><b class="num goal" style="font-size:14px">'+rng(p.floorFat, up, 1, '%')+'</b></div>'
+    + '<div class="r"><span class="l">体重</span><b class="num">'+v(b.baseWeight, 'kg')+'</b><b class="num now">'+v(n.weight, 'kg')+'</b><b class="num goal" style="font-size:14px">'+rng(wAt(p.floorFat), wAt(up), 1, 'kg')+'</b></div></div>'
+    + '<div class="sngtx">いまの体脂肪率は、守る範囲の<b>'+(inside ? '中です' : (n.fat < p.floorFat ? '下（最低ライン割れ）です' : '上（許容帯の超過）です'))+'</b></div>';
+}
 function maintainHero(V, n, ad, st){
   var fl = ad && ad.floor, p = V.plan, up = p.floorFat ? p.floorFat + PL.MAINT_BAND : null;
   var h = '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+st[1]+'">'+(st[0] || '維持期')+'</span></div>';
   if (p.floorFat) h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">維持期：最低 <b class="num">'+f1(p.floorFat)+'%</b> 〜 許容帯の上限 <b class="num">'+f1(up)+'%</b>'+(fl ? ' ／ 最低ラインまで <b class="num '+(fl.marginPct < 0 ? 'pos' : '')+'">'+sg(fl.marginPct)+'%</b>' : '')+'</div>';
+  h += maintainProgressHtml(V.built, n, p, up);
   h += '<div class="note">維持期は減量せず、維持カロリーで過ごします。体脂肪率が最低ラインを割りそうなら少し多めに食べ、許容帯の上を超えたら少し控えます（いずれも週単位で±200kcalまで）。判断は日ではなく直近7日の平均です。</div>';
   return h;
 }
