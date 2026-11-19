@@ -12,6 +12,10 @@ var PlanLib = (function () {
   var MAINT_BAND = 1.5;     // 維持期：最低体脂肪率の上にこの幅(%)までを許容帯とする
   var BAND_KG = 0.3;        // 計画との差が±この脂肪量(kg)以内なら「ほぼ計画どおり」
   var HOLD_BAND = 50;       // この差未満なら目標を変えない（kcal）
+  var BULK_SURPLUS = 0.075; // バルク：消費の見込みに上乗せする割合（マスタープランの+5〜10%の中央）
+  var BULK_GAIN_MIN = 0.25; // バルク：体重の増え方の目安（%/週）。これ未満は遅い、超えると速い
+  var BULK_GAIN_MAX = 0.5;
+  var BULK_NUDGE = 100;     // 増え方が目安から外れたときに動かす量（kcal）
 
   function r1(n) { return Math.round(n * 10) / 10; }
   function r2(n) { return Math.round(n * 100) / 100; }
@@ -91,7 +95,10 @@ var PlanLib = (function () {
       shape: plan.shape === 'ease' ? 'ease' : 'linear',
       pauses: cleanPauses(plan.pauses),
       phase: plan.phase === 'maintain' ? 'maintain' : 'cut',
-      floorFat: Number(plan.floorFat) > 0 ? Number(plan.floorFat) : 0
+      floorFat: Number(plan.floorFat) > 0 ? Number(plan.floorFat) : 0,
+      // マスタープラン連動（RoadmapLib.adjustCfg の結果）。無ければ従来どおり（減量計画の phase だけで決める）
+      roadmap: plan.roadmap && (plan.roadmap.mode === 'bulk' || plan.roadmap.mode === 'maintain' || plan.roadmap.mode === 'cut')
+        ? { mode: plan.roadmap.mode, kcalMin: Number(plan.roadmap.kcalMin) || 0, kcalMax: Number(plan.roadmap.kcalMax) || 0, floorFat: Number(plan.roadmap.floorFat) || 0 } : null
     };
     p.configured = !!(p.goalFat && p.startDate);
     return p;
@@ -317,13 +324,16 @@ var PlanLib = (function () {
     var est = estimatedTdee(bodyMap, plan, today, ctx.base), obs = observedTdee(bodyMap, mealMap, today, 28);
     var floor = Math.round(Math.max(est ? est.bmr : 1200, 1200));
     var pauseNow = pausedOn(b.pauses, today), rateNow = rateAt(b, today);
-    var maintain = plan.phase === 'maintain';
-    if (maintain) rateNow = 0; // 維持期：赤字なし（維持カロリー）
+    var rmc = plan.roadmap || null, mode = rmc ? rmc.mode : (plan.phase === 'maintain' ? 'maintain' : 'cut');
+    var maintain = mode === 'maintain' || plan.phase === 'maintain', bulk = mode === 'bulk' && !maintain;
+    var ff = plan.floorFat > 0 ? plan.floorFat : (rmc && rmc.floorFat) || 0; // 維持期の最低体脂肪率（未設定ならマスタープランの第1期の目標）
+    if (maintain || bulk) rateNow = 0; // 維持期・バルク：減量の赤字なし
+    function stepTo(r) { if (!prev) return r; var df = r - prev; if (Math.abs(df) < HOLD_BAND) return prev; return prev + Math.max(-STEP_LIMIT, Math.min(STEP_LIMIT, df)); }
     var deficit = Math.round(rateNow * KCAL_PER_KG / 7); // 休止中は0（維持カロリー）
     var out = {
       today: today, coverage: cov, weightKg: r1(weight),
       protein: { minG: Math.round(weight * 1.6), targetG: Math.round(weight * 2.0) },
-      planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain ? false : b.aggressive, shape: b.shape, paused: !!pauseNow, phase: plan.phase },
+      planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain || bulk ? false : b.aggressive, mode: maintain ? 'maintain' : bulk ? 'bulk' : 'cut', shape: b.shape, paused: !!pauseNow, phase: plan.phase },
       floorKcal: floor, previousTarget: prev || null,
       avgIntake7: meals7.length ? Math.round(mean(meals7.map(function (x) { return x.kcal; }))) : null
     };
@@ -331,10 +341,11 @@ var PlanLib = (function () {
 
     // 使う消費カロリー：実測が出せればそれ、無ければ推定
     var tdee, basis;
-    if (obs && obs.tdee >= floor && est && obs.tdee <= est.bmr * 2.3) { tdee = obs.tdee; basis = 'observed'; }
+    // バルクは筋肉も増えるため、脂肪量の変化からの実測は当てにならない。推定（基礎代謝×係数）を使い、体重の増え方で微調整する
+    if (!bulk && obs && obs.tdee >= floor && est && obs.tdee <= est.bmr * 2.3) { tdee = obs.tdee; basis = 'observed'; }
     else { tdee = est ? est.tdee : obs.tdee; basis = 'estimated'; }
     out.tdee = { kcal: tdee, basis: basis, estimated: est ? est.tdee : null, observed: obs ? obs.tdee : null };
-    var raw = Math.max(floor, Math.round((tdee - deficit) / 10) * 10);
+    var raw = bulk ? Math.max(floor, Math.round(tdee * (1 + BULK_SURPLUS) / 10) * 10) : Math.max(floor, Math.round((tdee - deficit) / 10) * 10);
     out.rawTarget = raw;
 
     if (meals7.length < cov.mealNeed) reasons.push('食事の記録が揃った日が直近7日で' + meals7.length + '日（5日以上で調整します）');
@@ -344,6 +355,20 @@ var PlanLib = (function () {
     if (reasons.length) {
       status = 'insufficient';
       target = prev || raw; // 記録が足りない週は、今の目標を変えない
+    } else if (bulk) {
+      var wtr = trendOf(bodyMap, 'weight', addDays(today, -27), today);
+      if (wtr && wtr.span >= MIN_BODY_SPAN) {
+        var pct = wtr.perWeek / weight * 100;
+        out.actual = { weeklyGainKg: r2(wtr.perWeek), weeklyGainPct: r2(pct), spanDays: wtr.span, bodyPoints: wtr.n, avgIntake: out.avgIntake7 };
+        if (pct > BULK_GAIN_MAX) { status = 'bulk_fast'; raw -= BULK_NUDGE; reasons.push('体重の増え方が週' + r2(pct) + '%で、目安（' + BULK_GAIN_MIN + '〜' + BULK_GAIN_MAX + '%）より速い。脂肪が乗りやすいので' + BULK_NUDGE + 'kcal控えめにします'); }
+        else if (pct < BULK_GAIN_MIN) { status = 'bulk_slow'; raw += BULK_NUDGE; reasons.push('体重の増え方が週' + r2(pct) + '%で、目安（' + BULK_GAIN_MIN + '〜' + BULK_GAIN_MAX + '%）より遅い。' + BULK_NUDGE + 'kcal多めにします'); }
+        else { status = 'bulk_ok'; reasons.push('体重の増え方が週' + r2(pct) + '%で、目安（' + BULK_GAIN_MIN + '〜' + BULK_GAIN_MAX + '%）の中です。今の食事量を続けます'); }
+        target = status === 'bulk_ok' && prev ? prev : stepTo(raw);
+      } else {
+        status = 'learning'; target = prev || raw;
+        reasons.push('バルクの記録がまだ' + MIN_BODY_SPAN + '日分に届いていないため、消費の見込み（基礎代謝×' + plan.activity + '）の' + Math.round(BULK_SURPLUS * 1000) / 10 + '%増しを使います');
+      }
+      target = Math.max(floor, Math.round(target / 10) * 10);
     } else if (basis !== 'observed') {
       status = 'learning';
       target = prev || raw;
@@ -352,11 +377,7 @@ var PlanLib = (function () {
       var actual = -obs.fatPerWeek, plan_ = rateNow;
       out.actual = { weeklyLossKg: r2(actual), spanDays: obs.span, bodyPoints: obs.bodyPoints, avgIntake: obs.intake, mealDays: obs.mealDays };
       if (actual < plan_ - 0.2) status = 'behind'; else if (actual > plan_ + 0.3) status = 'ahead'; else status = 'on_track';
-      if (prev) {
-        var diff = raw - prev;
-        if (Math.abs(diff) < HOLD_BAND) target = prev;
-        else target = prev + Math.max(-STEP_LIMIT, Math.min(STEP_LIMIT, diff));
-      } else target = raw;
+      target = stepTo(raw);
       target = Math.max(floor, Math.round(target / 10) * 10);
       if (obs.span < 21) reasons.push('実測は' + obs.span + '日分の傾向で、まだ誤差が大きい（週あたり±0.2kg程度）ので、動かす幅を小さく抑えます');
       var leanTr = trendOf(bodyMap, 'lean', addDays(today, -27), today);
@@ -368,16 +389,16 @@ var PlanLib = (function () {
     var fats = [];
     for (d = toDays(from7); d <= toDays(today); d++) { var bdd = bodyMap[fromDays(d)]; if (bdd && bdd.fat != null) fats.push(bdd.fat); }
     var fat7 = fats.length >= 2 ? mean(fats) : null;
-    if (plan.floorFat > 0 && fat7 != null) {
-      var upper = plan.floorFat + MAINT_BAND;
-      out.floor = { floorFat: plan.floorFat, upperFat: r1(upper), currentFat: r1(fat7), marginPct: r1(fat7 - plan.floorFat) };
+    if (ff > 0 && fat7 != null && !bulk) {
+      var upper = ff + MAINT_BAND;
+      out.floor = { floorFat: ff, upperFat: r1(upper), currentFat: r1(fat7), marginPct: r1(fat7 - ff) };
       if (maintain && status !== 'insufficient') {
-        if (fat7 < plan.floorFat) { status = 'below_floor'; target = Math.round((tdee + STEP_LIMIT) / 10) * 10; reasons.unshift('体脂肪率が最低ライン' + plan.floorFat + '%を下回っています。維持カロリーより' + STEP_LIMIT + 'kcal多く食べて、筋トレは維持します'); }
+        if (fat7 < ff) { status = 'below_floor'; target = Math.round((tdee + STEP_LIMIT) / 10) * 10; reasons.unshift('体脂肪率が最低ライン' + ff + '%を下回っています。維持カロリーより' + STEP_LIMIT + 'kcal多く食べて、筋トレは維持します'); }
         else if (fat7 > upper) { status = 'above_band'; target = Math.max(floor, Math.round((tdee - STEP_LIMIT) / 10) * 10); reasons.unshift('体脂肪率が許容帯の上限' + r1(upper) + '%を超えています。維持カロリーより' + STEP_LIMIT + 'kcal控えめにします'); }
-        else { status = 'maintaining'; target = Math.max(floor, Math.round(tdee / 10) * 10); reasons.unshift('体脂肪率は許容帯（' + plan.floorFat + '〜' + r1(upper) + '%）の中。維持カロリーで過ごします'); }
-      } else if (!maintain && fat7 <= plan.floorFat) {
+        else { status = 'maintaining'; target = Math.max(floor, Math.round(tdee / 10) * 10); reasons.unshift('体脂肪率は許容帯（' + ff + '〜' + r1(upper) + '%）の中。維持カロリーで過ごします'); }
+      } else if (!maintain && fat7 <= ff) {
         status = 'floor_reached'; target = Math.max(floor, Math.round(tdee / 10) * 10); out.floorReached = true;
-        reasons.unshift('体脂肪率が最低ライン' + plan.floorFat + '%に届きました。これ以上は減らさず、維持期へ切り替えるのがおすすめです');
+        reasons.unshift('体脂肪率が最低ライン' + ff + '%に届きました。これ以上は減らさず、維持期へ切り替えるのがおすすめです');
       }
     }
     if (pauseNow) { // 休止期間：維持カロリーで運用し、計画との比較は行わない
@@ -385,6 +406,12 @@ var PlanLib = (function () {
       reasons.unshift('休止期間（' + pauseNow.from + '〜' + pauseNow.to + (pauseNow.reason ? '：' + pauseNow.reason : '') + '）のため、維持カロリーで過ごします');
       out.pause = { from: pauseNow.from, to: pauseNow.to, reason: pauseNow.reason || '' };
     }
+    // マスタープランの範囲に収める（減量＝第1期、バルク＝第2期）。休止・記録不足・維持への切替提案のときは動かさない
+    if (rmc && rmc.kcalMax > 0 && !maintain && !pauseNow && status !== 'insufficient' && status !== 'floor_reached' && target) {
+      var lo = Math.max(rmc.kcalMin, floor), hi = Math.max(lo, rmc.kcalMax), cl = Math.min(hi, Math.max(lo, target));
+      if (cl !== target) { reasons.push('マスタープランの範囲（' + rmc.kcalMin + '〜' + rmc.kcalMax + 'kcal）に収めるため、' + target + 'kcalを' + cl + 'kcalにしました'); target = cl; }
+    }
+    out.mode = maintain ? 'maintain' : bulk ? 'bulk' : 'cut'; out.range = rmc && rmc.kcalMax > 0 && !maintain ? { min: rmc.kcalMin, max: rmc.kcalMax } : null;
     out.status = status; out.reasons = reasons; out.target = target;
     out.deltaFromPrevious = prev ? target - prev : null;
     out.weeklyBudget = target * 7;
