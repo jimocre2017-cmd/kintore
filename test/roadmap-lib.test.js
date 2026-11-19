@@ -127,4 +127,21 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.strictEqual(R.MAINT_BAND_PCT, 1.5);
   console.log('ok  advice rules');
 })();
+(function () {
+  var a = function (o) { o.date = '2026/11/19'; return R.autoMealGoals(o); };
+  var cut = a({ weightKg: 60, bmr: 1400, adoptedKcal: 1720 }).goals;
+  assert.deepStrictEqual(cut, { kcal: 1720, kcalMin: 1660, kcalMax: 1800, protein: 125, proteinMin: 120, proteinMax: 130, fat: 45, fatMin: 40, fatMax: 50 }, '第1期：マスタープランの数値＋採用カロリー');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400, adoptedKcal: 1320 }).goals.kcal, 1660, '採用値が範囲の外なら範囲に収める');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400 }).goals.kcal, 1730, '採用値が無ければ範囲の中央');
+  var bulk = a({ decision: 'advance', weightKg: 60, bmr: 1400, adoptedKcal: 2000 }).goals;
+  assert.deepStrictEqual([bulk.kcalMin, bulk.kcal, bulk.kcalMax, bulk.proteinMin, bulk.protein, bulk.proteinMax, bulk.fatMin, bulk.fat, bulk.fatMax], [1950, 2000, 2100, 96, 108, 132, 44, 56, 67], 'バルク：カロリーはマスタープラン、たんぱく質・脂質は体組成から');
+  var mt = a({ decision: 'maintain', weightKg: 60, bmr: 1400, adoptedKcal: 1700 }).goals;
+  assert.deepStrictEqual([mt.kcalMin, mt.kcal, mt.kcalMax, mt.protein, mt.fat], [1860, 1960, 2060, 125, 45], '維持：基礎代謝×1.4±100（古い採用値は使わない）');
+  assert.strictEqual(a({ planPhase: 'maintain', weightKg: 60, bmr: 1400 }).goals.kcal, 1960, '減量計画が維持期でも維持');
+  var none = a({ decision: 'maintain' }).goals;
+  assert.strictEqual(none.kcal, undefined, '体組成が無い維持期はカロリーを出さない（今の値を残す）');
+  assert.strictEqual(none.protein, 125);
+  assert.strictEqual(a({ decision: 'hold', weightKg: 60, bmr: 1400 }).phaseKey, 'recomp', '据え置きは第1期');
+  console.log('ok  autoMealGoals');
+})();
 console.log(n + ' 件OK');

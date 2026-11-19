@@ -110,7 +110,8 @@ function mealObj_(r) {
   };
 }
 
-function mealGoals_() {
+/** raw＝true のときは、自動の値を重ねずに保存済みの値だけを返す（手入力の保存で、送られなかった項目を今のままにするため） */
+function mealGoals_(raw) {
   var p = PropertiesService.getScriptProperties();
   // 減量計画で「来週から」採用した目標カロリーは、その日になったら反映する
   var nx = p.getProperty('MEAL_GOAL_KCAL_NEXT');
@@ -120,12 +121,19 @@ function mealGoals_() {
   }
   function g(k) { var v = Number(p.getProperty(k)); return v > 0 ? v : 0; }
   // kcal・protein・fat＝目安。〜Min＝下限（アンダー）、〜Max＝上限（トップ）。0＝設定なし
-  return {
+  var out = {
     kcal: g('MEAL_GOAL_KCAL'), protein: g('MEAL_GOAL_P'), fat: g('MEAL_GOAL_F'),
     kcalMin: g('MEAL_GOAL_KCAL_MIN'), kcalMax: g('MEAL_GOAL_KCAL_MAX'),
     proteinMin: g('MEAL_GOAL_P_MIN'), proteinMax: g('MEAL_GOAL_P_MAX'),
     fatMin: g('MEAL_GOAL_F_MIN'), fatMax: g('MEAL_GOAL_F_MAX')
   };
+  // 自動（体組成＋マスタープラン）。既定はオン。手で保存すると '0'（手入力）になり、「自動」に戻すまで保存した値を使う。自動で出せない項目は保存済みの値のまま
+  out.auto = p.getProperty('MEAL_GOAL_AUTO') !== '0';
+  if (out.auto && !raw) {
+    var a = mealAutoGoals_();
+    if (a) { Object.keys(a.goals).forEach(function (k) { if (a.goals[k] > 0) out[k] = a.goals[k]; }); out.autoInfo = a.summary; }
+  }
+  return out;
 }
 
 /** 目標カロリーを変えるとき、下限・上限も同じ幅だけずらす（範囲の幅は保つ）。減量計画の採用で目安だけ変わって範囲とずれるのを防ぐ */
@@ -147,6 +155,18 @@ function mealSuggest_() {
     var out = { protein: Math.round(w * 1.8) };
     if (bmr !== null) { out.maintenanceKcal = Math.round(bmr * 1.4 / 10) * 10; out.cutKcal = out.maintenanceKcal - 500; }
     return out;
+  } catch (e) { return null; }
+}
+
+/** 体組成の最新値とマスタープラン（期・モード）から、1日の目標を自動で出す。計算本体は RoadmapLib.autoMealGoals（画面と共通）。出せないときは null */
+function mealAutoGoals_() {
+  try {
+    var logs = bodyGet().logs, w = null, bmr = null, p = PropertiesService.getScriptProperties(), today = today_();
+    logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; });
+    return RoadmapLib.autoMealGoals({
+      date: today, decision: roadmapDecisionRead_(), planPhase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
+      fat7: RoadmapLib.fat7(logs, today), weightKg: w, bmr: bmr, adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0
+    });
   } catch (e) { return null; }
 }
 
@@ -223,6 +243,8 @@ function mealDelete(id) {
 function mealSetGoals(g) {
   g = g || {};
   var pr = PropertiesService.getScriptProperties();
+  // 「自動」に戻すだけ：数値は保存しない（自動のあいだは体組成とマスタープランから毎回出す）
+  if (g.auto === true) { pr.setProperty('MEAL_GOAL_AUTO', '1'); return mealGoals_(); }
   pr.deleteProperty('MEAL_GOAL_KCAL_NEXT'); // 手で目標を直した時は、予約中の変更を取り消す
   var defs = [
     ['kcal', 'MEAL_GOAL_KCAL', 6000], ['protein', 'MEAL_GOAL_P', 500], ['fat', 'MEAL_GOAL_F', 500],
@@ -230,7 +252,7 @@ function mealSetGoals(g) {
     ['proteinMin', 'MEAL_GOAL_P_MIN', 500], ['proteinMax', 'MEAL_GOAL_P_MAX', 500],
     ['fatMin', 'MEAL_GOAL_F_MIN', 500], ['fatMax', 'MEAL_GOAL_F_MAX', 500]
   ];
-  var cur = mealGoals_(), next = {};
+  var cur = mealGoals_(true), next = {};
   defs.forEach(function (d) {
     if (!Object.prototype.hasOwnProperty.call(g, d[0])) { next[d[0]] = cur[d[0]]; return; } // 送られなかった項目は今のまま（古いアプリ版との互換）
     var raw = g[d[0]], v = raw === '' || raw === null || raw === undefined ? 0 : Number(raw);
@@ -245,6 +267,7 @@ function mealSetGoals(g) {
     if (hi && t && t > hi) throw new Error(k[1] + 'の目安が上限より大きくなっています');
   });
   defs.forEach(function (d) { pr.setProperty(d[1], String(next[d[0]])); });
+  pr.setProperty('MEAL_GOAL_AUTO', '0'); // 手で保存した＝手入力モード
   return mealGoals_();
 }
 

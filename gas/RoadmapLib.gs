@@ -89,6 +89,39 @@ var RoadmapLib = (function () {
     return g;
   }
 
+  /* 体組成とマスタープランから、1日の目標（目安・下限・上限）を自動で出す。画面とApps Scriptで共通。
+     o＝{date, decision, planPhase:'cut'|'maintain', fat7, weightKg, bmr, adoptedKcal}
+     ・期とモード：未選択／据え置き＝第1期、バルク＝第2期、維持（選択、または減量計画が維持期）＝維持期
+     ・マスタープランに数値がある項目はそれを使う（第1期＝カロリー・たんぱく質・脂質、第2期＝カロリー）
+     ・マスタープランに無い項目は体組成から出す：たんぱく質＝体重×1.8g（範囲は×1.6〜×2.2）、維持カロリー＝基礎代謝×1.4（範囲は±100kcal）、脂質＝カロリーの25%（範囲は20〜30%）
+     ・目安のカロリー：減量計画で今週採用された値を、期の範囲に収めて使う（維持期は体重から出した維持カロリー）
+     出せない項目は含めない（呼び出し側が今の値を残す）。炭水化物は含まない */
+  function autoMealGoals(o, rm) {
+    rm = rm || ROADMAP; o = o || {};
+    var r = resolve(o.date || '2026/11/18', { decision: o.decision, fat7: o.fat7 }, rm);
+    var maint = o.decision === 'maintain' || o.planPhase === 'maintain';
+    var phase = maint && rm.maintainPhase ? rm.maintainPhase : r.phase;
+    var w = Number(o.weightKg) > 0 ? Number(o.weightKg) : 0, bmr = Number(o.bmr) > 0 ? Number(o.bmr) : 0, adopted = Number(o.adoptedKcal) > 0 ? Number(o.adoptedKcal) : 0;
+    var g = {}, src = {};
+    function setRange(key, lo, t, hi, from) { g[key] = Math.round(t); g[key + 'Min'] = Math.round(lo); g[key + 'Max'] = Math.round(hi); src[key] = from; }
+    if (phase.kcal) {
+      var k = adopted > 0 ? Math.min(phase.kcal.max, Math.max(phase.kcal.min, adopted)) : mid(phase.kcal, 10);
+      setRange('kcal', phase.kcal.min, k, phase.kcal.max, 'plan');
+    } else if (bmr) {
+      var mk = Math.round(bmr * 1.4 / 10) * 10;
+      setRange('kcal', mk - 100, mk, mk + 100, 'body');
+    }
+    if (phase.protein) setRange('protein', phase.protein.min, mid(phase.protein, 1), phase.protein.max, 'plan');
+    else if (w) setRange('protein', w * 1.6, w * 1.8, w * 2.2, 'body');
+    if (phase.fat) setRange('fat', phase.fat.min, mid(phase.fat, 1), phase.fat.max, 'plan');
+    else if (g.kcal) setRange('fat', g.kcal * 0.20 / 9, g.kcal * 0.25 / 9, g.kcal * 0.30 / 9, 'body');
+    var label = phase.label, parts = [];
+    if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? 'マスタープランの範囲' + g.kcalMin + '〜' + g.kcalMax + 'kcal' + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '') : '基礎代謝×1.4の維持カロリー±100kcal'));
+    if (src.protein) parts.push('たんぱく質＝' + (src.protein === 'plan' ? 'マスタープランの範囲' : '体重×1.6〜2.2g（目安は×1.8）'));
+    if (src.fat) parts.push('脂質＝' + (src.fat === 'plan' ? 'マスタープランの範囲' : 'カロリーの20〜30%（目安は25%）'));
+    return { phaseKey: phase.key, phaseLabel: label, goals: g, source: src, summary: label + ' に合わせて自動計算：' + parts.join('、') + '。' };
+  }
+
   /* 今の測定値との差。state＝{fatPct, leanKg, weightKg}（体組成の最新の日平均）。目標のない項目は出さない */
   function progress(phase, state) {
     var t = phase.targets, s = state || {}, out = [];
@@ -282,6 +315,6 @@ var RoadmapLib = (function () {
     };
   }
 
-  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;
