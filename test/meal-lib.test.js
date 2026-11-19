@@ -9,7 +9,7 @@
   assert.strictEqual(ML.carbGoals({ kcal: 500, protein: 125, fat: 45 }), null);
   assert.strictEqual(ML.riceG(35.6), 100);
   assert.strictEqual(ML.riceG(0), 0);
-  assert.strictEqual(ML.pastaG(72), 100);
+  assert.strictEqual(ML.pastaG(75), 100);
   assert.strictEqual(ML.focacciaPieces(31), 1);
   assert.strictEqual(ML.focacciaPieces(46), 1.5);
   assert.strictEqual(ML.pastaG(0), 0);
