@@ -228,6 +228,30 @@ var RoadmapLib = (function () {
     };
   }
 
+  /* ---- 数値に応じた助言（アプリを開いたとき・体組成を記録したときのポップアップ用。AIは使わない） ----
+     ctx＝{fat7:{avg,days}|null, decision, planPhase:'cut'|'maintain', floorFat, date}
+     戻り値 [{key, level:'warn'|'info', title, body, action:'plan'}]。しきい値：維持期の許容帯＝最低＋1.5%（減量計画の MAINT_BAND と同じ）、バルク時の上限＝第1期の目標＋3%（アプリの既定値） */
+  var MAINT_BAND_PCT = 1.5, BULK_OVER_PCT = 3;
+  function advice(ctx, rm) {
+    rm = rm || ROADMAP; ctx = ctx || {};
+    var out = [], first = rm.phases[0], goal = first.targets.fatPct, f = ctx.fat7, r = resolve(ctx.date || '2026/11/18', ctx, rm);
+    var maintMode = ctx.decision === 'maintain' || ctx.planPhase === 'maintain';
+    var avg = f ? f.avg : null;
+    if (r.needChoice && !maintMode) {
+      out.push({ key: 'choose', level: 'info', title: '第1期の目標に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + goal + '%）になりました。次の道を選んでください：第2期のバルク（増量）／維持（現状維持）／据え置き。減量計画の「いまの道」で切り替えられます。' });
+    }
+    if (maintMode && avg != null) {
+      var floor = Number(ctx.floorFat) > 0 ? Number(ctx.floorFat) : goal, upper = r1(floor + MAINT_BAND_PCT);
+      if (avg > upper) out.push({ key: 'maint-over', level: 'warn', title: '許容帯の上を超えました', body: '体脂肪率が直近7日平均で ' + avg + '%。維持期の許容帯（' + floor + '〜' + upper + '%）の上限を超えています。第1期（減量）に戻す目安です。減らしたいときは減量計画の「いまの道」で第1期を選んでください。' });
+      else if (avg < floor) out.push({ key: 'maint-below', level: 'warn', title: '最低ラインを下回りました', body: '体脂肪率が直近7日平均で ' + avg + '%。最低ライン ' + floor + '% を下回っています。維持カロリーより少し多めに食べて、筋量を守ってください。' });
+    }
+    if (ctx.decision === 'advance' && avg != null && goal != null && avg > goal + BULK_OVER_PCT) {
+      out.push({ key: 'bulk-over', level: 'warn', title: '脂肪が乗りすぎています', body: '体脂肪率が直近7日平均で ' + avg + '%。第1期の目標（' + goal + '%）より ' + r1(avg - goal) + '% 高くなりました。バルクの食事を少し控えるか、維持（現状維持）に切り替える、または第1期に戻す目安です。' });
+    }
+    if (r.overdue) out.push({ key: 'overdue', level: 'info', title: '第1期の期限を過ぎました', body: '期限（' + first.to + '）を過ぎましたが、体脂肪率 ' + goal + '% にはまだ届いていません。期限の見直しは総合コーチに相談できます。' });
+    return out;
+  }
+
   /* AI（総合コーチ・AIトレーナー）に渡す要約。AIはこの数値を引用するだけで、再計算しない */
   function brief(date, state, avg, ctx, rm) {
     rm = rm || ROADMAP;
@@ -248,6 +272,6 @@ var RoadmapLib = (function () {
     };
   }
 
-  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, mealGoals: mealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;
