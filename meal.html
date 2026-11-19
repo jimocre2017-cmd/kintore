@@ -382,7 +382,8 @@ function renderMsg(){
   if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
   $('msg').innerHTML = h;
 }
-var MACRO = [['kcal','カロリー','kcal',10,'limit'],['protein','たんぱく質','g',1,'reach'],['fat','脂質','g',1,'limit']];
+var MACRO = [['kcal','カロリー','kcal',10,'limit'],['protein','たんぱく質','g',1,'reach'],['fat','脂質','g',1,'limit'],['carbs','炭水化物','g',1,'range']];
+function riceTxt(c){ var r = ML.riceG(c); return r ? '白ご飯 約'+r+'g（茶碗'+(Math.round(r / ML.RICE_BOWL_G * 10) / 10)+'杯）' : ''; }
 var NCOL = { kcal: 'var(--nk)', protein: 'var(--np)', fat: 'var(--nf)', carbs: 'var(--nc)' };
 function fmtN(x, unit){ return unit === 'kcal' ? Math.round(x).toLocaleString('ja-JP') : ML.r1(x); }
 function macroRow(label, v, goal, unit, lo, hi, plan, kind, key){
@@ -398,7 +399,12 @@ function macroRow(label, v, goal, unit, lo, hi, plan, kind, key){
   var fill = '<i class="fl" style="width:'+pc(v)+'%"></i><i class="nd" style="left:'+pc(v)+'%"></i>';
   var mk = tgt ? '<i class="tg" style="left:'+pc(tgt)+'%"></i>' : '';
   var msg = '';
-  if (tgt) {
+  if (tgt && kind === 'range') {
+    var rc = function(x){ var t = riceTxt(x); return t ? '＝'+t : ''; };
+    msg = v > hiE ? '上限を <b>'+fmtN(v - hiE, unit)+unit+'</b> 超えています' : v < loE ? 'あと <b>'+fmtN(loE - v, unit)+unit+'</b>'+rc(loE - v)+' で範囲内'
+      : v < tgt ? 'あと <b>'+fmtN(tgt - v, unit)+unit+'</b>'+rc(tgt - v)+' で目標（上限まであと '+fmtN(hiE - v, unit)+unit+rc(hiE - v)+'）'
+      : '目標を '+fmtN(v - tgt, unit)+unit+' 超過（上限まであと <b>'+fmtN(hiE - v, unit)+unit+'</b>'+rc(hiE - v)+'）';
+  } else if (tgt) {
     if (kind === 'reach') msg = st === 'over' ? '上限を超えています' : v >= tgt ? '目標に届きました' : 'あと <b>'+fmtN(tgt - v, unit)+unit+'</b> 摂ると目標';
     else msg = v > hiE ? '上限を <b>'+fmtN(v - hiE, unit)+unit+'</b> 超えています' : v > tgt ? '目標を <b>'+fmtN(v - tgt, unit)+unit+'</b> 超過（上限まであと '+fmtN(hiE - v, unit)+unit+'）' : 'あと <b>'+fmtN(tgt - v, unit)+unit+'</b> 食べられます';
   }
@@ -410,10 +416,10 @@ function macroRow(label, v, goal, unit, lo, hi, plan, kind, key){
     + (zm ? '<div class="zst '+st+'">'+zm+'</div>' : '') + '<div class="gl"><span>'+msg+'</span>'+(ref ? '<span class="sub">目標内 '+fmtN(loE, unit)+'〜'+fmtN(hiE, unit)+unit+'</span>' : '')+'</div>'+adj+'</div>';
 }
 function macroRows(d, g, t, date){
-  return MACRO.map(function(c){ var k = c[0]; return macroRow(c[1], t[k], g[k], c[2], g[k+'Min'], g[k+'Max'], ML.weekPlan(d.logs, date, g[k], g[k+'Min'], g[k+'Max'], k, c[3]), c[4], k); }).join('');
+  return MACRO.filter(function(c){ return c[0] !== 'carbs' || g.carbs || t.meals; }).map(function(c){ var k = c[0]; return macroRow(c[1], t[k], g[k], c[2], g[k+'Min'], g[k+'Max'], ML.weekPlan(d.logs, date, g[k], g[k+'Min'], g[k+'Max'], k, c[3]), c[4], k); }).join('');
 }
 function renderDay(){
-  var d = S.data, t = ML.dayTotal(d.logs, S.date), g = d.goals || {};
+  var d = S.data, t = ML.dayTotal(d.logs, S.date), g = ML.withCarbs(d.goals || {});
   var h = '<div class="daynav"><button class="iconbtn" id="dPrev" aria-label="前の日">‹</button><b>'+(S.date === d.today ? '今日 ' : '')+mdw(S.date)+'</b><button class="iconbtn" id="dNext" aria-label="次の日"'+(S.date >= d.today ? ' disabled style="opacity:.3"' : '')+'>›</button></div>';
   if (!t.meals) {
     h += '<div class="empty">この日の記録はまだありません。</div>';
@@ -421,8 +427,7 @@ function renderDay(){
       h += macroRows(d, g, t, S.date);
     }
   } else {
-    h += macroRows(d, g, t, S.date)
-      + macroRow('炭水化物', t.carbs, 0, 'g', 0, 0, null, 'limit', 'carbs');
+    h += macroRows(d, g, t, S.date);
     h += '<div class="zlegend"><span><i style="background:var(--zy);opacity:.7"></i>足りない</span><span><i style="background:var(--zg);opacity:.7"></i>範囲内</span><span><i style="background:var(--zr);opacity:.7"></i>多すぎ</span><span>黒い線＝いまの値／点線＝今日の目標</span></div>';
     h += adviceHtml(d, g, t);
     var sp = ML.energySplit(t);
@@ -448,7 +453,7 @@ function renderList(){
   $('listCard').onclick = function(e){ var b = e.target.closest('.meal'); if (b) openForm(b.getAttribute('data-id')); };
 }
 function dayTargets(d, g, date){
-  var K = [['kcal',10],['protein',1],['fat',1]], tg = {}, any = false;
+  var K = [['kcal',10],['protein',1],['fat',1],['carbs',1]], tg = {}, any = false;
   K.forEach(function(c){
     var k = c[0], p = ML.weekPlan(d.logs, date, g[k], g[k+'Min'], g[k+'Max'], k, c[1]);
     tg[k] = { ref: p ? p.target : (g[k] || 0), lo: g[k+'Min'] || 0, hi: g[k+'Max'] || 0 };
@@ -477,7 +482,7 @@ function reviewHtml(r){
 var revBusy = false;
 $('dayCard').addEventListener('click', function(e){
   var b = e.target.closest('#revBtn'); if (!b || revBusy) return;
-  var d = S.data, g = d.goals || {}, tg = dayTargets(d, g, S.date), t = ML.dayTotal(d.logs, S.date), key = revKey(t);
+  var d = S.data, g = ML.withCarbs(d.goals || {}), tg = dayTargets(d, g, S.date), t = ML.dayTotal(d.logs, S.date), key = revKey(t);
   revBusy = true; b.disabled = true; b.textContent = '分析中…（数秒かかります）';
   KT.call('mealReview', { date: S.date, force: !!S.rev && S.rev.key === key, ctx: { targets: tg || {}, partial: S.date === d.today && new Date().getHours() < 20 } }).then(function(r){
     S.rev = { key: key, html: reviewHtml(r) };
@@ -490,6 +495,7 @@ $('dayCard').addEventListener('click', function(e){
 function weekBalanceHtml(d, g){
   var rows = '', miss = 0, el = ML.toDays(d.today) - ML.weekStart(d.today);
   MACRO.forEach(function(c){
+    if (c[4] === 'range') return; // 炭水化物は範囲目標なので週の貸し借りは出さない
     var k = c[0], u = c[2], wb = ML.weekBalance(d.logs, d.today, g[k], k);
     if (!wb) return;
     miss = Math.max(miss, wb.miss);
@@ -524,7 +530,7 @@ function weekGridHtml(d, g, days){
   return h + '</div><div class="lg"><span><i class="ok"></i>目標内</span><span><i class="over"></i>多い</span><span><i class="under"></i>少ない</span><span><i class="dash"></i>今日（途中）</span></div>';
 }
 function renderWeek(){
-  var d = S.data, g = d.goals || {}, days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
+  var d = S.data, g = ML.withCarbs(d.goals || {}), days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
   if (!av.days) { $('weekCard').innerHTML = '<h3>直近7日</h3><div class="empty">食事を記録すると、今週の収支と7日間の結果が表示されます。</div>'; return; }
   var h = weekBalanceHtml(d, g);
   h += '<h3 style="margin-top:16px">直近7日（マスの色＝目標に対する結果）</h3>' + weekGridHtml(d, g, days);
@@ -587,7 +593,7 @@ $('aGo').onclick = function(){
   if (askBusy) return;
   if (q.length < 4) { toast('相談したい内容を入力してください', true); return; }
   askBusy = true; $('aGo').disabled = true; $('aGo').textContent = '考え中…（数秒かかります）';
-  var g = d.goals || {}, tg = dayTargets(d, g, d.today) || {}, t = ML.dayTotal(d.logs, d.today);
+  var g = ML.withCarbs(d.goals || {}), tg = dayTargets(d, g, d.today) || {}, t = ML.dayTotal(d.logs, d.today);
   KT.call('mealAsk', { question: q, ctx: { targets: tg, totals: { kcal: t.kcal, protein: t.protein, fat: t.fat, carbs: t.carbs } } }).then(function(r){
     $('aOut').innerHTML = '<div class="adv bad"><b>'+esc(r.summary)+'</b>'
       + r.sections.map(function(s){ return '<p style="margin-top:8px"><b style="display:inline">'+esc(s.title)+'</b></p><ul style="margin:2px 0 0;padding-left:18px">'+s.points.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>'; }).join('')

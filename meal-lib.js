@@ -159,6 +159,32 @@ var MealLib = (function () {
     var liquid = meatG * targetPct / (brinePct - targetPct);
     return { liquidG: Math.round(liquid), liquidMl: Math.round(liquid / density), saltG: r1(liquid * brinePct / 100), totalG: Math.round(meatG + liquid) };
   }
-  return { r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  /* 炭水化物の目標：カロリー＝たんぱく質×4＋脂質×9＋炭水化物×4 なので、独立には決めず、カロリー・たんぱく質・脂質の目標から割り出す。
+     目安＝(カロリー目安 − たんぱく質目安×4 − 脂質目安×9) ÷ 4。下限・上限は、カロリーの下限・上限から同じ式で出す（無ければ入れない）。
+     カロリー・たんぱく質・脂質のどれかが未設定なら null（炭水化物の目標は出さない） */
+  function carbGoals(g) {
+    g = g || {};
+    var K = +g.kcal || 0, P = +g.protein || 0, F = +g.fat || 0;
+    if (!(K > 0 && P > 0 && F > 0)) return null;
+    var base = P * 4 + F * 9, ref = Math.round((K - base) / 4);
+    if (ref <= 0) return null;
+    var lo = +g.kcalMin > 0 ? Math.round((+g.kcalMin - base) / 4) : 0, hi = +g.kcalMax > 0 ? Math.round((+g.kcalMax - base) / 4) : 0;
+    if (lo < 0) lo = 0;
+    if (lo > ref) lo = 0;
+    if (hi && hi < ref) hi = 0;
+    return { carbs: ref, carbsMin: lo, carbsMax: hi };
+  }
+  function withCarbs(g) {
+    var c = carbGoals(g), o = {};
+    Object.keys(g || {}).forEach(function (k) { o[k] = g[k]; });
+    if (c) { o.carbs = c.carbs; o.carbsMin = c.carbsMin; o.carbsMax = c.carbsMax; }
+    return o;
+  }
+
+  // 白ご飯（炊飯後・精白米）100g あたりの炭水化物 35.6g（日本食品標準成分表2020年版（八訂））。茶碗1杯＝150g
+  var RICE_C_PER_G = 0.356, RICE_BOWL_G = 150;
+  function riceG(carbsG) { return Math.max(0, Math.round(carbsG / RICE_C_PER_G / 5) * 5); }
+
+  return { carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
