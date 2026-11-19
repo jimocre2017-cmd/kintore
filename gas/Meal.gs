@@ -159,6 +159,16 @@ function mealSuggest_() {
 }
 
 /** 体組成の最新値とマスタープラン（期・モード）から、1日の目標を自動で出す。計算本体は RoadmapLib.autoMealGoals（画面と共通）。出せないときは null */
+/** 減量計画で採用された、今日に効いている1日の目標kcal（減量調整履歴の「採用＝はい」のうち、開始週が今日以前で最新のもの）。
+ *  手入力の目標（MEAL_GOAL_KCAL）は手入力モードの値なので、自動計算の目安には使わない（採用の記録が1件も無いときだけ使う） */
+function mealAdoptedKcal_(today) {
+  try {
+    var best = null;
+    planTargets_().forEach(function (t) { if (t.from <= today && (!best || t.from > best.from)) best = t; });
+    return best ? best.kcal : 0;
+  } catch (e) { return 0; }
+}
+
 var MEAL_AUTO_MEMO_ = null; // 1回の実行の中で同じ計算を繰り返さない（体組成・計画の読み込みが重いため）
 function mealAutoGoals_() {
   if (MEAL_AUTO_MEMO_) return MEAL_AUTO_MEMO_.v;
@@ -175,7 +185,7 @@ function mealAutoGoalsCalc_() {
     return RoadmapLib.autoMealGoals({
       date: today, decision: roadmapDecisionRead_(), planPhase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
       fat7: RoadmapLib.fat7(logs, today), fatPct: bf, weightKg: w, bmr: bmr, activity: en.activity, tdeeKcal: en.tdeeKcal, tdeeBasis: en.tdeeBasis,
-      adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0, adoptedMode: lt && lt.adopted && lt.adjust ? lt.adjust.mode : ''
+      adoptedKcal: mealAdoptedKcal_(today) || Number(p.getProperty('MEAL_GOAL_KCAL')) || 0, adoptedMode: lt && lt.adopted && lt.adjust ? lt.adjust.mode : ''
     });
   } catch (e) { return null; }
 }
