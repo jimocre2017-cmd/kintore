@@ -374,7 +374,7 @@ function mealAsk(req) {
   var today = today_(), c = req.ctx || {}, lines = [];
   function n(v) { v = Number(v); return isNaN(v) || v < 0 ? 0 : Math.round(v * 10) / 10; }
   var tg = c.targets || {}, tt = c.totals || {};
-  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].forEach(function (k) {
+  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g'], ['carbs', '炭水化物', 'g']].forEach(function (k) {
     var x = tg[k[0]] || {}, ref = n(x.ref), lo = n(x.lo), hi = n(x.hi);
     if (!ref && !lo && !hi) return;
     lines.push('- ' + k[1] + '：今日の目標 ' + (ref || '–') + k[2] + (lo ? '（下限' + lo + '）' : '') + (hi ? '（上限' + hi + '）' : '') + '、ここまで ' + n(tt[k[0]]) + k[2]);
@@ -436,7 +436,7 @@ function mealReview(req) {
   if (!logs.length) throw new Error('この日の食事の記録がありません');
   function n(v) { v = Number(v); return isNaN(v) || v < 0 ? 0 : Math.round(v * 10) / 10; }
   var c = req.ctx || {}, tg = c.targets || {}, lines = [];
-  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].forEach(function (k) {
+  [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g'], ['carbs', '炭水化物', 'g']].forEach(function (k) {
     var x = tg[k[0]] || {}, ref = n(x.ref), lo = n(x.lo), hi = n(x.hi);
     if (ref || lo || hi) lines.push('- ' + k[1] + '：目標 ' + (ref || '–') + k[2] + (lo ? '（下限' + lo + '）' : '') + (hi ? '（上限' + hi + '）' : ''));
   });
