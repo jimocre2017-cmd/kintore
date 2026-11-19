@@ -99,4 +99,18 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.ok(b.items[0].advice.indexOf('増量') >= 0);
   assert.notStrictEqual(b.items[0].advice, R.balance(R.ROADMAP.phases[0], { meal: { kcal: 1500 } }).items[0].advice);
 });
+
+(function () {
+  var R = require('../roadmap-lib.js'), assert = require('assert'), rd = { avg: 14.9, days: 5 };
+  var m = R.resolve('2027/03/10', { fat7: rd, decision: 'maintain' });
+  assert.strictEqual(m.phase.key, 'maintain'); assert.strictEqual(m.needChoice, false); assert.strictEqual(m.decision, 'maintain');
+  assert.strictEqual(R.resolve('2027/03/10', { fat7: rd, decision: '' }).needChoice, true, '未選択なら選ぶ状態');
+  assert.strictEqual(R.ROADMAP.phases.length, 2, '日付で決まる期は2つのまま');
+  var b = R.brief('2027/03/10', {}, null, { fat7: rd, decision: 'maintain' });
+  assert.strictEqual(b.userChoice, 'maintain'); assert.strictEqual(b.nowPhaseKey, 'maintain');
+  assert.deepStrictEqual(R.mealGoals(m.phase).kcal, undefined, '維持期はカロリーを固定しない');
+  assert.ok(R.mealGoals(m.phase).protein > 0);
+  assert.ok(R.balance(m.phase, { meal: { protein: 125, fat: 45 } }).items.every(function (x) { return x.state === 'in'; }));
+  console.log('ok  maintain decision');
+})();
 console.log(n + ' 件OK');

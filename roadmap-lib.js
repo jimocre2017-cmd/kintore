@@ -39,6 +39,23 @@ var RoadmapLib = (function () {
         targets: { fatPct: null, leanKg: 51.0, weightKg: 60.0, ffmiAdj: 20.0 }
       }
     ],
+    // 第1期のあとの「もう一つの道」＝現状維持。本人が選んだときだけ使う（日付では入らない）。カロリーは固定せず、減量計画の維持期（体重から計算した維持カロリー）に任せる
+    maintainPhase: {
+      key: 'maintain', label: '第2期（もう一つの道）：維持期（現状維持）',
+      from: null, to: null, approx: true,
+      kcal: null,
+      protein: { min: 120, max: 130 },
+      fat: { min: 40, max: 50 },
+      carbs: null,
+      training: [
+        '第1期で作った筋肉と体脂肪率を保つ（重さ・セット数は落とさず、無理に増やさない）',
+        '有酸素は週1〜2回に減らし、回復を優先',
+        '体脂肪率は「最低ライン〜許容帯の上限」で見守る（減量計画の維持期の設定）'
+      ],
+      cardio: { speedMin: null, speedMax: null, perWeek: { min: 1, max: 2 } },
+      sets: null,
+      targets: { fatPct: null, leanKg: null, weightKg: null, ffmiAdj: null }
+    },
     rules: [
       '大筋群（胸・脚）の週間セット数を貯金する。気まぐれな日でも、まず胸（ダンベルプレス・インクライン・プッシュアッププラス）と脚（スクワット・ブルガリアン）から消化する。背中・腕は維持に留める',
       '関節の安全リミッターを外さない。右肩：胸・肩の種目前にフェイスプル（E009）かチューブ外旋（E014）を挟む。右足首・すね：有酸素は時速5.0〜5.4km、母趾球・小趾球・踵の3点接地、スピード競争をしない',
@@ -129,6 +146,15 @@ var RoadmapLib = (function () {
       legs:    { under: '脚のセット数が足りません。スクワット・ブルガリアンを優先して貯金してください。', over: '脚のやり過ぎです。回復を優先し、数日は減らしてください。' },
       cardio:  { under: '有酸素の記録がありません。時速5.0〜5.4kmで入れてください。', over: '時速が範囲より速い回があります。右足首・すねを守るため、5.0〜5.4kmに落としてください。' }
     },
+    maintain: {
+      kcal:    { under: '', over: '' },
+      protein: { under: 'たんぱく質が足りません。維持期でも筋量を守るため、範囲の下限は守ってください。', over: '' },
+      fat:     { under: '脂質が少なすぎます。下限は守ってください。', over: '' },
+      carbs:   { under: '', over: '' },
+      chest:   { under: '', over: '' },
+      legs:    { under: '', over: '' },
+      cardio:  { under: '有酸素の記録がありません。週1回は入れて、心肺と回復を保ってください。', over: '有酸素が多めです。維持期は回復を優先し、週1〜2回に収めてください。' }
+    },
     leanbulk: {
       kcal:    { under: '食事が少なく、増量が進みません。下限まで増やしてください（炭水化物から）。', over: '食事が多すぎます。脂肪が付きやすくなるので、上限に収めてください。' },
       protein:  { under: '', over: '' },
@@ -186,16 +212,16 @@ var RoadmapLib = (function () {
   }
 
   /* いまどの期のプランで動くか。第1期の体脂肪率目標に、直近7日平均で届いたら「選ぶ」状態になる。自動では切り替えない。
-     ctx＝{fat7, decision}。decision：''＝未選択（第1期のまま）／'advance'＝第2期へ進む／'hold'＝いまのプラン（第1期）を据え置く
+     ctx＝{fat7, decision}。decision：''＝未選択（第1期のまま）／'advance'＝第2期へ進む／'maintain'＝維持期（現状維持）にする／'hold'＝いまのプラン（第1期）を据え置く
      戻り値 {phase, index, ready, decision, needChoice, overdue} */
   function resolve(date, ctx, rm) {
     rm = rm || ROADMAP; ctx = ctx || {};
-    var first = rm.phases[0], dec = ctx.decision === 'advance' || ctx.decision === 'hold' ? ctx.decision : '';
+    var first = rm.phases[0], dec = ctx.decision === 'advance' || ctx.decision === 'hold' || ctx.decision === 'maintain' ? ctx.decision : '';
     var goal = first.targets.fatPct, f = ctx.fat7;
     var ready = !!(f && goal != null && f.avg <= goal);
-    var idx = dec === 'advance' ? 1 : 0;
+    var idx = dec === 'advance' || dec === 'maintain' ? 1 : 0;
     return {
-      phase: rm.phases[idx], index: idx, ready: ready, decision: dec,
+      phase: dec === 'maintain' && rm.maintainPhase ? rm.maintainPhase : rm.phases[idx], index: idx, ready: ready, decision: dec,
       needChoice: idx === 0 && ready && dec === '',
       overdue: idx === 0 && !ready && toDays(date) > toDays(first.to)
     };
@@ -208,7 +234,7 @@ var RoadmapLib = (function () {
     return {
       title: rm.title, decidedAt: rm.decidedAt, today: date,
       nowPhase: p.label, nowPhaseKey: p.key, phaseEnd: p.to, phaseEndApprox: !!p.approx, daysLeftInPhase: toDays(p.to) - toDays(date),
-      switchRule: '第1期の体脂肪率目標に直近7日平均で届いたら、本人が「第2期へ進む」か「いまのプランを据え置く」かを選ぶ（日付では自動で切り替わらない）',
+      switchRule: '第1期の体脂肪率目標に直近7日平均で届いたら、本人が「第2期（リーンバルク）へ進む」「維持期（現状維持）にする」「いまのプランを据え置く」のどれかを選ぶ（日付では自動で切り替わらない）',
       fat7: ctx && ctx.fat7 ? ctx.fat7 : null,
       reachedFirstPhaseGoal: r.ready, userChoice: r.decision || '未選択', waitingForUserChoice: r.needChoice, pastPhaseEndWithoutReaching: r.overdue,
       nextPhase: next ? { label: next.label, kcal: next.kcal, carbs: next.carbs, targets: next.targets } : null,
