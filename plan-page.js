@@ -21,7 +21,8 @@ function comma(n){ return n == null || isNaN(n) ? '－' : Math.round(n).toString
 function gapCls(x, band){ if (x == null || Math.abs(x) < (band || 0.001)) return 'mut'; return x > 0 ? 'pos' : 'neg'; }
 var STATUS = {
   on_track: ['順調', 'good'], behind: ['遅れ', 'bad'], ahead: ['先行（速め）', 'warn'], learning: ['計測中', ''], insufficient: ['記録不足', 'warn'],
-  paused: ['休止中（維持カロリー）', ''], maintaining: ['維持：許容帯の中', 'good'], below_floor: ['最低ライン割れ', 'bad'], above_band: ['許容帯の上', 'warn'], floor_reached: ['最低ラインに到達', 'good']
+  paused: ['休止中（維持カロリー）', ''], maintaining: ['維持：許容帯の中', 'good'], below_floor: ['最低ライン割れ', 'bad'], above_band: ['許容帯の上', 'warn'], floor_reached: ['最低ラインに到達', 'good'],
+  bulk_ok: ['増量：順調', 'good'], bulk_fast: ['増え方が速い', 'warn'], bulk_slow: ['増え方が遅い', 'warn']
 };
 
 var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', busy: false, loadErr: null };
@@ -29,7 +30,7 @@ var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', b
 function view(){
   if (!S.plan) return null;
   var p = S.plan.plan || {};
-  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat };
+  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat, roadmap: RoadmapLib.adjustCfg(p.roadmapDecision, p.phase) };
   return PL.view({
     today: (S.body && S.body.today) || KT.today(), daily: S.body ? S.body.logs : [], meals: S.meal ? S.meal.logs : [],
     plan: cfg, targets: S.plan.targets || [], mealGoalKcal: S.meal && S.meal.goals ? S.meal.goals.kcal : 0
@@ -240,6 +241,16 @@ function progressHtml(b, n, pre){
   h += trackHtml(b, n);
   return h;
 }
+// 開始から何日目（開始日を1日目とする）。開始前は「開始まであと◯日」。期限があれば残り日数も
+function dayCountHtml(b, today){
+  var d = PL.toDays(today) - PL.toDays(b.startDate) + 1, tx;
+  if (d < 1) tx = '開始まであと <b class="num">'+(1 - d)+'</b> 日（'+md(b.startDate)+' 開始）';
+  else {
+    tx = '開始から <b class="num">'+d+'</b> 日目';
+    if (b.deadline) { var left = PL.toDays(b.deadline) - PL.toDays(today), tot = PL.toDays(b.deadline) - PL.toDays(b.startDate) + 1; tx += left >= 0 ? ' ／ 期限まで残り <b class="num">'+left+'</b> 日（全 '+tot+' 日）' : ' ／ 期限から <b class="num">'+(-left)+'</b> 日経過'; }
+  }
+  return '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">'+tx+'</div>';
+}
 function renderHero(){
   var V = S.V, el = $('heroCard');
   if (!V || !V.configured) {
@@ -252,6 +263,7 @@ function renderHero(){
   var h = '<h3>目標に対する現在地（直近7日の平均）</h3>';
   if (!n) { el.innerHTML = h + '<div class="empty">直近7日に体組成の測定がありません。測れる時に測ると、ここに現在地が出ます。</div>'; return; }
   if (V.plan && V.plan.phase === 'maintain') { el.innerHTML = h + maintainHero(V, n, ad, st); return; }
+  h += dayCountHtml(b, V.today);
   var gap = n.gapKg, band = PL.BAND_KG, pre = PL.toDays(V.today) < PL.toDays(b.startDate);
   var verdict = pre ? '開始前' : (Math.abs(gap) < band ? 'ほぼ計画どおり' : (gap > 0 ? '計画より遅れ' : '計画より先行'));
   h += '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+(pre ? '' : (Math.abs(gap) < band ? 'good' : (gap > 0 ? 'bad' : 'good')))+'">'+verdict+'</span><span class="chip '+st[1]+'">'+st[0]+'</span></div>';
@@ -278,7 +290,7 @@ function maintainProgressHtml(b, n, p, up){
 }
 function maintainHero(V, n, ad, st){
   var fl = ad && ad.floor, p = V.plan, up = p.floorFat ? p.floorFat + PL.MAINT_BAND : null;
-  var h = '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+st[1]+'">'+(st[0] || '維持期')+'</span></div>';
+  var h = '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+st[1]+'">'+(st[0] || '維持期')+'</span></div>' + dayCountHtml(V.built, V.today);
   if (p.floorFat) h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">維持期：最低 <b class="num">'+f1(p.floorFat)+'%</b> 〜 許容帯の上限 <b class="num">'+f1(up)+'%</b>'+(fl ? ' ／ 最低ラインまで <b class="num '+(fl.marginPct < 0 ? 'pos' : '')+'">'+sg(fl.marginPct)+'%</b>' : '')+'</div>';
   h += maintainProgressHtml(V.built, n, p, up);
   h += '<div class="note">維持期は減量せず、維持カロリーで過ごします。体脂肪率が最低ラインを割りそうなら少し多めに食べ、許容帯の上を超えたら少し控えます（いずれも週単位で±200kcalまで）。判断は日ではなく直近7日の平均です。</div>';
@@ -291,18 +303,28 @@ function renderAdjust(){
   el.style.display = '';
   var ai = S.ai, ad = ai ? ai.adjust : V.adjust, st = STATUS[ad.status] || ['', ''];
   var from = ai ? ai.effectiveFrom : PL.nextMonday(V.today);
+  var bulkM = ad.mode === 'bulk', maintM = ad.mode === 'maintain', off = window.KTAdvice && KTAdvice.isOff();
+  var modeTx = bulkM ? '第2期バルク' : maintM ? '第2期 維持' : '第1期（減量）';
   var h = '<h3>次週のカロリー調整（'+mdw(from)+'から）</h3>';
+  h += '<div class="note" style="margin:0 0 8px">モード：<b>'+modeTx+'</b>'+(ad.range ? '（目標の範囲 '+comma(ad.range.min)+'〜'+comma(ad.range.max)+'kcal）' : '')+(off ? ' ／ 記録だけのモード：自動では変えません' : ' ／ 毎週、先週の記録で自動採用されます')+'</div>';
+  var al = S.plan && S.plan.autoLast;
+  if (al && !off) {
+    h += '<div class="banner '+(al.changed ? 'warn' : '')+'" style="margin:0 0 10px"><b>'+mdw(al.from)+'からの目標：'+(al.changed ? (al.prev ? comma(al.prev)+' → ' : '')+comma(al.kcal)+'kcal に自動で変更しました' : (al.kcal ? comma(al.kcal)+'kcal のまま（据え置き）' : '据え置き'))+'</b>'
+      + (al.reasons && al.reasons.length ? '<ul class="reasons" style="margin:6px 0 0">'+al.reasons.map(function(r){ return '<li>'+esc(r)+'</li>'; }).join('')+'</ul>' : '')
+      + '<div style="font-size:12px;margin-top:4px;color:var(--ink-2)">'+mdw(al.evalDate)+'までの1週間の記録で判定。週の途中の節制と外食は、同じ週の平均で見ます。</div></div>';
+  }
   if (ad.target) {
     h += '<div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap"><div class="big num">'+comma(ad.target)+'<small> kcal／日</small></div><span class="chip '+st[1]+'">'+st[0]+'</span></div>';
     var dl = ad.deltaFromPrevious;
     h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">'+(ad.previousTarget ? '今の目標 '+comma(ad.previousTarget)+'kcal から <b class="num">'+(dl ? sg(dl, 0)+'kcal' : '変更なし')+'</b> ／ ' : '')+'1週間の予算 <b class="num">'+comma(ad.weeklyBudget || ad.target*7)+'kcal</b></div>';
-    h += '<div class="kv"><div><b class="num">'+comma(ad.tdee ? ad.tdee.kcal : null)+'</b><span>消費の見込み（'+(ad.tdee && ad.tdee.basis === 'observed' ? '実測' : '基礎代謝×係数の推定')+'）</span></div><div><b class="num">'+(ad.protein ? ad.protein.minG+'〜'+ad.protein.targetG+'g' : '－')+'</b><span>たんぱく質／日</span></div><div><b class="num">'+(ad.expectedLossKgPerWeek != null ? f2(ad.expectedLossKgPerWeek)+'kg' : '－')+'</b><span>この目標での脂肪の減り／週</span></div></div>';
+    h += '<div class="kv"><div><b class="num">'+comma(ad.tdee ? ad.tdee.kcal : null)+'</b><span>消費の見込み（'+(ad.tdee && ad.tdee.basis === 'observed' ? '実測' : '基礎代謝×係数の推定')+'）</span></div><div><b class="num">'+(ad.protein ? ad.protein.minG+'〜'+ad.protein.targetG+'g' : '－')+'</b><span>たんぱく質／日</span></div><div><b class="num">'+(ad.expectedLossKgPerWeek != null ? f2(Math.abs(ad.expectedLossKgPerWeek))+'kg' : '－')+'</b><span>'+(ad.mode === 'bulk' ? 'この目標での体重の増え（目安）／週' : 'この目標での脂肪の減り／週')+'</span></div></div>';
   } else {
     h += '<div><span class="chip '+st[1]+'">'+st[0]+'</span></div>';
   }
   if (ad.reasons && ad.reasons.length) h += '<ul class="reasons">'+ad.reasons.map(function(r){ return '<li>'+esc(r)+'</li>'; }).join('')+'</ul>';
   if (ad.leanWarning) h += '<div class="banner warn" style="margin-top:10px">'+esc(ad.leanWarning)+'</div>';
-  if (ad.actual) h += '<div class="note">実績（直近'+ad.actual.spanDays+'日の傾向）：脂肪が週 '+f2(ad.actual.weeklyLossKg)+'kg のペースで減少、平均摂取 '+comma(ad.actual.avgIntake)+'kcal。期間が短いほど誤差は大きくなります。</div>';
+  if (ad.actual && ad.actual.weeklyGainPct != null) h += '<div class="note">実績（直近'+ad.actual.spanDays+'日の傾向）：体重が週 '+f2(ad.actual.weeklyGainKg)+'kg（'+f2(ad.actual.weeklyGainPct)+'%）のペースで増加。目安は週0.25〜0.5%です。</div>';
+  else if (ad.actual) h += '<div class="note">実績（直近'+ad.actual.spanDays+'日の傾向）：脂肪が週 '+f2(ad.actual.weeklyLossKg)+'kg のペースで減少、平均摂取 '+comma(ad.actual.avgIntake)+'kcal。期間が短いほど誤差は大きくなります。</div>';
 
   var adv = ai ? ai.advice : (S.plan && S.plan.latest && S.plan.latest.effectiveFrom === from ? S.plan.latest.advice : null);
   if (adv) {
@@ -317,7 +339,7 @@ function renderAdjust(){
   var adopted = S.plan && (S.plan.targets || []).some(function(t){ return t.from === from; });
   if (ad.target) {
     h += '<div class="apply"><input type="number" id="aKcal" inputmode="numeric" step="10" min="1000" max="4500" value="'+ad.target+'" aria-label="採用する目標kcal"><button class="btn primary" id="aApply"'+(S.busy?' disabled':'')+'>'+(adopted ? '採用済み（上書き）' : 'この目標を採用')+'</button></div>';
-    h += '<div class="note">採用すると、'+mdw(from)+'からの目標として履歴に残り、食事画面の目標カロリーにも反映されます。数値は手で直しても構いません。</div>';
+    h += '<div class="note">自動で採用されますが、ここから手で決め直すこともできます（採用すると '+mdw(from)+'からの目標として履歴に残り、食事画面にも反映）。</div>';
   }
   h += '<div class="rowbtns"><button class="btn small" id="aAdvise"'+(S.busy?' disabled':'')+'>'+(S.busy ? '処理中…' : (adv ? 'AIに出し直してもらう' : 'AIに来週の方針を出してもらう'))+'</button></div>';
   if (ai && ai.createdAt) h += '<div class="note">'+esc(ai.createdAt)+' に作成'+(ai.model ? '（'+esc(ai.model)+'）' : '')+'。数値はアプリが計算し、AIは文章にしています。いまの総合診断（期限に間に合うか）は「総合コーチ」、見た目の変化は「体つき写真」で。</div>';
@@ -715,13 +737,25 @@ function healStaleCache(e){
   else done();
   return true;
 }
+// 毎週1回、先週の記録から次の目標を自動で採用する（サーバー側で判定）。「記録だけ」のモードでは動かさない
+function autoRun(){
+  var p = S.plan && S.plan.plan;
+  if (!p || !p.goalFat || !p.startDate || (window.KTAdvice && KTAdvice.isOff())) return;
+  return KT.call('planAuto').then(function(d){
+    var was = S.plan && S.plan.autoLast ? S.plan.autoLast.from + ':' + S.plan.autoLast.kcal : '';
+    S.plan = d;
+    var a = d.autoLast;
+    if (a && a.changed && a.from + ':' + a.kcal !== was) return KT.call('mealInit').catch(function(){ return S.meal; }).then(function(m){ if (m) S.meal = m; render(); toast('今週の目標を自動で '+a.kcal+'kcal にしました'); });
+    render();
+  }, function(){ /* 古いサーバー・オフラインでは何もしない */ });
+}
 function init(){
   if (!KT.configured()) { showSetup(); return; }
   Promise.all([KT.call('bodyCached'), KT.call('mealCached'), KT.call('planCached'), KT.call('cardioCached').catch(function(){ return null; })]).then(function(r){
     if (r[0]) S.body = r[0]; if (r[1]) S.meal = r[1]; if (r[2]) S.plan = r[2]; if (r[3]) S.cardioC = r[3];
     if (S.body && S.plan) render();
   }, function(e){ healStaleCache(e); });
-  reloadAll().catch(function(e){
+  reloadAll().then(autoRun).catch(function(e){
     if (healStaleCache(e)) return;
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
     var hint = /^不明な操作：plan(Get|Init)$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「減量計画の導入手順」を実行してください）' : '';

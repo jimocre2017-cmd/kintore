@@ -222,4 +222,34 @@ t('gas/PlanLib.gs が plan-lib.js と同じ内容', function () {
   assert.strictEqual(a, b, 'node tools/sync-planlib.js を実行してください');
 });
 
+
+/* ---- マスタープラン連動（モード別の次週カロリー） ---- */
+var RL = require('../roadmap-lib.js');
+t('adjustCfg：選択に応じてモードと範囲が決まる', function () {
+  assert.deepStrictEqual([RL.adjustCfg('', 'cut').mode, RL.adjustCfg('hold', 'cut').mode, RL.adjustCfg('advance', 'cut').mode, RL.adjustCfg('maintain', 'cut').mode, RL.adjustCfg('', 'maintain').mode], ['cut', 'cut', 'bulk', 'maintain', 'maintain']);
+  assert.deepStrictEqual([RL.adjustCfg('advance').kcalMin, RL.adjustCfg('advance').kcalMax], [1950, 2100]);
+  assert.strictEqual(RL.adjustCfg('maintain').kcalMax, 0);
+});
+t('第1期：目標がマスタープランの範囲（1660〜1800）に収まる', function () {
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850] });
+  var v = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: RL.adjustCfg('', 'cut') } });
+  assert.strictEqual(v.adjust.mode, 'cut');
+  assert.strictEqual(v.adjust.target, 1800);
+  assert.ok(v.adjust.reasons.join('').indexOf('マスタープランの範囲') >= 0);
+});
+t('第2期バルク：体重の増え方が目安内なら据え置き、速すぎれば下げ、範囲（1950〜2100）に収める', function () {
+  var rm = { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: RL.adjustCfg('advance', 'cut') };
+  var ok = run(synth({ days: 35, tdee: 2400, avgIntake: 2600, intake: [2600] }), { plan: rm, mealGoalKcal: 2000 });
+  assert.strictEqual(ok.adjust.mode, 'bulk'); assert.strictEqual(ok.adjust.status, 'bulk_ok'); assert.strictEqual(ok.adjust.target, 2000);
+  var fast = run(synth({ days: 35, tdee: 2400, avgIntake: 3000, intake: [3000] }), { plan: rm, mealGoalKcal: 2000 });
+  assert.strictEqual(fast.adjust.status, 'bulk_fast'); assert.ok(fast.adjust.target <= 2100 && fast.adjust.target >= 1950);
+  var low = run(synth({ days: 35, tdee: 2400, avgIntake: 2600, intake: [2600] }), { plan: rm, mealGoalKcal: 1800 });
+  assert.ok(low.adjust.target >= 1950, '範囲の下限まで引き上げる: ' + low.adjust.target);
+});
+t('マスタープランで維持を選ぶと、減量計画が維持期でなくても維持カロリーで運用する', function () {
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 2400, intake: [2400] });
+  var v = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: RL.adjustCfg('maintain', 'cut') }, mealGoalKcal: 2400 });
+  assert.strictEqual(v.adjust.mode, 'maintain'); assert.strictEqual(v.adjust.planned.deficitKcalPerDay, 0);
+});
+
 console.log('\n' + n + ' 件すべて成功');

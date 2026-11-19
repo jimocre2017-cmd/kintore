@@ -32,6 +32,7 @@ var sandbox = {
   toDays_: function (s) { var p = s.split('/'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); },
   addDays_: function (s, n) { var d = new Date((sandbox.toDays_(s) + n) * 86400000); return d.getUTCFullYear() + '/' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '/' + ('0' + d.getUTCDate()).slice(-2); },
   aiModelUsed_: 'fake-model',
+  mealShiftKcalRange_: function () {}, // Meal.gs の代わり（下限・上限のずらしは別テスト）
   aiCached_: function (kind, key, force, fn) { return fn(); }, // キャッシュなし（AiTrainer.gs の代わり）
   gemini_: function (system, user, schema) {
     calls.push({ system: system, user: user });
@@ -48,7 +49,7 @@ for (i = 0; i < 14; i++) {
 sandbox.bodyGet = function () { return { logs: B.daily(entries) }; };
 sandbox.mealGet = function () { return { logs: meals, goals: { kcal: Number(props.MEAL_GOAL_KCAL) || 0 } }; };
 vm.createContext(sandbox);
-vm.runInContext(load('PlanLib.gs') + '\n' + load('Plan.gs'), sandbox);
+vm.runInContext(load('PlanLib.gs') + '\n' + load('RoadmapLib.gs') + '\n' + load('Plan.gs'), sandbox);
 var run = function (code) { return vm.runInContext(code, sandbox); };
 
 var n = 0;
@@ -135,6 +136,33 @@ t('planPauseApply：サーバー側で検証し、休止期間を追加・取消
   sandbox.__c = { action: 'remove_pause', from: '2026/12/28', to: '2027/01/05' };
   r = run('planPauseApply(__c)');
   assert.strictEqual(r.plan.pauses.length, 0);
+});
+
+
+t('planAuto：先週の日曜までの記録で次の目標を自動採用する。1週1回、記録不足・変更なしは据え置き', function () {
+  props.BODY_GOAL_FAT = '12'; props.PLAN_START = '2026/11/09'; props.MEAL_GOAL_KCAL = '1700'; props.ROADMAP_DECISION = 'advance';
+  delete props.PLAN_AUTO_DONE; delete props.PLAN_AUTO_LAST;
+  var before = sheets['減量調整履歴'].rows.length;
+  meals.length = 0;
+  for (var d = 0; d < 14; d++) [0, 1, 2].forEach(function (k) { meals.push({ date: sandbox.addDays_('2026/11/09', d), type: '朝食', text: 'x', kcal: 600, protein: 40, fat: 20, carbs: 50 }); });
+  var r = run('planAuto()');
+  assert.ok(r.autoLast && r.autoLast.from === '2026/11/16', '対象週は今週の月曜');
+  assert.strictEqual(r.autoLast.changed, true);
+  assert.ok(r.autoLast.kcal >= 1950 && r.autoLast.kcal <= 2100, 'バルクの範囲に収まる: ' + r.autoLast.kcal);
+  assert.strictEqual(r.targets[r.targets.length - 1].from, '2026/11/16');
+  assert.strictEqual(props.MEAL_GOAL_KCAL, String(r.autoLast.kcal));
+  var rows = sheets['減量調整履歴'].rows;
+  assert.strictEqual(rows.length, before + 1); assert.ok(String(rows[rows.length - 1][2]).indexOf('自動:') === 0);
+  var again = run('planAuto()');
+  assert.strictEqual(sheets['減量調整履歴'].rows.length, before + 1, '同じ週は2回採用しない');
+  assert.strictEqual(again.autoLast.kcal, r.autoLast.kcal);
+});
+t('planAuto：記録不足の週は採用しない（据え置き）', function () {
+  props.MEAL_GOAL_KCAL = '1700'; delete props.PLAN_AUTO_DONE; delete props.PLAN_AUTO_LAST; props.PLAN_AUTO_X = '';
+  sheets['減量調整履歴'].rows.length = 1; meals.length = 0;
+  var r = run('planAuto()');
+  assert.strictEqual(r.autoLast.changed, false); assert.strictEqual(r.autoLast.status, 'insufficient');
+  assert.strictEqual(r.targets.length, 0); assert.strictEqual(props.MEAL_GOAL_KCAL, '1700');
 });
 
 console.log('\n' + n + ' 件すべて成功');

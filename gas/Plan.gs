@@ -97,7 +97,7 @@ function roadmapSets7_(today) {
 
 function planGet() {
   var today = today_();
-  return { today: today, plan: planSettings_(), defaultStart: PlanLib.nextMonday(today), targets: planTargets_(), latest: planLatestAdvice_(), sets7: roadmapSets7_(today) };
+  return { today: today, plan: planSettings_(), defaultStart: PlanLib.nextMonday(today), targets: planTargets_(), latest: planLatestAdvice_(), sets7: roadmapSets7_(today), autoLast: planAutoLast_() };
 }
 
 function planSetDate_(v, label, allowEmpty) {
@@ -171,8 +171,9 @@ function planPauseApply(c) {
   return planGet();
 }
 
-function planView_() {
-  var today = today_(), pl = planSettings_(), body = bodyGet(), meal = mealGet();
+function planView_(todayOpt) {
+  var today = todayOpt || today_(), pl = planSettings_(), body = bodyGet(), meal = mealGet();
+  pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
   return PlanLib.view({ today: today, daily: body.logs, meals: meal.logs, plan: pl, targets: planTargets_(), mealGoalKcal: meal.goals.kcal });
 }
 
@@ -185,7 +186,7 @@ function planAdviceSystem_() {
     '',
     '## 守るルール',
     '- adjust.target（来週の1日の目標kcal）、adjust.weeklyBudget、adjust.deltaFromPrevious、adjust.protein、adjust.floorKcal は決定済み。変更・再計算・別の数値の提案をしない。文中で引用するときはそのまま使う。',
-    '- adjust.status：paused＝休止期間中（維持カロリーで過ごす）、maintaining＝維持期で体脂肪率が許容帯の中、below_floor＝最低体脂肪率を下回った（少し多めに食べて筋トレは維持）、above_band＝許容帯の上限を超えた（少し控えめに）、floor_reached＝減量期で最低体脂肪率に到達（維持期への切替をすすめる）、on_track＝計画どおり（目標を維持）、behind＝計画より遅れ、ahead＝計画より速い（筋肉が落ちやすいので緩める）、learning＝実測がまだ足りず計画値で運用、insufficient＝記録不足で調整しない。それぞれに合う言い方にする。',
+    '- adjust.status：paused＝休止期間中（維持カロリーで過ごす）、maintaining＝維持期で体脂肪率が許容帯の中、below_floor＝最低体脂肪率を下回った（少し多めに食べて筋トレは維持）、above_band＝許容帯の上限を超えた（少し控えめに）、floor_reached＝減量期で最低体脂肪率に到達（維持期への切替をすすめる）、bulk_ok＝バルクで体重の増え方が目安（週0.25〜0.5%）の中、bulk_fast＝増え方が速い（脂肪が乗りやすいので控えめに）、bulk_slow＝増え方が遅い（少し多めに）、on_track＝計画どおり（目標を維持）、behind＝計画より遅れ、ahead＝計画より速い（筋肉が落ちやすいので緩める）、learning＝実測がまだ足りず計画値で運用、insufficient＝記録不足で調整しない。それぞれに合う言い方にする。',
     '- 遅れの原因は adjust.reasons と実績（adjust.actual、weeks、meals7）から読み取る。摂取が目標より多いのが主因なら「目標は変えず、守る工夫」を書く。目標を下げすぎる提案をしない。',
     '- adjust.leanWarning がある場合は、筋トレの重さ・回数が落ちていないか確認し、たんぱく質を確保するよう伝える。診断はしない。',
     '- 食べ物の例は meals7（実際に食べたもの）を踏まえ、身近な食品・外食・コンビニで選べるものにする。極端な制限や、特定の食品の禁止はしない。',
@@ -274,6 +275,12 @@ function planApply(p) {
   p = p || {};
   var kcal = Math.round(Number(p.kcal)), from = planSetDate_(p.from, '開始週', false);
   if (isNaN(kcal) || kcal < 1000 || kcal > 4500) throw new Error('目標カロリーは1000〜4500で入力してください');
+  planApplyCore_(kcal, from, Number(p.protein), null);
+  return planGet();
+}
+
+/** 採用の書き込み本体。meta＝{status, json}（自動採用のとき、履歴に「自動:状態」と根拠を残す） */
+function planApplyCore_(kcal, from, protein, meta) {
   var lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
@@ -282,7 +289,7 @@ function planApply(p) {
       var vals = sh.getRange(2, 1, last - 1, PLAN_HEAD.length).getValues();
       for (var i = vals.length - 1; i >= 0; i--) if (planDateCell_(vals[i][1]) === from) { row = i + 2; break; }
     }
-    if (!row) { sh.appendRow([new Date(), from, '手入力', kcal, '', 'はい', kcal, '', '']); }
+    if (!row) { sh.appendRow([new Date(), from, meta ? meta.status : '手入力', kcal, '', 'はい', kcal, meta ? meta.json : '', '']); }
     else { sh.getRange(row, 6, 1, 2).setValues([['はい', kcal]]); }
     // 食事画面の目標：今日から有効にするため、開始週が今日以前（今週の月曜など）の場合だけ反映する
     var pr = PropertiesService.getScriptProperties();
@@ -292,8 +299,33 @@ function planApply(p) {
     } else {
       pr.setProperty('MEAL_GOAL_KCAL_NEXT', JSON.stringify({ from: from, kcal: kcal }));
     }
-    var prot = Number(p.protein);
-    if (prot > 0 && !Number(pr.getProperty('MEAL_GOAL_P'))) pr.setProperty('MEAL_GOAL_P', String(Math.round(prot)));
+    if (protein > 0 && !Number(pr.getProperty('MEAL_GOAL_P'))) pr.setProperty('MEAL_GOAL_P', String(Math.round(protein)));
   } finally { lock.releaseLock(); }
+}
+
+function planAutoLast_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('PLAN_AUTO_LAST') || 'null'); } catch (e) { return null; }
+}
+
+/**
+ * 週1回の自動採用。今週の月曜を「対象週」とし、先週（月〜日）までの記録で次の目標を計算して、そのまま採用する。
+ * 週の途中の節制日と外食日が同じ週に入るよう、いつも「先週の日曜まで」で評価する。1つの対象週につき1回だけ（再計算しない）。
+ * 記録不足・休止中・変更が小さいときは、いまの目標を据え置く。結果は PLAN_AUTO_LAST に残し、画面に出す。
+ */
+function planAuto() {
+  var pr = PropertiesService.getScriptProperties(), today = today_(), weekMon = PlanLib.weekStart(today), evalDate = PlanLib.addDays(weekMon, -1);
+  var pl = planSettings_();
+  if (!(pl.goalFat && pl.startDate) || weekMon <= pl.startDate) return planGet();
+  if (pr.getProperty('PLAN_AUTO_DONE') === weekMon) return planGet();
+  if (planTargets_().some(function (t) { return t.from === weekMon; })) { pr.setProperty('PLAN_AUTO_DONE', weekMon); return planGet(); }
+  var v = planView_(evalDate);
+  if (!v.configured || v.noBody || !v.adjust) return planGet();
+  var adj = v.adjust, prev = adj.previousTarget || 0, last = { from: weekMon, evalDate: evalDate, status: adj.status, mode: adj.mode, reasons: (adj.reasons || []).slice(0, 4), prev: prev || null };
+  if (adj.status !== 'insufficient' && adj.target > 0 && adj.target !== prev) {
+    planApplyCore_(adj.target, weekMon, adj.protein ? adj.protein.targetG : 0, { status: '自動:' + adj.status, json: JSON.stringify(adj).slice(0, 45000) });
+    last.kcal = adj.target; last.changed = true;
+  } else { last.kcal = prev || adj.target || null; last.changed = false; }
+  pr.setProperty('PLAN_AUTO_LAST', JSON.stringify(last));
+  pr.setProperty('PLAN_AUTO_DONE', weekMon);
   return planGet();
 }
