@@ -231,7 +231,7 @@
   function openJudge() {
     KT.call('coachLast').then(function (c) {
       if (c && c.res && Date.now() - c.t < FRESH_MS) { show(resultHtml(c.res, false) + goBtn('最新の記録で診断し直す')); bindGo(); }
-      else run();
+      else { show('<div class="note" style="margin:0 0 10px">まだ今日の診断はありません。下のボタンを押すと、最新の記録から総合的に判断します（AIを1回使います）。</div>' + goBtn('診断する')); bindGo(); }
     });
   }
   function close() { root.classList.remove('on'); if (!busy) topic = 'free'; }
