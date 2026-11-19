@@ -176,15 +176,46 @@ function renderMsg(){
 }
 
 // 「開始 → 現在 → 目標」の3列。開始は計画の基準（開始後7日の平均で確定）、目標は目標体脂肪率に達したときの体重・脂肪量（除脂肪量は変わらない前提）
+// 追加の指標（骨格筋率・内臓脂肪レベル・FFMI）。体組成の日ごとの平均から、開始（開始日から7日）／現在（直近7日）／FFMIの開始以降の平均を出す
+function bodyExtra(b){
+  var logs = (S.body && S.body.logs) || [], today = (S.body && S.body.today) || KT.today(), ht = 0, hd = '', i;
+  for (i = 0; i < logs.length; i++) if (logs[i].height && logs[i].date > hd) { ht = logs[i].height; hd = logs[i].date; }
+  function inRange(from, to){ return logs.filter(function(l){ return l.date >= from && l.date <= to; }); }
+  function mean(list, f){ var v = list.map(function(x){ return x[f]; }).filter(function(x){ return x != null; }); return v.length ? v.reduce(function(a, c){ return a + c; }, 0) / v.length : null; }
+  var s0 = b.startDate, base = inRange(s0, PL.addDays(s0, 6)), now = inRange(PL.addDays(today, -6), today);
+  if (!base.length) base = logs.filter(function(l){ return l.date >= s0; }).slice(0, 7);
+  function nf(w, f){ if (typeof FfmiLib === 'undefined' || !ht || w == null || f == null) return null; var v = FfmiLib.ffmi(w, f, ht); return v == null ? null : FfmiLib.r1(FfmiLib.normalized(v, ht)); }
+  var since = logs.filter(function(l){ return l.date >= s0 && l.weight != null && l.fat != null; }).map(function(l){ return nf(l.weight, l.fat); }).filter(function(x){ return x != null; });
+  return { height: ht, muscle: [mean(base, 'muscle'), mean(now, 'muscle')], visceral: [mean(base, 'visceral'), mean(now, 'visceral')], ffmiBase: nf(b.baseWeight, b.baseFat), ffmiGoal: nf(b.targetWeight, b.goalFat), ffmiNow: null, ffmiAvg: since.length ? FfmiLib.r1(since.reduce(function(a, c){ return a + c; }, 0) / since.length) : null, ffmiDays: since.length, nf: nf };
+}
+// 開始→目標の道のり。脂肪の量で測り、1/4・折り返し（半分）・3/4の目印と、いまの位置を出す
+function trackHtml(b, n){
+  if (b.baseFatMass == null || n.fatMass == null || !(b.baseFatMass > b.targetFatMass)) return '';
+  var tot = b.baseFatMass - b.targetFatMass, done = b.baseFatMass - n.fatMass, pct = Math.max(0, Math.min(100, done / tot * 100)), left = Math.max(0, n.fatMass - b.targetFatMass);
+  var txt = pct >= 100 ? '目標の脂肪の量に届きました'
+    : pct >= 75 ? 'ゴールが見えてきました。あと脂肪 <b class="num">'+f1(left)+'kg</b>'
+    : pct >= 50 ? '折り返しを過ぎました。残りは脂肪 <b class="num">'+f1(left)+'kg</b>'
+    : pct >= 25 ? '折り返しまであと脂肪 <b class="num">'+f1(n.fatMass - (b.baseFatMass - tot / 2))+'kg</b>（全体で残り <b class="num">'+f1(left)+'kg</b>）'
+    : 'まだ序盤です。折り返しまであと脂肪 <b class="num">'+f1(n.fatMass - (b.baseFatMass - tot / 2))+'kg</b>';
+  var tick = function(p, lbl){ return '<span class="tk" style="left:'+p+'%"><i></i><em>'+lbl+'</em></span>'; };
+  return '<div class="track"><div class="tt">開始から目標までの道のり（脂肪の量で <b class="num">'+pct.toFixed(0)+'%</b>）</div>'
+    + '<div class="rail"><i class="fill" style="width:'+pct.toFixed(1)+'%"></i><i class="dot" style="left:'+pct.toFixed(1)+'%"></i>'+tick(0, '開始')+tick(25, '1/4')+tick(50, '折り返し')+tick(75, '3/4')+tick(100, '目標')+'</div>'
+    + '<div class="tx">'+txt+'</div></div>';
+}
+// 「開始 → 現在 → 目標」の表。開始は計画の基準（開始後7日の平均で確定）、目標は目標体脂肪率に達したときの体重・脂肪量（除脂肪量は変わらない前提）
 function progressHtml(b, n, pre){
-  var prog = (b.baseFat != null && n.fat != null && b.baseFat > b.goalFat) ? Math.max(0, Math.min(100, (b.baseFat - n.fat) / (b.baseFat - b.goalFat) * 100)) : null;
-  var dl = b.deadline.split('/');
+  var dl = b.deadline.split('/'), ex = bodyExtra(b);
+  var ffNow = ex.nf(n.weight, n.fat);
   function row(lbl, a, c, g, u, d){ return '<div class="r"><span class="l">'+lbl+'</span><b class="num">'+(a == null ? '－' : a.toFixed(d))+'<small>'+u+'</small></b><b class="num now">'+(c == null ? '－' : c.toFixed(d))+'<small>'+u+'</small></b><b class="num goal">'+(g == null ? '－' : g.toFixed(d))+'<small>'+u+'</small></b></div>'; }
   var h = '<div class="sng"><div class="r hd"><span class="l"></span><span>開始<br><small>'+md(b.startDate)+(pre ? '（暫定）' : '')+'</small></span><span class="now">現在<br><small>直近7日</small></span><span class="goal">目標<br><small>'+(+dl[1])+'/'+(+dl[2])+'ごろ</small></span></div>'
     + row('体脂肪率', b.baseFat, n.fat, b.goalFat, '%', 1)
     + row('体重', b.baseWeight, n.weight, b.targetWeight, 'kg', 1)
-    + row('脂肪の量', b.baseFatMass, n.fatMass, b.targetFatMass, 'kg', 1) + '</div>';
-  if (prog != null) h += '<div class="sngbar" title="開始から目標までの進み具合"><i style="width:'+prog.toFixed(0)+'%"></i></div><div class="sngtx">開始から目標まで、体脂肪率の <b class="num">'+prog.toFixed(0)+'%</b> まで進みました</div>';
+    + row('脂肪の量', b.baseFatMass, n.fatMass, b.targetFatMass, 'kg', 1)
+    + row('骨格筋率', ex.muscle[0], ex.muscle[1], null, '%', 1)
+    + row('内臓脂肪', ex.visceral[0], ex.visceral[1], null, '', 1)
+    + row('FFMI（補正後）', ex.ffmiBase, ffNow, ex.ffmiGoal, '', 1) + '</div>';
+  h += '<div class="sngtx">FFMIの開始以降の平均：<b class="num">'+(ex.ffmiAvg == null ? '－' : ex.ffmiAvg.toFixed(1))+'</b>'+(ex.ffmiDays ? '（'+ex.ffmiDays+'日分）' : '')+'　／　骨格筋率・内臓脂肪レベルに目標はありません（推移を見る指標です）</div>';
+  h += trackHtml(b, n);
   return h;
 }
 function renderHero(){
@@ -518,12 +549,16 @@ function renderDays(){
   var V = S.V, el = $('dayCard');
   if (!V || !V.days) { el.style.display = 'none'; return; }
   el.style.display = '';
-  var h = '<h3>日（直近14日）</h3><div class="tblwrap"><table class="tbl"><tr><th>日付</th><th>体脂肪率</th><th>計画</th><th>ずれ</th><th>摂取kcal</th><th>目標差</th></tr>';
+  var h = '<h3>日（直近14日）</h3><div class="tblwrap"><table class="tbl"><tr><th>日付</th><th>体脂肪率</th><th>FFMI</th><th>計画</th><th>ずれ</th><th>摂取kcal</th><th>目標差</th></tr>';
+  var blogs = (S.body && S.body.logs) || [], byD = {}, hh = 0, hdt = '';
+  blogs.forEach(function(l){ byD[l.date] = l; if (l.height && l.date > hdt) { hh = l.height; hdt = l.date; } });
+  function ffmiDay(date){ var l = byD[date]; if (!l || typeof FfmiLib === 'undefined' || l.weight == null || l.fat == null) return null; var ht = l.height || hh; if (!ht) return null; var x = FfmiLib.ffmi(l.weight, l.fat, ht); return x == null ? null : FfmiLib.r1(FfmiLib.normalized(x, ht)); }
   V.days.forEach(function(r){
     var kc = r.kcal == null ? '－' : comma(r.kcal)+(r.complete ? '' : '<small>記録中</small>');
     var okd = r.kcal != null && r.complete && r.target;
     h += '<tr'+(r.date === V.today ? ' class="today"' : '')+'><td>'+mdw(r.date)+'</td>'
       + '<td class="num">'+(r.body ? f1(r.fat)+'<small>'+r.count+'回</small>' : '<span class="mut">－</span>')+'</td>'
+      + '<td class="num">'+(ffmiDay(r.date) == null ? '<span class="mut">－</span>' : f1(ffmiDay(r.date)))+'</td>'
       + '<td class="num">'+(r.active ? f1(r.plannedFat) : '<span class="mut">開始前</span>')+'</td>'
       + '<td class="num '+(r.body && r.active ? gapCls(r.gapPct, 0.05) : 'mut')+'">'+(r.body && r.active ? sg(r.gapPct) : '－')+'</td>'
       + '<td class="num">'+kc+'</td><td class="num '+(okd ? (r.kcal - r.target > 0 ? 'pos' : 'neg') : 'mut')+'">'+(okd ? sg(r.kcal - r.target, 0) : '－')+'</td></tr>';
