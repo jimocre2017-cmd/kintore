@@ -253,6 +253,8 @@ header .sp{margin-left:auto}
 
 <script src="api.js"></script>
 <script src="coach.js"></script>
+<script src="roadmap-lib.js"></script>
+<script src="advice.js"></script>
 <script src="guide.js"></script>
 <script src="body-lib.js"></script>
 <script src="ffmi-lib.js"></script>
@@ -650,7 +652,7 @@ $('fSave').onclick = function(){
   }
   if (e.bmi === '' && e.weight !== '' && e.height !== '') e.bmi = BL.bmi(e.weight, e.height);
   ['weight','fat','muscle','bmi','bmr','visceral','height'].forEach(function(k){ e[k] = e[k] === '' ? null : e[k]; });
-  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); S.now = null; renderNow(); }, function(er){ toast(er.message, true); });
+  KT.call('bodySave', e).then(function(r){ S.data = r; S.day = date; closeForm(); render(); toast('保存しました'); S.now = null; renderNow(); if (window.KTAdvice) setTimeout(function(){ KTAdvice.check(true); }, 600); }, function(er){ toast(er.message, true); });
 };
 $('fDel').onclick = function(){
   if (!confirm('この測定を削除しますか？')) return;

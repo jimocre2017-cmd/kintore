@@ -113,4 +113,18 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.ok(R.balance(m.phase, { meal: { protein: 125, fat: 45 } }).items.every(function (x) { return x.state === 'in'; }));
   console.log('ok  maintain decision');
 })();
+
+(function () {
+  var R = require('../roadmap-lib.js'), assert = require('assert');
+  var k = function (o) { return R.advice(o).map(function (x) { return x.key; }); };
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 14.9, days: 5 }, decision: '' }), ['choose']);
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 14.6, days: 5 }, decision: 'maintain', planPhase: 'maintain', floorFat: 13 }), ['maint-over'], '最低13＋1.5=14.5を超えたら');
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 14.5, days: 5 }, decision: 'maintain', planPhase: 'maintain', floorFat: 13 }), [], '許容帯の中');
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 12.5, days: 5 }, decision: 'maintain', planPhase: 'maintain', floorFat: 13 }), ['maint-below']);
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 18.1, days: 5 }, decision: 'advance' }), ['bulk-over']);
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: { avg: 17.5, days: 5 }, decision: 'advance' }), []);
+  assert.deepStrictEqual(k({ date: '2027/03/10', fat7: null, decision: 'maintain' }), [], '測定が足りないときは出さない');
+  assert.strictEqual(R.MAINT_BAND_PCT, 1.5);
+  console.log('ok  advice rules');
+})();
 console.log(n + ' 件OK');
