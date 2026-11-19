@@ -208,16 +208,22 @@ var COACH_VERDICTS = ['on_track', 'slightly_behind', 'behind', 'ahead', 'unknown
  * キャッシュの照合には、毎回変わる nowTime と、診断のたびに変わる previous を含めない
  */
 function coachJudge(req) {
+  var t0 = Date.now();
   var data = coachData_();
+  var dataMs = Date.now() - t0;
   var tr0 = data.training, hasTrain = tr0 && (tr0.last28Days.strengthDays || tr0.last28Days.cardioDays);
   if (!data.body && !data.meal && !hasTrain) throw new Error('記録がまだありません。体組成・食事・運動のどれかを記録してから使ってください');
   var keyData = JSON.parse(JSON.stringify(data));
   delete keyData.nowTime; delete keyData.previous;
-  return aiCached_('coach', keyData, !!(req && req.force), function () { return coachJudgeRun_(data); });
+  return aiCached_('coach', keyData, !!(req && req.force), function () {
+    var t1 = Date.now(), out = coachJudgeRun_(data);
+    out.timing = { dataSec: Math.round(dataMs / 100) / 10, aiSec: Math.round((Date.now() - t1) / 100) / 10 }; // 速さの確認用：記録の集計と、AIの待ち時間
+    return out;
+  });
 }
 
 function coachJudgeRun_(data) {
-  var res = gemini_(coachSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), coachSchema_());
+  var res = gemini_(coachSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), coachSchema_(), null, { fast: true });
   var out = {
     verdict: COACH_VERDICTS.indexOf(res.verdict) >= 0 ? res.verdict : 'unknown',
     headline: planStr_(res.headline, 120), goalCheck: planStr_(res.goalCheck, 600), meal: planStr_(res.meal, 500),
@@ -376,7 +382,7 @@ function coachAsk(req) {
   // 使い方の質問は軽量モデル。同じ日・同じ質問・同じ記録なら保存済みの回答を使う（req.force で作り直し）
   var keyData = JSON.parse(JSON.stringify(data)); delete keyData.nowTime; delete keyData.previous;
   var res = aiCached_('ask', { topic: topic, q: q, page: page, hist: hist, manual: manual, data: keyData }, !!req.force, function () {
-    return gemini_(askSystem_(topic), user, askSchema_(), null, { lite: topic === 'howto' });
+    return gemini_(askSystem_(topic), user, askSchema_(), null, { lite: topic === 'howto', fast: true });
   });
   var out = {
     topic: topic, topicLabel: ASK_TOPICS[topic][0], question: q,

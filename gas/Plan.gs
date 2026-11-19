@@ -257,7 +257,7 @@ function planAdvise(req) {
       weeks: v.weeks.slice(-3), meals7: meals7
     };
     var advUser = '# 記録データ（JSON）\n' + JSON.stringify(data);
-    var res = aiCached_('planAdv', { u: advUser }, !!(req && req.force), function () { return gemini_(planAdviceSystem_(), advUser, planAdviceSchema_()); }); // 同じ日・同じ記録なら保存済みの提案を使う
+    var res = aiCached_('planAdv', { u: advUser }, !!(req && req.force), function () { return gemini_(planAdviceSystem_(), advUser, planAdviceSchema_(), null, { fast: true }); }); // 同じ日・同じ記録なら保存済みの提案を使う
     advice = {
       headline: planStr_(res.headline, 200), summary: planStr_(res.summary, 600), whyTarget: planStr_(res.whyTarget, 400),
       actions: (res.actions || []).slice(0, 4).map(function (a) { return { title: planStr_(a.title, 60), detail: planStr_(a.detail, 300) }; }),

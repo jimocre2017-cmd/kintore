@@ -386,7 +386,7 @@ function mealAsk(req) {
     + (w ? '\n\n直近7日（記録した日だけ）：平均 ' + w.averagePerLoggedDay.kcal + 'kcal、たんぱく質' + w.averagePerLoggedDay.protein + 'g、脂質' + w.averagePerLoggedDay.fat + 'g、脂質エネルギー比' + w.fatEnergyPercent + '%' : '')
     + (sug && sug.protein ? '\n\n体組成からの目安：たんぱく質 約' + sug.protein + 'g' + (sug.cutKcal ? '、減量なら約' + sug.cutKcal + 'kcal' : '') : '');
   var askUser = ctx + '\n\n## 相談\n' + q;
-  var res = aiCached_('mealAsk', { u: askUser }, !!req.force, function () { return gemini_(mealAskSystem_(), askUser, mealAskSchema_()); });
+  var res = aiCached_('mealAsk', { u: askUser }, !!req.force, function () { return gemini_(mealAskSystem_(), askUser, mealAskSchema_(), null, { fast: true }); });
   var secs = (res.sections || []).slice(0, 6).map(function (s) {
     return { title: String(s.title || '').slice(0, 30), points: (s.points || []).slice(0, 8).map(function (x) { return String(x).slice(0, 200); }) };
   }).filter(function (s) { return s.points.length; });
@@ -450,7 +450,7 @@ function mealReview(req) {
   var ctx = '日付：' + date + (partial ? '（まだ1日の途中）' : '（1日が終わった／過去の日）') + '\n\n目標：\n' + (lines.join('\n') || '（目標未設定）')
     + '\n\nここまでの合計：' + Math.round(tot.kcal) + 'kcal、たんぱく質' + n(tot.protein) + 'g、脂質' + n(tot.fat) + 'g、炭水化物' + n(tot.carbs) + 'g\n\n食事の記録：\n' + rec.join('\n\n');
   // コメント生成は軽量モデル。同じ日・同じ記録なら保存済みの分析を使う（req.force で作り直し）
-  var res = aiCached_('mealReview', { u: ctx }, !!req.force, function () { return gemini_(mealReviewSystem_(), ctx, mealReviewSchema_(), null, { lite: true }); });
+  var res = aiCached_('mealReview', { u: ctx }, !!req.force, function () { return gemini_(mealReviewSystem_(), ctx, mealReviewSchema_(), null, { lite: true, fast: true }); });
   function arr(a, max) { return (a || []).slice(0, max).map(function (x) { return String(x).slice(0, 220); }).filter(function (x) { return x; }); }
   var out = { summary: String(res.summary || '').slice(0, 400), causes: arr(res.causes, 4), actions: arr(res.actions, 5), nextMeal: String(res.nextMeal || '').slice(0, 300) };
   if (!out.summary && !out.actions.length) throw new Error('分析を作れませんでした。もう一度お試しください');
