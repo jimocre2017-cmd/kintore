@@ -511,16 +511,34 @@ function aiAltModel_(model) {
   } catch (e) { return null; }
 }
 
+// 速くするための「考える量」の指定（上から順に試す。モデルによって指定の仕方が違うので、通ったものを記憶する）
+//  1) thinkingLevel: low（Gemini 3 系）  2) thinkingBudget（2.5 系）  3) 指定なし
+var AI_THINK_MODES = [{ thinkingLevel: 'low' }, { thinkingBudget: 512 }, null];
+
+function aiThinkStart_(model) {
+  var v = Number(PropertiesService.getScriptProperties().getProperty('GEMINI_THINK_' + model.name));
+  return v >= 0 && v < AI_THINK_MODES.length ? v : 0;
+}
+
+function aiThinkRemember_(model, think) {
+  try {
+    var pr = PropertiesService.getScriptProperties(), k = 'GEMINI_THINK_' + model.name;
+    if (pr.getProperty(k) !== String(think)) pr.setProperty(k, String(think));
+  } catch (e) {}
+}
+
 // images（任意）：[{ mime, data(base64) }]。写真を見て答えさせるときに、文章の前に付ける
-// opts（任意）：{ lite:true } 軽い処理（コメント生成・使い方の質問）は Flash-Lite に回す
+// opts（任意）：{ lite:true } 軽い処理（コメント生成・使い方の質問）は Flash-Lite に回す／{ fast:true } 考える量を絞って速くする（数字は確定済みで、文章にするだけの処理）
 //  429（混雑）は、待ち時間を空けて最大2回やり直す。1日の上限のときはやり直さず、もう一方のモデルに切り替える
 function gemini_(system, user, schema, images, opts) {
   opts = opts || {};
   var key = geminiKey_();
   var model = aiModel_('', !!opts.lite);
   var useSchema = true, tries = 0, srv = 0, rl = 0, swapped = false, quota = null, lastRes = null;
+  var think = opts.fast ? aiThinkStart_(model) : AI_THINK_MODES.length - 1; // fast：考える量を絞って速くする（文章にするだけの処理用）
   while (tries++ < 10) {
     var gen = { responseMimeType: 'application/json' };
+    if (AI_THINK_MODES[think]) gen.thinkingConfig = AI_THINK_MODES[think];
     if (useSchema && schema) gen.responseSchema = schema;
     var parts = (images || []).map(function (im) { return { inlineData: { mimeType: im.mime, data: im.data } }; });
     parts.push({ text: user + (useSchema ? '' : '\n\n出力は次の JSON スキーマに従う JSON のみ：' + JSON.stringify(schema)) });
@@ -536,10 +554,12 @@ function gemini_(system, user, schema, images, opts) {
     var code = res.getResponseCode();
     if (code === 200) {
       aiModelUsed_ = model.name;
+      if (opts.fast) aiThinkRemember_(model, think);
       return aiParse_(JSON.parse(res.getContentText()));
     }
     lastRes = res;
-    if (code === 404 && model.auto) { model = aiModel_(model.name, model.lite); continue; } // 自動選択したモデルが廃止された
+    if (code === 404 && model.auto) { model = aiModel_(model.name, model.lite); think = opts.fast ? aiThinkStart_(model) : think; continue; } // 自動選択したモデルが廃止された
+    if (code === 400 && think < AI_THINK_MODES.length - 1 && /think/i.test(res.getContentText())) { think++; continue; } // このモデルは thinking の指定に非対応：次の指定、最後は指定なし
     if (code === 400 && useSchema) { useSchema = false; continue; }              // スキーマ指定に非対応のモデル
     if ((code === 503 || code === 500) && srv < 2) { srv++; Utilities.sleep(2000 * srv); continue; } // 一時的な混雑：少し待って再試行
     if (code === 429) {
@@ -552,7 +572,7 @@ function gemini_(system, user, schema, images, opts) {
       if (!swapped) { // 上限が続く：もう一方のモデル（軽量↔メイン）で1回だけ試す
         swapped = true;
         var alt = aiAltModel_(model);
-        if (alt) { model = alt; rl = 1; continue; }
+        if (alt) { model = alt; rl = 1; think = opts.fast ? aiThinkStart_(model) : think; continue; }
       }
     }
     break;

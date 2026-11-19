@@ -148,4 +148,44 @@ t('キャッシュ：シートやハッシュが使えなくても、そのま�
   assert.strictEqual(e.sb.aiCached_('coach', { x: 1 }, false, function () { return { v: 7 }; }).v, 7);
 });
 
+function body(opt) { return JSON.parse(opt.payload); }
+function e400think(e) { return function () { return e.resp(400, { error: { message: 'Unknown name "thinking_level": Cannot find field.' } }); }; }
+
+t('fast：thinkingLevel=low を付けて呼ぶ。通ったら記憶して、次回もそれで始める', function () {
+  var e = env(), seen = [];
+  e.queue(function (u, o) { seen.push(body(o).generationConfig.thinkingConfig); return e.resp(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }); },
+          function (u, o) { seen.push(body(o).generationConfig.thinkingConfig); return e.resp(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }); });
+  e.sb.gemini_('s', 'u', null, null, { fast: true }); e.sb.gemini_('s', 'u', null, null, { fast: true });
+  assert.deepStrictEqual(seen, [{ thinkingLevel: 'low' }, { thinkingLevel: 'low' }]);
+});
+
+t('fast：thinking の指定が通らないモデルは、thinkingBudget → 指定なし の順に切り替え、通った指定を記憶する', function () {
+  var e = env(), seen = [];
+  function rec(code) { return function (u, o) { seen.push(body(o).generationConfig.thinkingConfig || null); return code === 200 ? e.resp(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }) : e400think(e)(); }; }
+  e.queue(rec(400), rec(400), rec(200));
+  var r = e.sb.gemini_('s', 'u', null, null, { fast: true });
+  assert.strictEqual(r.a, 1);
+  assert.deepStrictEqual(seen, [{ thinkingLevel: 'low' }, { thinkingBudget: 512 }, null]);
+  assert.strictEqual(e.props['GEMINI_THINK_gemini-3.6-flash'], '2');
+  seen.length = 0; e.queue(rec(200));
+  e.sb.gemini_('s', 'u', null, null, { fast: true });
+  assert.deepStrictEqual(seen, [null], '次回は指定なしから始める（無駄な400を出さない）');
+});
+
+t('fast を付けない呼び出し（写真など）は、thinking の指定を付けない', function () {
+  var e = env(), cfg;
+  e.queue(function (u, o) { cfg = body(o).generationConfig; return e.resp(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }); });
+  e.sb.gemini_('s', 'u', null, null);
+  assert.ok(!('thinkingConfig' in cfg));
+});
+
+t('thinking と無関係の 400（スキーマ非対応）は、これまで通りスキーマ無しでやり直す', function () {
+  var e = env(), cfgs = [];
+  function r(code) { return function (u, o) { cfgs.push(body(o).generationConfig); return code === 200 ? e.resp(200, { candidates: [{ content: { parts: [{ text: '{"a":1}' }] } }] }) : e.resp(400, { error: { message: 'response schema not supported' } }); }; }
+  e.queue(r(400), r(200));
+  e.sb.gemini_('s', 'u', { type: 'OBJECT' }, null, { fast: true });
+  assert.ok(cfgs[0].responseSchema && !cfgs[1].responseSchema);
+  assert.deepStrictEqual(cfgs[1].thinkingConfig, { thinkingLevel: 'low' }, 'thinking は外さない');
+});
+
 console.log('\n' + n + ' passed');

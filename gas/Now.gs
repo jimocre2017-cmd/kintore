@@ -37,7 +37,7 @@ function bodyNowEval(req) {
   var res = aiCached_('now', keyData, !!(req && req.force), function () {
     var r = gemini_(nowEvalSystem_(), '# 記録データ（JSON）\n' + JSON.stringify(data), {
       type: 'OBJECT', properties: { comment: { type: 'STRING' }, tone: { type: 'STRING', enum: ['good', 'neutral', 'watch'] } }, required: ['comment', 'tone']
-    }, null, { lite: true });
+    }, null, { lite: true, fast: true });
     r.at = data.nowTime; // 評価した時刻も保存して、再表示のときに使う
     return r;
   });

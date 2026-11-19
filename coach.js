@@ -75,7 +75,7 @@
     var v = VERDICT[r.verdict] || VERDICT.unknown, h = '';
     h += '<span class="vd" style="background:' + v[1] + '">' + esc(v[0]) + '</span>';
     h += '<div class="hl">' + esc(r.headline) + '</div>';
-    h += '<div class="meta">' + esc(r.createdAt || '') + (stale ? '（前回の診断）' : '') + (r.cached ? '（今日すでに出した診断を再表示。記録が変わっていないので、AIは使っていません）' : '') + '</div>';
+    h += '<div class="meta">' + esc(r.createdAt || '') + (stale ? '（前回の診断）' : '') + (r.cached ? '（今日すでに出した診断を再表示。記録が変わっていないので、AIは使っていません）' : '') + (r.timing && !r.cached ? '（所要 集計' + r.timing.dataSec + '秒＋AI' + r.timing.aiSec + '秒）' : '') + '</div>';
     h += fmtFacts(r.facts);
     h += '<div class="sec"><b>目標と期限</b><p>' + esc(r.goalCheck) + '</p></div>';
     h += '<div class="sec"><b>食事</b><p>' + esc(r.meal) + '</p></div>';
