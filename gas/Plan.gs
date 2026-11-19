@@ -32,13 +32,13 @@ function planPausesRead_() {
   try { return PlanLib.cleanPauses(JSON.parse(PropertiesService.getScriptProperties().getProperty('PLAN_PAUSES') || '[]')); } catch (e) { return []; }
 }
 
-/** マスタープランの選択：''＝未選択／'advance'＝第2期へ進む／'hold'＝いまのプラン（第1期）を据え置く */
+/** マスタープランの選択：''＝未選択／'advance'＝第2期へ進む／'maintain'＝維持期（現状維持）／'hold'＝いまのプラン（第1期）を据え置く */
 function roadmapDecisionRead_() {
   var v = PropertiesService.getScriptProperties().getProperty('ROADMAP_DECISION');
-  return v === 'advance' || v === 'hold' ? v : '';
+  return v === 'advance' || v === 'hold' || v === 'maintain' ? v : '';
 }
 function roadmapSet(d) {
-  var v = d === 'advance' || d === 'hold' ? d : '';
+  var v = d === 'advance' || d === 'hold' || d === 'maintain' ? d : '';
   PropertiesService.getScriptProperties().setProperty('ROADMAP_DECISION', v);
   return planGet();
 }

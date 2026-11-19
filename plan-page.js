@@ -79,21 +79,25 @@ function renderRoadmap(){
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
   if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
-      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
-      + '<div class="note">据え置くと、食事は第1期の範囲（1,660〜1,800kcal）のままなので、減量の赤字が続きます。いつでも選び直せます。</div></div>';
+      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>維持期（現状維持）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
+      + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／維持期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（1,660〜1,800kcal）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
   } else if (R.decision === 'hold') {
     h += '<div class="banner warn" style="margin-top:10px">いまのプラン（第1期）を据え置いています。<div class="rowbtns"><button class="btn small primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期へ進む</button></div></div>';
+  } else if (R.decision === 'maintain') {
+    var pl0 = (S.plan && S.plan.plan) || {};
+    h += '<div class="banner info" style="margin-top:10px">維持期（現状維持）を選んでいます。'+(pl0.phase === 'maintain' ? '減量計画も維持期の設定です。' : '減量計画はまだ減量期の設定です。下のボタンで維持期に切り替えると、食事のカロリーが維持カロリーになります。')
+      + '<div class="rowbtns">'+(pl0.phase === 'maintain' ? '' : '<button class="btn small primary" id="rmMaintPlan"'+(S.rmBusy ? ' disabled' : '')+'>減量計画を維持期にする（最低 '+first.targets.fatPct+'%）</button>')+'<button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>選び直す</button></div></div>';
   } else if (R.decision === 'advance') {
-    h += '<div class="banner info" style="margin-top:10px">第2期に進んでいます。<div class="rowbtns"><button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>第1期に戻す</button></div></div>';
+    h += '<div class="banner info" style="margin-top:10px">第2期（リーンバルク）に進んでいます。<div class="rowbtns"><button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>第1期に戻す</button></div></div>';
   } else if (R.overdue) {
     h += '<div class="banner warn" style="margin-top:10px">第1期の期限（'+md(first.to)+'）を過ぎましたが、体脂肪率 '+first.targets.fatPct+'% にはまだ届いていません。期限の見直しは総合コーチに相談できます。</div>';
   }
-  RM.phases.forEach(function(p, i){
-    var now = R.index === i;
-    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
-    h += '<div class="kvs"><div>カロリー<b class="num">'+rmRange(p.kcal)+'</b></div>'
+  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).forEach(function(p, i){
+    var now = R.phase.key === p.key;
+    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期のあと、選んだとき' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
+    h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b></div>'
       + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
-      + '<div>'+(p.carbs ? '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>' : '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>')+'</div></div>';
+      + '<div>'+(p.fat ? '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>' : '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>')+'</div></div>';
     h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
     if (p.targets && p.targets.ffmiAdj) h += rmFfmiRow(p.targets.ffmiAdj, st);
     if (now) {
@@ -118,14 +122,26 @@ function renderRoadmap(){
   el.innerHTML = h;
   var b = $('rmApply'); if (b) b.onclick = rmApply;
   var a = $('rmAdvance'); if (a) a.onclick = function(){ rmDecide('advance'); };
+  var m = $('rmMaintain'); if (m) m.onclick = function(){ rmDecide('maintain'); };
+  var mp = $('rmMaintPlan'); if (mp) mp.onclick = rmMaintPlan;
   var o = $('rmHold'); if (o) o.onclick = function(){ rmDecide('hold'); };
   var k = $('rmBack'); if (k) k.onclick = function(){ rmDecide(''); };
 }
 function rmDecide(d){
   if (S.rmBusy) return;
   S.rmBusy = true; renderRoadmap();
-  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。「この期の食事目標を反映」で食事の範囲も切り替えられます' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
+  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。「この期の食事目標を反映」で食事の範囲も切り替えられます' : d === 'maintain' ? '維持期（現状維持）を選びました。「減量計画を維持期にする」で食事も維持カロリーに切り替わります' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
     function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
+}
+// 減量計画の「いまの局面」を維持期にする（最低体脂肪率＝第1期の目標）。ほかの設定はそのまま
+function rmMaintPlan(){
+  if (S.rmBusy) return;
+  var p = (S.plan && S.plan.plan) || {}, fl = RoadmapLib.ROADMAP.phases[0].targets.fatPct;
+  var req = { goalFat: p.goalFat, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, shape: p.shape, phase: 'maintain', floorFat: p.floorFat || fl };
+  S.rmBusy = true; renderRoadmap();
+  KT.call('planSet', req).then(function(d){ S.plan = d; S.ai = null; return KT.call('bodyInit').catch(function(){ return S.body; }); })
+    .then(function(b){ if (b) S.body = b; S.rmBusy = false; render(); toast('減量計画を維持期にしました（最低 '+(req.floorFat)+'%）'); },
+      function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 function rmApply(){
   var today = (S.body && S.body.today) || KT.today(), c = RoadmapLib.resolve(today, rmCtx(today));
