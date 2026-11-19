@@ -596,9 +596,11 @@ function renderHist(){
   var L = S.view.logs, cnt = {};
   (S.data.entries || []).forEach(function(e){ cnt[e.date] = (cnt[e.date]||0)+1; });
   if (!L.length) { $('histCard').innerHTML = ''; return; }
-  var h = '<h3>日ごとの一覧（'+(S.tag?esc(S.tag)+'の平均':'日平均')+'・タップでその日の測定を表示）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日付</th><th>回数</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>BMI</th><th>基代</th><th>内臓</th></tr></thead><tbody>';
+  var h = '<h3>日ごとの一覧（'+(S.tag?esc(S.tag)+'の平均':'日平均')+'・タップでその日の測定を表示）</h3><div style="overflow-x:auto"><table class="tbl"><thead><tr><th>日付</th><th>回数</th><th>体重</th><th>体脂肪</th><th>筋肉</th><th>FFMI</th><th>BMI</th><th>基代</th><th>内臓</th></tr></thead><tbody>';
+  var ht = heightNow();
+  function ffmiOf(l){ var hh = l.height || ht; if (!hh || l.weight == null || l.fat == null) return null; var x = FfmiLib.ffmi(l.weight, l.fat, hh); return x == null ? null : FfmiLib.r1(FfmiLib.normalized(x, hh)); }
   L.slice(0, 60).forEach(function(l){
-    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+((S.tag || l.count !== (cnt[l.date]||l.count)) ? l.count+'/' : '')+(cnt[l.date]||l.count||1)+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
+    h += '<tr class="row" data-d="'+esc(l.date)+'"><td>'+mdw(l.date)+(l.pending?'<span class="tag pend">未送信</span>':'')+'</td><td class="num">'+((S.tag || l.count !== (cnt[l.date]||l.count)) ? l.count+'/' : '')+(cnt[l.date]||l.count||1)+'</td><td class="num">'+v(l.weight,'',1)+'</td><td class="num">'+v(l.fat,'',1)+'</td><td class="num">'+v(l.muscle,'',1)+'</td><td class="num">'+v(ffmiOf(l),'',1)+'</td><td class="num">'+v(l.bmi,'',1)+'</td><td class="num">'+v(l.bmr)+'</td><td class="num">'+v(l.visceral)+'</td></tr>';
   });
   h += '</tbody></table></div>';
   $('histCard').innerHTML = h;
