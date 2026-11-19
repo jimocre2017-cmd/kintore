@@ -174,7 +174,10 @@ function planPauseApply(c) {
 
 function planView_(todayOpt) {
   var today = todayOpt || today_(), pl = planSettings_(), body = bodyGet(), meal = mealGet();
-  pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase, null, planBodyNow_(body.logs)); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
+  var bn = planBodyNow_(body.logs), bmr0 = null;
+  (body.logs || []).forEach(function (l) { if (bmr0 === null && l.bmr != null) bmr0 = l.bmr; });
+  // 第2期バルクのカロリー範囲は消費の見込みに連動（RoadmapLib.effective）。見込みは全画面と同じ planEnergy_
+  pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase, null, bn, RoadmapLib.energy(planEnergy_(bmr0))); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
   return PlanLib.view({ today: today, daily: body.logs, meals: meal.logs, plan: pl, targets: planTargets_(), mealGoalKcal: meal.goals.kcal });
 }
 

@@ -148,11 +148,13 @@ t('planAuto：先週の日曜までの記録で次の目標を自動採用する
   var r = run('planAuto()');
   assert.ok(r.autoLast && r.autoLast.from === '2026/11/16', '対象週は今週の月曜');
   assert.strictEqual(r.autoLast.changed, true);
-  assert.ok(r.autoLast.kcal >= 1950 && r.autoLast.kcal <= 2100, 'バルクの範囲に収まる: ' + r.autoLast.kcal);
   assert.strictEqual(r.targets[r.targets.length - 1].from, '2026/11/16');
   assert.strictEqual(props.MEAL_GOAL_KCAL, String(r.autoLast.kcal));
   var rows = sheets['減量調整履歴'].rows;
   assert.strictEqual(rows.length, before + 1); assert.ok(String(rows[rows.length - 1][2]).indexOf('自動:') === 0);
+  var rg = JSON.parse(rows[rows.length - 1][7]).range;
+  assert.ok(rg && rg.min > 2100, '第2期のカロリーは消費に連動（固定の2100を超える）: ' + JSON.stringify(rg));
+  assert.ok(r.autoLast.kcal >= rg.min && r.autoLast.kcal <= rg.max, 'バルクの範囲に収まる: ' + r.autoLast.kcal);
   var again = run('planAuto()');
   assert.strictEqual(sheets['減量調整履歴'].rows.length, before + 1, '同じ週は2回採用しない');
   assert.strictEqual(again.autoLast.kcal, r.autoLast.kcal);

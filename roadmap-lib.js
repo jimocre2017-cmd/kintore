@@ -27,9 +27,12 @@ var RoadmapLib = (function () {
       {
         key: 'leanbulk', label: '第2期：リーンバルク仕上げ',
         from: '2027/05/01', to: '2027/06/30', approx: true, // 「2027年5月〜6月頃」
+        // カロリーは消費の見込み（実測）に連動：消費×1.05〜1.10（+5〜10%の余剰）。2026-11-19に本人が承認（固定の1950〜2100kcalは実測の消費2,218kcalを下回り、増量にならないため）。
+        // kcal は消費が分からないときだけ使う控え。炭水化物は 230g 以上・上限はカロリーの55%（effective で計算）
+        kcalFromEnergy: { min: 1.05, max: 1.10 },
         kcal: { min: 1950, max: 2100 },
         protein: null, fat: null,
-        carbs: { min: 230, max: 260 },
+        carbs: { min: 230, max: 260 }, carbsMaxPct: 0.55,
         training: [
           '筋トレの出力と重量をさらに引き上げる',
           '有酸素は週1〜2回へ減らし、回復と筋肥大を最優先'
@@ -102,6 +105,19 @@ var RoadmapLib = (function () {
     return bmr ? { kcal: Math.round(bmr * act / 10) * 10, basis: 'estimated', activity: act } : null;
   }
 
+  /* その期の実際の範囲。消費に連動する期（第2期バルク）は、消費の見込み en から カロリー＝消費×1.05〜1.10、炭水化物＝230g〜カロリーの55% を出す。
+     それ以外の期、または消費が分からないときは、ROADMAP に書いた値そのまま。元の phase は書き換えない（コピーを返す） */
+  function effective(phase, en) {
+    if (!phase || !phase.kcalFromEnergy || !(en && en.kcal > 0)) return phase;
+    var q = {}, k;
+    for (k in phase) q[k] = phase[k];
+    var lo = Math.round(en.kcal * phase.kcalFromEnergy.min / 10) * 10, hi = Math.round(en.kcal * phase.kcalFromEnergy.max / 10) * 10;
+    q.kcal = { min: lo, max: hi };
+    if (phase.carbs) q.carbs = { min: phase.carbs.min, max: Math.max(phase.carbs.min, Math.round(hi * (phase.carbsMaxPct || 0.55) / 4)) };
+    q.dynamic = { energyKcal: en.kcal, basis: en.basis || '' };
+    return q;
+  }
+
   /* たんぱく質の範囲（g）。期に数値があればそれ（第1期・維持期＝120〜130g）。無ければ体組成から：
      体脂肪率20%未満＝体重×1.6〜2.2（目安×1.8）、20%以上＝除脂肪量×2.0〜2.5（目安×2.2）。根拠：Morton 2018／ISSN 2017（docs/references.md） */
   function proteinFor(phase, weightKg, fatPct) {
@@ -128,10 +144,9 @@ var RoadmapLib = (function () {
      出せない項目は含めない（呼び出し側が今の値を残す） */
   function autoMealGoals(o, rm) {
     rm = rm || ROADMAP; o = o || {};
-    var pf = phaseFor(o, rm), phase = pf.phase;
+    var en = energy(o), pf = phaseFor(o, rm), phase = effective(pf.phase, en);
     var w = Number(o.weightKg) > 0 ? Number(o.weightKg) : 0, adopted = Number(o.adoptedKcal) > 0 ? Number(o.adoptedKcal) : 0;
     var bf = o.fat7 && Number(o.fat7.avg) > 0 ? Number(o.fat7.avg) : (Number(o.fatPct) > 0 ? Number(o.fatPct) : 0);
-    var en = energy(o);
     var g = {}, src = {};
     function setRange(key, lo, t, hi, from) { g[key] = Math.round(t); g[key + 'Min'] = Math.round(lo); g[key + 'Max'] = Math.round(hi); src[key] = from; }
     if (phase.kcal) {
@@ -151,7 +166,7 @@ var RoadmapLib = (function () {
       setRange('fat', floor, Math.min(Math.max(t, floor), ceil), ceil, back ? 'back' : 'body');
     }
     var parts = [];
-    if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? 'マスタープランの範囲' + g.kcalMin + '〜' + g.kcalMax + 'kcal' + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '')
+    if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? (phase.dynamic ? '消費の見込み' + phase.dynamic.energyKcal + 'kcalの+5〜10%（' + g.kcalMin + '〜' + g.kcalMax + 'kcal）' : 'マスタープランの範囲' + g.kcalMin + '〜' + g.kcalMax + 'kcal') + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '')
       : src.kcal === 'adopted' ? '減量計画が維持期として採用した' + g.kcal + 'kcal±150'
       : '消費カロリーの見込み' + g.kcal + 'kcal（' + (en && en.basis === 'estimated' ? '基礎代謝×' + en.activity : '記録からの実測') + '）±150'));
     if (src.protein) parts.push('たんぱく質＝' + (src.protein === 'plan' ? 'マスタープランの範囲' : src.protein === 'lean' ? '体脂肪率が高めなので除脂肪量×2.0〜2.5g（目安×2.2）' : '体重×1.6〜2.2g（目安×1.8）'));
@@ -186,9 +201,11 @@ var RoadmapLib = (function () {
       }
     }
     if (second && second.kcal) {
-      var sur = second.kcal.max - E, decided = o.decision === 'advance';
-      if (sur < BULK_MIN_SURPLUS) out.push({ key: 'bulk-surplus', level: decided ? 'warn' : 'info', title: '第2期バルクのカロリーでは、増量になりにくい',
-        body: '第2期の上限 ' + second.kcal.max + 'kcal は、消費の見込み ' + E + 'kcal' + ebasis + 'より ' + (sur >= 0 ? '+' + sur : sur) + 'kcal。筋肉を増やすには消費の+5〜10%（約+' + Math.round(E * 0.05) + '〜' + Math.round(E * 0.1) + 'kcal）の余剰が目安です。第2期に入る前にカロリー範囲を見直してください。' });
+      var sp = effective(second, { kcal: E, basis: o.energy.basis }), sur = sp.kcal.max - E, decided = o.decision === 'advance';
+      if (sp.dynamic) out.push({ key: 'bulk-surplus', level: 'ok', title: '第2期バルクは消費の+5〜10%に自動で合わせます',
+        body: 'いまの消費の見込み ' + E + 'kcal' + ebasis + 'なら、第2期のカロリーは ' + sp.kcal.min + '〜' + sp.kcal.max + 'kcal（炭水化物 ' + sp.carbs.min + '〜' + sp.carbs.max + 'g）。第2期に入った時点の消費に合わせて動きます。' });
+      else if (sur < BULK_MIN_SURPLUS) out.push({ key: 'bulk-surplus', level: decided ? 'warn' : 'info', title: '第2期バルクのカロリーでは、増量になりにくい',
+        body: '第2期の上限 ' + sp.kcal.max + 'kcal は、消費の見込み ' + E + 'kcal' + ebasis + 'より ' + (sur >= 0 ? '+' + sur : sur) + 'kcal。筋肉を増やすには消費の+5〜10%（約+' + Math.round(E * 0.05) + '〜' + Math.round(E * 0.1) + 'kcal）の余剰が目安です。第2期に入る前にカロリー範囲を見直してください。' });
     }
     return out;
   }
@@ -359,10 +376,10 @@ var RoadmapLib = (function () {
   /* 次週のカロリー調整（PlanLib.adjust）に渡す設定。モードはマスタープランの選択で決まる：
      ''/'hold'＝第1期（減量）、'advance'＝第2期バルク、'maintain'（または減量計画が維持期）＝維持。
      kcalMin/kcalMax＝そのモードの目標カロリーの範囲（維持は範囲なし＝0）。floorFat＝維持期の最低ラインの既定（第1期の体脂肪率目標） */
-  function adjustCfg(decision, planPhase, rm, body) {
+  function adjustCfg(decision, planPhase, rm, body, en) {
     rm = rm || ROADMAP; body = body || {};
     var mode = decision === 'maintain' || planPhase === 'maintain' ? 'maintain' : decision === 'advance' ? 'bulk' : 'cut';
-    var ph = mode === 'maintain' ? (rm.maintainPhase || rm.phases[0]) : mode === 'bulk' ? rm.phases[1] : rm.phases[0];
+    var ph = effective(mode === 'maintain' ? (rm.maintainPhase || rm.phases[0]) : mode === 'bulk' ? rm.phases[1] : rm.phases[0], en);
     var k = mode === 'maintain' ? null : ph.kcal, pr = proteinFor(ph, body.weightKg, body.fatPct);
     // protein：その期のたんぱく質の範囲（食事の目標・総合コーチと同じ）。体組成が無く期にも数値が無いときは null
     return { mode: mode, kcalMin: k ? k.min : 0, kcalMax: k ? k.max : 0, floorFat: rm.phases[0].targets.fatPct || 0, protein: pr ? { min: pr.min, target: pr.target, max: pr.max } : null };
@@ -371,7 +388,8 @@ var RoadmapLib = (function () {
   /* AI（総合コーチ・AIトレーナー）に渡す要約。AIはこの数値を引用するだけで、再計算しない */
   function brief(date, state, avg, ctx, rm) {
     rm = rm || ROADMAP;
-    var r = resolve(date, ctx, rm), p = r.phase, next = rm.phases[r.index + 1] || null;
+    var en = ctx && ctx.energy ? ctx.energy : null;
+    var r = resolve(date, ctx, rm), p = effective(r.phase, en), next = rm.phases[r.index + 1] ? effective(rm.phases[r.index + 1], en) : null;
     return {
       title: rm.title, decidedAt: rm.decidedAt, today: date,
       nowPhase: p.label, nowPhaseKey: p.key, phaseEnd: p.to, phaseEndApprox: !!p.approx, daysLeftInPhase: toDays(p.to) - toDays(date),
@@ -389,6 +407,6 @@ var RoadmapLib = (function () {
     };
   }
 
-  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;

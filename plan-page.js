@@ -30,7 +30,7 @@ var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', b
 function view(){
   if (!S.plan) return null;
   var p = S.plan.plan || {};
-  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, activityCal: p.activityCal, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat, roadmap: RoadmapLib.adjustCfg(p.roadmapDecision, p.phase, null, rmState()) };
+  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, activityCal: p.activityCal, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat, roadmap: RoadmapLib.adjustCfg(p.roadmapDecision, p.phase, null, rmState(), rmEnergyStored()) };
   return PL.view({
     today: (S.body && S.body.today) || KT.today(), daily: S.body ? S.body.logs : [], meals: S.meal ? S.meal.logs : [],
     plan: cfg, targets: S.plan.targets || [], mealGoalKcal: S.meal && S.meal.goals ? S.meal.goals.kcal : 0
@@ -102,10 +102,11 @@ function renderRoadmap(){
   } else if (R.overdue) {
     h += '<div class="banner warn" style="margin-top:10px">第1期の期限（'+md(first.to)+'）を過ぎましたが、体脂肪率 '+first.targets.fatPct+'% にはまだ届いていません。期限の見直しは総合コーチに相談できます。</div>';
   }
-  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).forEach(function(p, i){
+  var enNow = rmEnergy();
+  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).map(function(p){ return RoadmapLib.effective(p, enNow); }).forEach(function(p, i){
     var now = R.phase.key === p.key;
     h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期のあと、選んだとき' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
-    h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b></div>'
+    h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b>'+(p.dynamic ? '<small class="mut" style="display:block;font-size:11px">消費 '+comma(p.dynamic.energyKcal)+'kcalの+5〜10%</small>' : '')+'</div>'
       + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
       + '<div>'+(p.fat ? '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>' : '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>')+'</div></div>';
     h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
@@ -144,6 +145,14 @@ function renderRoadmap(){
   var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ pick('maintain', 'maintain'); };
 }
 // 計画の点検：記録（消費カロリーの見込み・体組成）とマスタープランの数値が噛み合っているか（RoadmapLib.planCheck。AIは使わない）
+// 消費の見込み（計算の前に使う版）：減量計画の直近の結果（実測ならそれ）→ 基礎代謝×係数。Apps Script の planEnergy_ と同じ順
+function rmEnergyStored(){
+  var lt = S.plan && S.plan.latest, t = lt && lt.adjust && lt.adjust.tdee;
+  if (t && t.basis === 'observed' && t.kcal > 0) return { kcal: t.kcal, basis: 'observed' };
+  var logs = (S.body && S.body.logs) || [], bmr = null, i, p = (S.plan && S.plan.plan) || {};
+  for (i = 0; i < logs.length && bmr == null; i++) if (logs[i].bmr != null) bmr = logs[i].bmr;
+  return RoadmapLib.energy({ bmr: bmr, activity: p.activityCal || p.activity });
+}
 function rmEnergy(){
   var V = S.V || view(), t = V && V.adjust && V.adjust.tdee;
   if (t && t.kcal > 0) return { kcal: t.kcal, basis: t.basis === 'observed' ? 'observed' : 'estimated', activity: t.activity };
