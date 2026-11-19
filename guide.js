@@ -160,9 +160,15 @@
     ['除脂肪体重', '体重から脂肪を引いた重さ（筋肉・骨・水分など）。減量中はこれを減らさないのが大事。'],
     ['基礎代謝', '何もしなくても1日に使うエネルギー（kcal）。'],
     ['維持カロリー', '体重が増えも減りもしない1日の食事量の目安。これより少なく食べると減量になります。'],
-    ['減量期・維持期・増量期', '脂肪を落とす時期／体脂肪率を保つ時期／筋肉を増やすために少し多めに食べる時期。'],
+    ['減量期・維持期・増量期', '脂肪を落とす時期／体脂肪率を保つ時期／筋肉を増やすために少し多めに食べる時期。', 'phases'],
+    ['リコンプ（リコンプ期）', '体重はあまり動かさずに、体脂肪を減らしながら筋肉を保つ・増やす同時進行の期間。食事は維持カロリーの前後〜やや控えめ、たんぱく質は高め、筋トレは重さとセット数を落とさずに進めます。成果は体重ではなく、体脂肪率・除脂肪量・ウエスト・体つき写真で見ます。筋トレを始めたばかり・ブランク明け・体脂肪が多めの人ほど効果が出やすい方法です。マスタープランの「第1期」がこれにあたります。', 'recomp'],
+    ['リーンバルク（リーンバルク仕上げ）', '脂肪をなるべく増やさずに、筋肉を増やすことを優先する増量期。食事は維持カロリーより少しだけ多め（目安＋5〜10%、約＋200〜300kcal）、有酸素は減らして回復と筋肥大を優先します。体重はゆっくり増え（目安は週に体重の0.25〜0.5%）、増え方が速すぎるときは脂肪が乗っているので食事を少し戻します。「仕上げ」は、リコンプで体脂肪を下げたあとに、増やしすぎず筋量を乗せ切る段階のこと。マスタープランの「第2期」がこれにあたります。', 'leanbulk'],
+    ['リコンプとリーンバルクの違い', 'カロリー：リコンプは維持前後〜やや控えめ／リーンバルクは維持より少し多め。\n体重：リコンプはほとんど変わらない／リーンバルクはゆっくり増える。\n脂肪：リコンプは減る／リーンバルクはわずかに増える（想定内）。\n筋肉の増え方：リコンプは遅め／リーンバルクは速め。\n向く人：リコンプは初心者・ブランク明け・体脂肪が多め／リーンバルクは体脂肪が下がって経験がある人。\n見る数字：リコンプは体脂肪率・除脂肪量・写真／リーンバルクは体重の増え方と、その中身（筋肉か脂肪か）。\n順番：このアプリのマスタープランは、先にリコンプで体脂肪率を下げ、目標に届いたらリーンバルクへ進む2段階です。', 'diff'],
     ['同期・未送信', '記録はまず端末に保存され、ネットにつながると自動で送られます。送る前の記録は「未送信」と表示されます。']
   ];
+
+  // 「気になる言葉」のチップ：[GLOSSARY の飛び先キー, ボタンの文字]
+  var TERMS = [['recomp', 'リコンプ期とは？'], ['leanbulk', 'リーンバルクとは？'], ['diff', '2つの違い'], ['phases', '減量期・維持期・増量期']];
 
   // AIに聞く「よくある質問」：[ボタンの文字, 送る質問]
   var FAQ = [
@@ -198,7 +204,7 @@
     return PAGES[f] ? f : 'index.html';
   }
 
-  var api = { TOUR: TOUR, PAGES: PAGES, GLOSSARY: GLOSSARY, FAQ: FAQ, manual: manual, pageKey: pageKey };
+  var api = { TOUR: TOUR, PAGES: PAGES, GLOSSARY: GLOSSARY, TERMS: TERMS, FAQ: FAQ, manual: manual, pageKey: pageKey };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; } // テスト（node）用
   if (root.KTGuide) return;
   root.KTGuide = api;
@@ -227,6 +233,8 @@
       '.ktgbox .tip{background:var(--surface-2,#f0efec);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:13px}' +
       '.ktgbox .sec{margin-top:16px}.ktgbox .sec>b{display:block;font-size:13px;color:var(--ink-3,#8a8983);margin-bottom:4px}' +
       '.ktgbox details{border:1px solid var(--line,#e2e1dc);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:14px}.ktgbox summary{cursor:pointer;font-weight:700}' +
+      '.tlink{border:1px solid var(--line,#e2e1dc);background:transparent;color:var(--accent,#2a78d6);border-radius:999px;font:inherit;font-size:12px;font-weight:700;padding:1px 8px;margin-left:6px;cursor:pointer}' +
+      '.ktgbox dt.hl{background:#fff3c4;border-radius:6px;padding:2px 6px}.ktgbox dd.hl{background:#fffaE6;border-radius:6px;padding:4px 6px}' +
       '.ktgbox dl{margin:6px 0 0}.ktgbox dt{font-weight:700;font-size:13px;margin-top:6px}.ktgbox dd{margin:0 0 0 2px;font-size:13px;color:var(--ink-2,#55544f)}' +
       '.ktgbox .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ktgbox .chip{border:1px solid var(--line,#e2e1dc);background:var(--surface-2,#f0efec);color:var(--ink,#141413);border-radius:999px;padding:7px 12px;font-size:13px;cursor:pointer;font-family:inherit}' +
       '.ktgbox .go{width:100%;margin-top:10px;border:0;border-radius:12px;padding:12px;font-size:14px;font-weight:700;background:var(--accent,#2a78d6);color:var(--accent-ink,#fff);cursor:pointer;font-family:inherit}' +
@@ -262,12 +270,14 @@
   }
 
   /* 使い方シート */
-  function help() {
+  function help(termKey) {
     mode = 'help';
     var p = PAGES[here()];
     var h = '<div class="gh"><h3>？ 使い方：' + esc(p.title) + '</h3><button class="gx" type="button" data-g="close">閉じる</button></div>' +
       '<p class="lead">' + esc(p.lead) + '</p><ol>' + p.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol>' +
       (p.tips || []).map(function (t) { return '<div class="tip">💡 ' + esc(t) + '</div>'; }).join('');
+    h += '<div class="sec"><b>💡 気になる言葉</b><div class="chips">' +
+      TERMS.map(function (x) { return '<button type="button" class="chip" data-term="' + x[0] + '">' + esc(x[1]) + '</button>'; }).join('') + '</div></div>';
     h += '<div class="sec"><b>🧭 AIに使い方を聞く</b><div class="chips">' +
       FAQ.map(function (f, i) { return '<button type="button" class="chip" data-faq="' + i + '">' + esc(f[0]) + '</button>'; }).join('') + '</div>' +
       '<button type="button" class="go" data-g="ask">自分の言葉で質問する</button>' +
@@ -278,10 +288,17 @@
         q.steps.map(function (s) { return '<li>' + esc(s) + '</li>'; }).join('') + '</ol></details>';
     }).join('') + '</div>';
     h += '<div class="sec"><b>用語集（はじめての方へ）</b><details open><summary>よく出てくる言葉</summary><dl>' +
-      GLOSSARY.map(function (g) { return '<dt>' + esc(g[0]) + '</dt><dd>' + esc(g[1]) + '</dd>'; }).join('') + '</dl></details></div>';
+      GLOSSARY.map(function (g) { return '<dt' + (g[2] ? ' id="ktg-term-' + g[2] + '"' : '') + '>' + esc(g[0]) + '</dt><dd>' + esc(g[1]).replace(/\n/g, '<br>') + '</dd>'; }).join('') + '</dl></details></div>';
     h += '<button type="button" class="go sub" data-g="tour">初回ガイドをもう一度見る</button>';
     box(h);
     var bx = ov.querySelector('.ktgbox'); if (bx) bx.scrollTop = 0;
+    if (termKey) {
+      var dt = ov.querySelector('#ktg-term-' + termKey);
+      if (dt) {
+        dt.classList.add('hl'); var dd = dt.nextElementSibling; if (dd) dd.classList.add('hl');
+        if (dt.scrollIntoView) dt.scrollIntoView({ block: 'start' });
+      }
+    }
   }
 
   function askAI(text) {
@@ -311,7 +328,12 @@
     doc.body.appendChild(ov);
     var btn = doc.createElement('button');
     btn.type = 'button'; btn.className = 'ktgbtn'; btn.id = 'guideOpen'; btn.textContent = '？ 使い方'; btn.setAttribute('aria-label', 'この画面の使い方');
-    btn.addEventListener('click', help);
+    btn.addEventListener('click', function () { help(); });
+    doc.addEventListener('click', function (e) {
+      var tl = e.target && e.target.closest ? e.target.closest('[data-term]') : null;
+      if (!tl || (ov && ov.contains(tl))) return;
+      e.preventDefault(); help(tl.getAttribute('data-term'));
+    });
     var hd = doc.querySelector('header'), sync = doc.getElementById('syncChip');
     if (sync && sync.parentNode) sync.parentNode.insertBefore(btn, sync);
     else if (hd) hd.appendChild(btn);
@@ -326,6 +348,7 @@
   }
 
   api.openHelp = function () { help(); };
+  api.openTerm = function (key) { help(key); }; // 用語集の該当項目へ飛ぶ（画面の ⓘ・data-term から）
   api.openTour = function () { tour(0); };
   api.isTourOpen = function () { return !!ov && mode === 'tour' && ov.classList.contains('on'); };
   /** 初回ガイドが開いていれば、閉じた後に fn を呼ぶ（開いていなければすぐ呼ぶ）。カウンセリングシートと重ならないようにする */

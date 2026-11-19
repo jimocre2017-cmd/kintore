@@ -74,7 +74,7 @@ function rmFfmiRow(goal, st){
 function renderRoadmap(){
   var el = $('roadmapCard'); if (!el || typeof RoadmapLib === 'undefined') return;
   var RM = RoadmapLib.ROADMAP, today = (S.body && S.body.today) || KT.today(), ctx = rmCtx(today), R = RoadmapLib.resolve(today, ctx);
-  var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'</h3>';
+  var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'<button type="button" class="tlink" data-term="diff">ⓘ 違いと意味</button></h3>';
   var first = RM.phases[0], f7 = ctx.fat7;
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
   if (R.needChoice) {
@@ -90,7 +90,7 @@ function renderRoadmap(){
   }
   RM.phases.forEach(function(p, i){
     var now = R.index === i;
-    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
+    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
     h += '<div class="kvs"><div>カロリー<b class="num">'+rmRange(p.kcal)+'</b></div>'
       + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
       + '<div>'+(p.carbs ? '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>' : '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>')+'</div></div>';

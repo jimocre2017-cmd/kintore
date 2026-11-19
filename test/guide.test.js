@@ -54,4 +54,25 @@ t('画面に書いたボタン名が、実際の画面にある', function () {
   });
 });
 
+t('用語集：リコンプ・リーンバルク・違い・局面があり、「気になる言葉」の飛び先がすべて存在する', function () {
+  var keys = G.GLOSSARY.filter(function (g) { return g[2]; }).map(function (g) { return g[2]; });
+  ['recomp', 'leanbulk', 'diff', 'phases'].forEach(function (k) { assert.ok(keys.indexOf(k) >= 0, k); });
+  assert.strictEqual(keys.length, new Set(keys).size, '飛び先キーが重複しています');
+  G.TERMS.forEach(function (x) { assert.ok(keys.indexOf(x[0]) >= 0, x[0] + ' の用語がありません'); assert.ok(x[1].length <= 14, x[1]); });
+  var m = G.manual();
+  assert.ok(m.indexOf('リコンプ') >= 0 && m.indexOf('リーンバルク') >= 0, '説明書（AIに渡す）にも入っている');
+});
+
+t('画面の ⓘ（data-term）の飛び先は、すべて用語集にある', function () {
+  var keys = G.GLOSSARY.filter(function (g) { return g[2]; }).map(function (g) { return g[2]; }), found = 0;
+  fs.readdirSync(dir).filter(function (f) { return /\.(html|js)$/.test(f); }).forEach(function (f) {
+    var src = fs.readFileSync(path.join(dir, f), 'utf8'), re = /data-term="([a-z]+)"/g, mm;
+    while ((mm = re.exec(src))) { found++; assert.ok(keys.indexOf(mm[1]) >= 0, f + '：' + mm[1] + ' の用語がありません'); }
+    // マスタープランの期のキー（p.key）で飛ぶ分は、期のキーが用語集にあることを確認
+  });
+  assert.ok(found >= 2, 'ⓘ が画面に付いている');
+  var RL = require('../roadmap-lib.js');
+  RL.ROADMAP.phases.forEach(function (p) { assert.ok(keys.indexOf(p.key) >= 0, 'マスタープランの期 ' + p.key + ' の用語がありません'); });
+});
+
 console.log('\n' + n + ' 件すべて成功');
