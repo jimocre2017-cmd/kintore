@@ -77,6 +77,11 @@ function renderRoadmap(){
   var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'<button type="button" class="tlink" data-term="diff">ⓘ 違いと意味</button></h3>';
   var first = RM.phases[0], f7 = ctx.fat7;
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
+  var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : 'first', dis = S.rmBusy ? ' disabled' : '';
+  h += '<div class="modesw"><div class="note" style="margin:8px 0 4px"><b>いまの道</b>（押すとすぐ切り替わります。第2期の中は「バルク」と「維持」を行き来でき、また減らしたいときは第1期へ）</div><div class="seg">'
+    + '<button type="button" class="'+(modeKey === 'first' ? 'on' : '')+'" id="rmGo1"'+dis+'>第1期<small>減量（リコンプ）</small></button>'
+    + '<button type="button" class="'+(modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期<small>バルク（増量）</small></button>'
+    + '<button type="button" class="'+(modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第2期<small>維持（現状維持）</small></button></div></div>';
   if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
       + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>維持期（現状維持）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
@@ -86,9 +91,9 @@ function renderRoadmap(){
   } else if (R.decision === 'maintain') {
     var pl0 = (S.plan && S.plan.plan) || {};
     h += '<div class="banner info" style="margin-top:10px">維持期（現状維持）を選んでいます。'+(pl0.phase === 'maintain' ? '減量計画も維持期の設定です。' : '減量計画はまだ減量期の設定です。下のボタンで維持期に切り替えると、食事のカロリーが維持カロリーになります。')
-      + '<div class="rowbtns">'+(pl0.phase === 'maintain' ? '' : '<button class="btn small primary" id="rmMaintPlan"'+(S.rmBusy ? ' disabled' : '')+'>減量計画を維持期にする（最低 '+first.targets.fatPct+'%）</button>')+'<button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>選び直す</button></div></div>';
+      + '<div class="rowbtns">'+(pl0.phase === 'maintain' ? '' : '<button class="btn small primary" id="rmMaintPlan"'+(S.rmBusy ? ' disabled' : '')+'>減量計画を維持期にする（最低 '+first.targets.fatPct+'%）</button>')+'</div></div>';
   } else if (R.decision === 'advance') {
-    h += '<div class="banner info" style="margin-top:10px">第2期（リーンバルク）に進んでいます。<div class="rowbtns"><button class="btn small" id="rmBack"'+(S.rmBusy ? ' disabled' : '')+'>第1期に戻す</button></div></div>';
+    h += '<div class="banner info" style="margin-top:10px">第2期（リーンバルク）に進んでいます。</div>';
   } else if (R.overdue) {
     h += '<div class="banner warn" style="margin-top:10px">第1期の期限（'+md(first.to)+'）を過ぎましたが、体脂肪率 '+first.targets.fatPct+'% にはまだ届いていません。期限の見直しは総合コーチに相談できます。</div>';
   }
@@ -126,6 +131,9 @@ function renderRoadmap(){
   var mp = $('rmMaintPlan'); if (mp) mp.onclick = rmMaintPlan;
   var o = $('rmHold'); if (o) o.onclick = function(){ rmDecide('hold'); };
   var k = $('rmBack'); if (k) k.onclick = function(){ rmDecide(''); };
+  var g1 = $('rmGo1'); if (g1) g1.onclick = function(){ if (modeKey !== 'first') rmDecide(''); };
+  var gb = $('rmGoBulk'); if (gb) gb.onclick = function(){ if (modeKey !== 'advance') rmDecide('advance'); };
+  var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ if (modeKey !== 'maintain') rmDecide('maintain'); };
 }
 function rmDecide(d){
   if (S.rmBusy) return;
