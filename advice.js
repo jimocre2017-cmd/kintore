@@ -53,7 +53,7 @@
       var a = e.target && e.target.getAttribute && e.target.getAttribute('data-a');
       if (e.target === box) { close(); return; }
       if (!a) return;
-      if (a === 'go') { mark(); close(); if (onPlan) { var c = document.getElementById('roadmapCard'); if (c && c.scrollIntoView) c.scrollIntoView({ block: 'start' }); } else location.href = 'plan.html'; }
+      if (a === 'go') { mark(); close(); if (onPlan) { var c = document.getElementById('roadmapCard'), hd = document.querySelector('header'); if (c) window.scrollTo({ top: c.getBoundingClientRect().top + window.pageYOffset - (hd ? hd.offsetHeight + 8 : 8), behavior: 'smooth' }); } else location.href = 'plan.html'; }
       else if (a === 'ok') { mark(); close(); }
       else if (a === 'later') close();
       else if (a === 'off') { setOff(true); close(); }
