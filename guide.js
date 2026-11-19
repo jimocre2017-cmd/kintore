@@ -184,6 +184,27 @@
     ['どのAIを使えばいい？', '総合コーチ・AIトレーナー・減量計画・写真のAIは、それぞれいつ使えばいいですか？']
   ];
 
+  // 参考文献・出典：[グループ名, [[書誌, このアプリでの使い道, URL（無ければ空）], ...]]。docs/references.md と同じ内容（test/guide.test.js で突き合わせる）
+  var REFERENCES = [
+    ['食事の目標（たんぱく質・脂質・カロリー）— 2026-11-19に内容を確認', [
+      ['Morton RW, et al. (2018). A systematic review, meta-analysis and meta-regression of the effect of protein supplementation on resistance training-induced gains in muscle mass and strength in healthy adults. Br J Sports Med 52(6):376-384.', 'たんぱく質は約1.6g/kg/日を超えても、筋トレによる除脂肪量の増加は増えにくい（体重基準の「下限×1.6」「目安×1.8」の根拠）。', 'https://doi.org/10.1136/bjsports-2017-097608'],
+      ['Jäger R, et al. (2017). International Society of Sports Nutrition Position Stand: protein and exercise. J Int Soc Sports Nutr 14:20.', '筋量をつくる・保つには1.4〜2.0g/kg/日。筋トレをしている人が摂取カロリーを抑えている期間（減量期）は2.3〜3.1g/kg/日が必要になる場合がある。', 'https://doi.org/10.1186/s12970-017-0177-8'],
+      ['Whittaker J, Wu K. (2021). Low-fat diets and testosterone in men: Systematic review and meta-analysis of intervention studies. J Steroid Biochem Mol Biol 210:105878.', '脂質をエネルギーの40%から20%に下げると、男性の総テストステロンが10〜15%低下した（6試験・206人、値は正常範囲内）。脂質の下限を20%付近に置く参考。「20%未満は危険」という閾値を示した研究ではなく、著者もさらなる試験が必要としている。', 'https://doi.org/10.1016/j.jsbmb.2021.105878'],
+      ['Thomas DT, Erdman KA, Burke LM. (2016). Position of the Academy of Nutrition and Dietetics, Dietitians of Canada, and the American College of Sports Medicine: Nutrition and Athletic Performance. J Acad Nutr Diet 116(3):501-528.', '脂質の範囲（エネルギーの20〜35%）の参考にした立場表明。※この数値が本文にあることは、今回は本文では確認していない。', 'https://doi.org/10.1016/j.jand.2015.12.006']
+    ]],
+    ['アプリ独自の設定値（研究で決まった値ではない・見直し可）', [
+      ['たんぱく質の上限＝体重×2.2g、体脂肪率20%以上は除脂肪量×2.0〜2.5g（目安×2.2）', '2.2と、20%で基準を切り替える点、除脂肪量の係数は、レビュー（Gemini）をもとにアプリ側で決めた値。', ''],
+      ['脂質の上限＝カロリーの30%、下限＝カロリーの20%か40gの大きいほう', '上限30%は、残りのカロリーから逆算した値が大きくなりすぎないようにする設計上の値。', ''],
+      ['維持カロリー＝基礎代謝×1.35、範囲±150kcal', '直近の減量ログ（摂取量と体重変化）から逆算した消費量に近い値。数週間の記録が根拠なので、体重の推移を見て見直す。', '']
+    ]],
+    ['すでにアプリが使っている式・分布（コードに書かれた出典。今回は再確認していない）', [
+      ['Kouri EM, et al. (1995). 補正FFMI（身長の補正と、ナチュラルの上限目安＝補正FFMI約25）', 'FFMI機能。男性のみ・絶対的な壁ではない。', ''],
+      ['Kim et al. Nutrients 2026;18(8):1170（韓国 KNHANES 2022–23）／Jin et al. Clin Nutr 2019（中国）／Schutz・Kyle 2002（スイス）', 'FFMIを同性・同年代と比べる分布（日本の若年成人の全国分布が見つからず、65歳未満は韓国の値で代用）。', ''],
+      ['Compendium of Physical Activities（運動強度METsの代表値）', '有酸素・筋トレの消費カロリー推定（MET × 体重 × 時間）。時速の間は線形補間。', ''],
+      ['脂肪1kg ≒ 7200kcal', '減量の必要カロリー・ペースの計算に使う一般的な概算の換算値。', '']
+    ]]
+  ];
+
   // AI（総合コーチの「アプリの使い方」相談）に渡す説明書。全画面の説明と用語集をまとめた文章
   function manual() {
     var out = ['# 筋トレトラッカー（アプリ）の説明書',
@@ -210,7 +231,7 @@
     return PAGES[f] ? f : 'index.html';
   }
 
-  var api = { TOUR: TOUR, PAGES: PAGES, GLOSSARY: GLOSSARY, TERMS: TERMS, FAQ: FAQ, manual: manual, pageKey: pageKey };
+  var api = { TOUR: TOUR, PAGES: PAGES, GLOSSARY: GLOSSARY, REFERENCES: REFERENCES, TERMS: TERMS, FAQ: FAQ, manual: manual, pageKey: pageKey };
   if (typeof module !== 'undefined' && module.exports) { module.exports = api; return; } // テスト（node）用
   if (root.KTGuide) return;
   root.KTGuide = api;
@@ -241,6 +262,7 @@
       '.ktgbox details{border:1px solid var(--line,#e2e1dc);border-radius:10px;padding:8px 10px;margin-top:8px;font-size:14px}.ktgbox summary{cursor:pointer;font-weight:700}' +
       '.tlink{border:1px solid var(--line,#e2e1dc);background:transparent;color:var(--accent,#2a78d6);border-radius:999px;font:inherit;font-size:12px;font-weight:700;padding:1px 8px;margin-left:6px;cursor:pointer}' +
       '.ktgbox dt.hl{background:#ffe27a;color:#141413;border-radius:6px;padding:2px 6px}.ktgbox dd.hl{background:#fff3c4;color:#141413;border-radius:6px;padding:4px 6px}' +
+      '.ktgbox .refs{margin:6px 0 0;padding-left:18px;font-size:12px}.ktgbox .refs li{margin-top:8px}.ktgbox .ruse{color:var(--ink-2,#55544f);margin-top:2px}.ktgbox .refs a{color:var(--accent,#2a78d6);font-weight:700}' +
       '.ktgbox dl{margin:6px 0 0}.ktgbox dt{font-weight:700;font-size:13px;margin-top:6px}.ktgbox dd{margin:0 0 0 2px;font-size:13px;color:var(--ink,#141413)}' +
       '.ktgbox .chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}.ktgbox .chip{border:1px solid var(--line,#e2e1dc);background:var(--surface-2,#f0efec);color:var(--ink,#141413);border-radius:999px;padding:7px 12px;font-size:13px;cursor:pointer;font-family:inherit}' +
       '.ktgbox .go{width:100%;margin-top:10px;border:0;border-radius:12px;padding:12px;font-size:14px;font-weight:700;background:var(--accent,#2a78d6);color:var(--accent-ink,#fff);cursor:pointer;font-family:inherit}' +
@@ -298,6 +320,11 @@
       '<button class="go sub" type="button" data-g="adv">' + (advOff ? '助言のポップアップをまた出す' : '記録だけのモードにする（出さない）') + '</button></div>';
     h += '<div class="sec"><b>用語集（はじめての方へ）</b><details open><summary>よく出てくる言葉</summary><dl>' +
       GLOSSARY.map(function (g) { return '<dt' + (g[2] ? ' id="ktg-term-' + g[2] + '"' : '') + '>' + esc(g[0]) + '</dt><dd>' + esc(g[1]).replace(/\n/g, '<br>') + '</dd>'; }).join('') + '</dl></details></div>';
+    h += '<div class="sec"><b>参考文献・出典</b>' + REFERENCES.map(function (grp) {
+      return '<details><summary>' + esc(grp[0]) + '</summary><ul class="refs">' + grp[1].map(function (r) {
+        return '<li>' + esc(r[0]) + '<div class="ruse">' + esc(r[1]) + '</div>' + (r[2] ? '<a href="' + esc(r[2]) + '" target="_blank" rel="noopener noreferrer">論文を開く（DOI）</a>' : '') + '</li>';
+      }).join('') + '</ul></details>';
+    }).join('') + '<div class="note">数値の根拠は研究の一部で、一人ひとりに当てはまるとは限りません。体調や持病がある場合は医師・管理栄養士に相談してください。</div></div>';
     h += '<button type="button" class="go sub" data-g="tour">初回ガイドをもう一度見る</button>';
     box(h);
     var bx = ov.querySelector('.ktgbox'); if (bx) bx.scrollTop = 0;
