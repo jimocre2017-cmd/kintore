@@ -127,4 +127,27 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.strictEqual(R.MAINT_BAND_PCT, 1.5);
   console.log('ok  advice rules');
 })();
+(function () {
+  var a = function (o) { o.date = '2026/11/19'; return R.autoMealGoals(o); };
+  var cut = a({ weightKg: 60, bmr: 1400, adoptedKcal: 1720 }).goals;
+  assert.deepStrictEqual(cut, { kcal: 1720, kcalMin: 1660, kcalMax: 1800, protein: 125, proteinMin: 120, proteinMax: 130, fat: 45, fatMin: 40, fatMax: 50 }, '第1期：マスタープランの数値＋採用カロリー');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400, adoptedKcal: 1320 }).goals.kcal, 1660, '採用値が範囲の外なら範囲に収める');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400 }).goals.kcal, 1730, '採用値が無ければ範囲の中央');
+  var bulk = a({ decision: 'advance', weightKg: 60, bmr: 1520, adoptedKcal: 2000, fatPct: 15 }).goals;
+  assert.deepStrictEqual([bulk.kcalMin, bulk.kcal, bulk.kcalMax, bulk.proteinMin, bulk.protein, bulk.proteinMax, bulk.fatMin, bulk.fat, bulk.fatMax], [1950, 2000, 2100, 96, 108, 132, 44, 65, 67], 'バルク：カロリー・炭水化物はマスタープラン、たんぱく質は体重基準、脂質は残りから逆算');
+  assert.strictEqual(a({ decision: 'advance', weightKg: 60, bmr: 1520, adoptedKcal: 1950, fatPct: 15 }).goals.fat, 60, '1950kcalでは脂質の残りが少ない');
+  var top = a({ decision: 'advance', weightKg: 60, bmr: 1520, adoptedKcal: 2100, fatPct: 15 }).goals;
+  assert.strictEqual(top.fat, top.fatMax, '残りが上限(30%)を超えるときは上限に収める');
+  var hi = a({ decision: 'advance', weightKg: 70, bmr: 1520, adoptedKcal: 2000, fatPct: 22 }).goals;
+  assert.deepStrictEqual([hi.proteinMin, hi.protein, hi.proteinMax, hi.fat], [109, 120, 137, 60], '体脂肪率20%以上は除脂肪量基準（70kg×78%＝54.6kg）');
+  assert.strictEqual(a({ decision: 'advance', weightKg: 70, bmr: 1520, adoptedKcal: 2000, fat7: { avg: 15, days: 5 }, fatPct: 22 }).goals.protein, 126, '7日平均の体脂肪率があればそれを使う');
+  var mt = a({ decision: 'maintain', weightKg: 60, bmr: 1400, adoptedKcal: 1700 }).goals;
+  assert.deepStrictEqual([mt.kcalMin, mt.kcal, mt.kcalMax, mt.protein, mt.fat], [1740, 1890, 2040, 125, 45], '維持：基礎代謝×1.35±150（古い採用値は使わない）');
+  assert.strictEqual(a({ planPhase: 'maintain', weightKg: 60, bmr: 1520 }).goals.kcal, 2050, '減量計画が維持期でも維持');
+  var none = a({ decision: 'maintain' }).goals;
+  assert.strictEqual(none.kcal, undefined, '体組成が無い維持期はカロリーを出さない（今の値を残す）');
+  assert.strictEqual(none.protein, 125);
+  assert.strictEqual(a({ decision: 'hold', weightKg: 60, bmr: 1400 }).phaseKey, 'recomp', '据え置きは第1期');
+  console.log('ok  autoMealGoals');
+})();
 console.log(n + ' 件OK');

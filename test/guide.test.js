@@ -35,6 +35,20 @@ t('初回ガイド・よくある質問の形', function () {
   G.FAQ.forEach(function (f) { assert.ok(f[0].length <= 16 && f[1].length >= 10, f[0]); });
 });
 
+t('参考文献：形が揃っていて、リンクはhttpsのみ、docs/references.md と一致する', function () {
+  assert.ok(G.REFERENCES.length >= 3);
+  var doc = fs.readFileSync(path.join(dir, 'docs', 'references.md'), 'utf8');
+  G.REFERENCES.forEach(function (grp) {
+    assert.ok(grp[0] && grp[1].length, grp[0]);
+    assert.ok(doc.indexOf('## ' + grp[0]) >= 0, 'docs に見出しがありません：' + grp[0]);
+    grp[1].forEach(function (r) {
+      assert.ok(r[0] && r[1], '書誌と使い道は必須');
+      if (r[2]) { assert.ok(/^https:\/\//.test(r[2]), 'httpsのみ：' + r[2]); assert.ok(doc.indexOf('(' + r[2] + ')') >= 0, 'docs にリンクがありません：' + r[2]); }
+    });
+  });
+  assert.ok(G.manual().indexOf('参考文献') < 0, '説明書（AIに渡す）は長さ上限があるので参考文献は入れない');
+});
+
 t('画面名の判定：パス・クエリ付き・不明な画面', function () {
   assert.strictEqual(G.pageKey('/kintore/meal.html?x=1'), 'meal.html');
   assert.strictEqual(G.pageKey('/kintore/'), 'index.html');

@@ -425,7 +425,7 @@ var KT = (function () {
       if (pending) e.pending = true;
       upsertById(v.logs, e);
     } else if (op.type === 'mealDelete') removeById(v.logs, op.id);
-    else if (op.type === 'mealGoal') v.goals = clone(op.goals);
+    else if (op.type === 'mealGoal') { if (op.goals && op.goals.auto === true) { v.goals = v.goals || {}; v.goals.auto = true; } else v.goals = clone(op.goals); }
     else if (op.type === 'mealFood') {
       v.foods = v.foods || [];
       var f = clone(op.food);

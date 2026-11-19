@@ -124,6 +124,9 @@ header .sp{margin-left:auto}
 .modal h2 .x{margin-left:auto;width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2)}
 .f{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
 .rgrid{display:grid;grid-template-columns:auto 1fr 1fr 1fr;gap:8px;align-items:center;margin-bottom:10px}
+.rgrid input:disabled{opacity:.55}
+.autorow{display:flex;gap:10px;align-items:flex-start;margin-bottom:10px;font-size:14px;font-weight:600;line-height:1.4}
+.autorow input{width:22px;height:22px;margin:0;flex:none}
 .rgrid .h{font-size:11px;color:var(--ink-3);text-align:center;font-weight:600}
 .rgrid label{font-size:13px;color:var(--ink-2);font-weight:600;line-height:1.3}
 .rgrid input{width:100%;min-width:0;height:44px;border-radius:10px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);padding:0 8px;text-align:right}
@@ -318,6 +321,7 @@ header .sp{margin-left:auto}
 
 <div class="modal" id="goalModal"><div class="box">
   <h2><span>1日の目標</span><button class="x" id="gClose" aria-label="閉じる">✕</button></h2>
+  <label class="autorow"><input type="checkbox" id="gAuto"><span>体組成とマスタープランから自動で計算する</span></label>
   <div class="rgrid">
     <span></span><span class="h">下限（アンダー）</span><span class="h">目安</span><span class="h">上限（トップ）</span>
     <label>カロリー<br>kcal</label><input type="number" id="gKcalMin" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcal" inputmode="numeric" step="10" min="0" max="6000"><input type="number" id="gKcalMax" inputmode="numeric" step="10" min="0" max="6000">
@@ -782,15 +786,26 @@ $('foList').addEventListener('click', function(e){
 });
 
 /* ---- 目標 ---- */
+var GIDS = ['gKcalMin','gKcal','gKcalMax','gPMin','gP','gPMax','gFMin','gF','gFMax'];
+function gAutoView(){
+  var on = $('gAuto').checked, sg = S.data.suggest;
+  GIDS.forEach(function(id){ $(id).disabled = on; });
+  $('gFill').style.display = (!on && sg) ? '' : 'none';
+  var g = S.data.goals || {};
+  $('gHint').innerHTML = on
+    ? esc(g.autoInfo || '体組成の記録とマスタープランから、保存しなくても毎日自動で計算されます。')+'<br>数値を自分で決めたいときは、チェックを外して入力し、保存してください。'
+    : (sg ? '体組成の最新値からの目安：たんぱく質 約'+sg.protein+'g（体重×1.8）'+(sg.maintenanceKcal?'／維持カロリー 約'+sg.maintenanceKcal+'kcal（基礎代謝×1.4）、減量するなら約'+sg.cutKcal+'kcal（-500kcal）':'')+'。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。'
+      : '体組成を記録すると、目安が表示されます。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。');
+}
 $('goalBtn').onclick = function(){
-  var g = S.data.goals || {}, sg = S.data.suggest;
+  var g = S.data.goals || {};
   $('gKcal').value = g.kcal || ''; $('gP').value = g.protein || ''; $('gF').value = g.fat || '';
   $('gKcalMin').value = g.kcalMin || ''; $('gKcalMax').value = g.kcalMax || ''; $('gPMin').value = g.proteinMin || ''; $('gPMax').value = g.proteinMax || ''; $('gFMin').value = g.fatMin || ''; $('gFMax').value = g.fatMax || '';
-  $('gHint').innerHTML = sg ? '体組成の最新値からの目安：たんぱく質 約'+sg.protein+'g（体重×1.8）'+(sg.maintenanceKcal?'／維持カロリー 約'+sg.maintenanceKcal+'kcal（基礎代謝×1.4）、減量するなら約'+sg.cutKcal+'kcal（-500kcal）':'')+'。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。'
-    : '体組成を記録すると、目安が表示されます。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。';
-  $('gFill').style.display = sg ? '' : 'none';
+  $('gAuto').checked = g.auto === true;
+  gAutoView();
   $('goalModal').classList.add('open');
 };
+$('gAuto').onchange = gAutoView;
 $('gFill').onclick = function(){
   var sg = S.data.suggest; if (!sg) return;
   $('gP').value = sg.protein;
@@ -799,8 +814,12 @@ $('gFill').onclick = function(){
 };
 $('gClose').onclick = $('gCancel').onclick = function(){ $('goalModal').classList.remove('open'); };
 $('gSave').onclick = function(){
-  var g = { kcal: num('gKcal'), protein: num('gP'), fat: num('gF'), kcalMin: num('gKcalMin'), kcalMax: num('gKcalMax'), proteinMin: num('gPMin'), proteinMax: num('gPMax'), fatMin: num('gFMin'), fatMax: num('gFMax') };
-  if (Object.keys(g).some(function(k){ return isNaN(g[k]) || g[k] < 0; })) { toast('0以上の数字で入力してください', true); return; }
+  if ($('gAuto').checked) {
+    KT.call('mealSetGoals', { auto: true }).then(function(r){ S.data = r; $('goalModal').classList.remove('open'); render(); toast('自動に切り替えました'); }, function(er){ toast(er.message, true); });
+    return;
+  }
+  var g = { kcal: num('gKcal'), protein: num('gP'), fat: num('gF'), kcalMin: num('gKcalMin'), kcalMax: num('gKcalMax'), proteinMin: num('gPMin'), proteinMax: num('gPMax'), fatMin: num('gFMin'), fatMax: num('gFMax'), auto: false };
+  if (Object.keys(g).some(function(k){ return k !== 'auto' && (isNaN(g[k]) || g[k] < 0); })) { toast('0以上の数字で入力してください', true); return; }
   var bad = [['カロリー','kcal'],['たんぱく質','protein'],['脂質','fat']].filter(function(k){ var lo = g[k[1]+'Min'], t = g[k[1]], hi = g[k[1]+'Max']; return (lo && hi && lo > hi) || (lo && t && lo > t) || (hi && t && t > hi); });
   if (bad.length) { toast(bad[0][0]+'は「下限 ≤ 目安 ≤ 上限」になるように入れてください', true); return; }
   KT.call('mealSetGoals', g).then(function(r){ S.data = r; $('goalModal').classList.remove('open'); render(); toast('目標を保存しました'); }, function(er){ toast(er.message, true); });
