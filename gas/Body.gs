@@ -210,7 +210,10 @@ function bodyPlan_(latest, today) {
     targetWeightKg: r1_(target), fatToLoseKg: r1_(toLose), energyNeededKcal: Math.round(toLose * 7200),
     method: '除脂肪体重を維持して脂肪のみ減らす前提。脂肪1kg=7200kcal'
   };
-  out.proteinGramsPerDay = Math.round(w * 1.6) + '〜' + Math.round(w * 2.0);
+  // たんぱく質：食事の目標・減量計画と同じ（マスタープランの期の範囲。無い期は体組成から）
+  var pr = null;
+  try { pr = RoadmapLib.adjustCfg(roadmapDecisionRead_(), PropertiesService.getScriptProperties().getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut', null, { weightKg: w, fatPct: latest.fat }).protein; } catch (e) {}
+  out.proteinGramsPerDay = pr ? pr.min + '〜' + pr.max : Math.round(w * 1.6) + '〜' + Math.round(w * 1.8);
   out.maxSafeLossKgPerWeek = r1_(w * 0.01);
   out.latestRecordDate = latest.date;
   if (latest.height) out.healthyWeightBmi22Kg = r1_(22 * Math.pow(latest.height / 100, 2));

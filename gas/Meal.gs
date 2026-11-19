@@ -146,26 +146,36 @@ function mealShiftKcalRange_(pr, oldKcal, newKcal) {
   });
 }
 
-/** 体組成の最新値から、目標の目安を出す（たんぱく質＝体重×1.8g、維持カロリー＝基礎代謝×1.4）。体組成が無ければ null */
+/** 体組成の最新値から、目標の目安を出す（たんぱく質＝体重×1.8g、維持カロリー＝消費の見積もり planEnergy_ と同じ）。体組成が無ければ null */
 function mealSuggest_() {
   try {
     var logs = bodyGet().logs, w = null, bmr = null;
     logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; });
     if (w === null) return null;
     var out = { protein: Math.round(w * 1.8) };
-    if (bmr !== null) { out.maintenanceKcal = Math.round(bmr * 1.4 / 10) * 10; out.cutKcal = out.maintenanceKcal - 500; }
+    if (bmr !== null) { var en = RoadmapLib.energy(planEnergy_(bmr)); out.maintenanceKcal = en.kcal; out.cutKcal = en.kcal - 500; out.basis = en.basis; out.activity = en.activity || null; }
     return out;
   } catch (e) { return null; }
 }
 
 /** 体組成の最新値とマスタープラン（期・モード）から、1日の目標を自動で出す。計算本体は RoadmapLib.autoMealGoals（画面と共通）。出せないときは null */
+var MEAL_AUTO_MEMO_ = null; // 1回の実行の中で同じ計算を繰り返さない（体組成・計画の読み込みが重いため）
 function mealAutoGoals_() {
+  if (MEAL_AUTO_MEMO_) return MEAL_AUTO_MEMO_.v;
+  var v = mealAutoGoalsCalc_();
+  MEAL_AUTO_MEMO_ = { v: v };
+  return v;
+}
+function mealAutoGoalsCalc_() {
   try {
     var logs = bodyGet().logs, w = null, bmr = null, bf = null, p = PropertiesService.getScriptProperties(), today = today_();
     logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; if (bf === null && l.fat !== null) bf = l.fat; });
+    var en = planEnergy_(bmr), lt = null;
+    try { lt = planLatestAdvice_(); } catch (e) {}
     return RoadmapLib.autoMealGoals({
       date: today, decision: roadmapDecisionRead_(), planPhase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
-      fat7: RoadmapLib.fat7(logs, today), fatPct: bf, weightKg: w, bmr: bmr, adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0
+      fat7: RoadmapLib.fat7(logs, today), fatPct: bf, weightKg: w, bmr: bmr, activity: en.activity, tdeeKcal: en.tdeeKcal, tdeeBasis: en.tdeeBasis,
+      adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0, adoptedMode: lt && lt.adopted && lt.adjust ? lt.adjust.mode : ''
     });
   } catch (e) { return null; }
 }
@@ -175,7 +185,8 @@ function mealGet() {
   var from = addDays_(today_(), -120);
   var logs = rows_(MSH).filter(function (r) { return String(r[0]).trim() !== '' && ymd_(r[1]) >= from; }).map(mealObj_);
   logs.sort(function (a, b) { return a.date === b.date ? (a.time < b.time ? 1 : -1) : (a.date < b.date ? 1 : -1); });
-  return { today: today_(), logs: logs, goals: mealGoals_(), suggest: mealSuggest_(), foods: mealFoods_() };
+  var ap = mealAutoGoals_();
+  return { today: today_(), logs: logs, goals: mealGoals_(), suggest: mealSuggest_(), autoPreview: ap ? { goals: ap.goals, summary: ap.summary } : null, foods: mealFoods_() };
 }
 
 function mealSave(p) {

@@ -122,7 +122,7 @@ t('最初の10日は実測を使わず、基礎代謝×活動係数から計画�
   var v = run(s, { mealGoalKcal: 0 });
   assert.strictEqual(v.adjust.status, 'learning');
   assert.strictEqual(v.adjust.tdee.basis, 'estimated');
-  near(v.adjust.target, 1525 * 1.55 - v.built.deficitKcalPerDay, 10);
+  near(v.adjust.target, Math.max(1525, 1525 * P.DEFAULTS.activity - v.built.deficitKcalPerDay), 10);
 });
 
 t('下限（基礎代謝）を下回る目標は出さない', function () {
@@ -252,4 +252,27 @@ t('マスタープランで維持を選ぶと、減量計画が維持期でな�
   assert.strictEqual(v.adjust.mode, 'maintain'); assert.strictEqual(v.adjust.planned.deficitKcalPerDay, 0);
 });
 
+t('消費カロリーの係数：既定はRoadmapLibと同じ・実測が出たら係数を返し、保存された係数を推定に使う', function () {
+  var R = require('../roadmap-lib.js');
+  assert.strictEqual(P.DEFAULTS.activity, R.ACTIVITY, '既定の係数は全体で1つ');
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850] });
+  var v = run(s);
+  assert.strictEqual(v.adjust.tdee.basis, 'observed');
+  near(v.adjust.calibration, 2400 / 1525, 0.12);
+  var s7 = synth({ days: 7, tdee: 2400, avgIntake: 1850, intake: [1850] });
+  var v7 = run(s7, { mealGoalKcal: 0, plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, activityCal: 1.5 } });
+  assert.strictEqual(v7.adjust.tdee.calibrated, true);
+  near(v7.adjust.tdee.estimated, 1525 * 1.5, 2);
+  var bad = run(s7, { mealGoalKcal: 0, plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, activityCal: 3 } });
+  assert.strictEqual(bad.adjust.tdee.calibrated, false, 'ありえない係数は使わない');
+});
+
+t('たんぱく質：マスタープランの期の範囲を使う（無ければ体重×1.6〜1.8）', function () {
+  var R = require('../roadmap-lib.js');
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850] });
+  var v = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: R.adjustCfg('', 'cut', null, { weightKg: 65, fatPct: 25 }) } });
+  assert.deepStrictEqual(v.adjust.protein, { minG: 120, targetG: 125, maxG: 130 });
+  var v2 = run(s);
+  assert.strictEqual(v2.adjust.protein.targetG, Math.round(v2.adjust.weightKg * 1.8));
+});
 console.log('\n' + n + ' 件すべて成功');

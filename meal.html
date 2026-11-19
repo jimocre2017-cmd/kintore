@@ -329,7 +329,7 @@ header .sp{margin-left:auto}
     <label>脂質<br>g</label><input type="number" id="gFMin" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gF" inputmode="numeric" step="1" min="0" max="500"><input type="number" id="gFMax" inputmode="numeric" step="1" min="0" max="500">
   </div>
   <div class="hint" id="gHint" style="margin-bottom:10px"></div>
-  <div class="rowbtns" style="margin-bottom:10px"><button class="btn small" id="gFill">体組成から目安を入れる</button></div>
+  <div class="rowbtns" style="margin-bottom:10px"><button class="btn small" id="gFill">自動の値を入れる</button></div>
   <div class="mbtns"><button class="btn" id="gCancel">キャンセル</button><button class="btn primary" id="gSave">保存</button></div>
 </div></div>
 
@@ -790,11 +790,11 @@ var GIDS = ['gKcalMin','gKcal','gKcalMax','gPMin','gP','gPMax','gFMin','gF','gFM
 function gAutoView(){
   var on = $('gAuto').checked, sg = S.data.suggest;
   GIDS.forEach(function(id){ $(id).disabled = on; });
-  $('gFill').style.display = (!on && sg) ? '' : 'none';
+  $('gFill').style.display = (!on && S.data.autoPreview) ? '' : 'none';
   var g = S.data.goals || {};
   $('gHint').innerHTML = on
     ? esc(g.autoInfo || '体組成の記録とマスタープランから、保存しなくても毎日自動で計算されます。')+'<br>数値を自分で決めたいときは、チェックを外して入力し、保存してください。'
-    : (sg ? '体組成の最新値からの目安：たんぱく質 約'+sg.protein+'g（体重×1.8）'+(sg.maintenanceKcal?'／維持カロリー 約'+sg.maintenanceKcal+'kcal（基礎代謝×1.4）、減量するなら約'+sg.cutKcal+'kcal（-500kcal）':'')+'。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。'
+    : (S.data.autoPreview ? '自動で計算するなら：'+esc(S.data.autoPreview.summary)+'「自動の値を入れる」で入力欄に入れてから直せます。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。'
       : '体組成を記録すると、目安が表示されます。下限＝これ以上は摂りたい線、上限＝これ以上は摂りすぎの線。0または空欄＝設定なし。');
 }
 $('goalBtn').onclick = function(){
@@ -807,10 +807,9 @@ $('goalBtn').onclick = function(){
 };
 $('gAuto').onchange = gAutoView;
 $('gFill').onclick = function(){
-  var sg = S.data.suggest; if (!sg) return;
-  $('gP').value = sg.protein;
-  if (sg.cutKcal) $('gKcal').value = sg.cutKcal;
-  if (sg.cutKcal) $('gF').value = Math.round(sg.cutKcal * 0.25 / 9);
+  // 自動計算と同じ値（体組成＋マスタープラン）を入力欄に入れる。手で少し変えたいときの出発点
+  var ap = S.data.autoPreview && S.data.autoPreview.goals; if (!ap) return;
+  [['gKcal','kcal'],['gKcalMin','kcalMin'],['gKcalMax','kcalMax'],['gP','protein'],['gPMin','proteinMin'],['gPMax','proteinMax'],['gF','fat'],['gFMin','fatMin'],['gFMax','fatMax']].forEach(function(x){ if (ap[x[1]]) $(x[0]).value = ap[x[1]]; });
 };
 $('gClose').onclick = $('gCancel').onclick = function(){ $('goalModal').classList.remove('open'); };
 $('gSave').onclick = function(){
