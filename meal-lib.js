@@ -185,8 +185,8 @@ var MealLib = (function () {
   var RICE_C_PER_G = 0.356, RICE_BOWL_G = 150;
   // 主食ごとの炭水化物（100gあたり）：パスタ＝乾麺（八訂 スパゲッティ乾 約72g）、フォカッチャ＝市販・店の標準的な目安（約47g、商品で幅あり）
   var PASTA_C_PER_G = 0.72;
-  // ジモカフェのフォカッチャ：強力粉333g（炭水化物 約72%）＋砂糖16g＋イースト少量 ≒ 259g を8等分 → 1個 約32g
-  var FOCACCIA_C_PER_PIECE = 32;
+  // ジモカフェのフォカッチャ：強力粉333g＋砂糖16g＋イースト7.5g。成分表（八訂）の差引き法による利用可能炭水化物で計算 ≒ 251g を8等分 → 1個 約31g（質量計だと約30g）
+  var FOCACCIA_C_PER_PIECE = 31;
   function foodG(carbsG, perG) { return Math.max(0, Math.round(carbsG / perG / 5) * 5); }
   function pastaG(carbsG) { return foodG(carbsG, PASTA_C_PER_G); }
   function focacciaPieces(carbsG) { return Math.max(0, Math.round(carbsG / FOCACCIA_C_PER_PIECE * 2) / 2); }
