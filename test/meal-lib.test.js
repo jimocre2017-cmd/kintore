@@ -10,7 +10,8 @@
   assert.strictEqual(ML.riceG(35.6), 100);
   assert.strictEqual(ML.riceG(0), 0);
   assert.strictEqual(ML.pastaG(72), 100);
-  assert.strictEqual(ML.focacciaG(47), 100);
+  assert.strictEqual(ML.focacciaPieces(32), 1);
+  assert.strictEqual(ML.focacciaPieces(48), 1.5);
   assert.strictEqual(ML.pastaG(0), 0);
   console.log('ok  carbGoals / riceG');
 })();
