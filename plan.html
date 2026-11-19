@@ -191,7 +191,7 @@ header .sp{margin-left:auto}
   </div>
   <div class="f"><label>活動係数（消費カロリー＝基礎代謝×係数）</label><input type="number" id="sAct" inputmode="decimal" step="0.05" min="1.2" max="2"><div class="hint">立ち仕事＋運動習慣で1.5〜1.6が目安。体組成が10日分たまると、実測の消費カロリーに自動で切り替わります。</div></div>
   <div class="fgrid">
-    <div class="f"><label>いまの局面</label><select id="sPhase"><option value="cut">減量期（目標の体脂肪率へ）</option><option value="maintain">維持期（最低体脂肪率を守る）</option></select><div class="hint">維持期は減量せず、維持カロリーで過ごします。</div></div>
+    <div class="f"><label>いまの局面<button type="button" class="tlink" data-term="phases">ⓘ</button></label><select id="sPhase"><option value="cut">減量期（目標の体脂肪率へ）</option><option value="maintain">維持期（最低体脂肪率を守る）</option></select><div class="hint">維持期は減量せず、維持カロリーで過ごします。</div></div>
     <div class="f"><label>最低体脂肪率（%・任意）</label><input type="number" id="sFloor" inputmode="decimal" step="0.5" min="0" max="40" placeholder="例 12"><div class="hint">これを割らないための安全ライン。維持期は必須。減量期に届いたら維持期をすすめます。</div></div>
   </div>
   <div class="f"><label>減量ペースの形</label><select id="sShape"><option value="ease">終盤を緩やかに（おすすめ）</option><option value="linear">一定のペース</option></select><div class="hint">終盤は脂肪が落ちにくく筋肉も減りやすいので、最後の約2か月は前半の6割のペースにします（期限と目標は同じ）。</div></div>
