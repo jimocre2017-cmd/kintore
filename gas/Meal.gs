@@ -161,11 +161,11 @@ function mealSuggest_() {
 /** 体組成の最新値とマスタープラン（期・モード）から、1日の目標を自動で出す。計算本体は RoadmapLib.autoMealGoals（画面と共通）。出せないときは null */
 function mealAutoGoals_() {
   try {
-    var logs = bodyGet().logs, w = null, bmr = null, p = PropertiesService.getScriptProperties(), today = today_();
-    logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; });
+    var logs = bodyGet().logs, w = null, bmr = null, bf = null, p = PropertiesService.getScriptProperties(), today = today_();
+    logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; if (bf === null && l.fat !== null) bf = l.fat; });
     return RoadmapLib.autoMealGoals({
       date: today, decision: roadmapDecisionRead_(), planPhase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
-      fat7: RoadmapLib.fat7(logs, today), weightKg: w, bmr: bmr, adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0
+      fat7: RoadmapLib.fat7(logs, today), fatPct: bf, weightKg: w, bmr: bmr, adoptedKcal: Number(p.getProperty('MEAL_GOAL_KCAL')) || 0
     });
   } catch (e) { return null; }
 }

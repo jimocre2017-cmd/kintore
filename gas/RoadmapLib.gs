@@ -90,35 +90,47 @@ var RoadmapLib = (function () {
   }
 
   /* 体組成とマスタープランから、1日の目標（目安・下限・上限）を自動で出す。画面とApps Scriptで共通。
-     o＝{date, decision, planPhase:'cut'|'maintain', fat7, weightKg, bmr, adoptedKcal}
+     o＝{date, decision, planPhase:'cut'|'maintain', fat7, fatPct, weightKg, bmr, adoptedKcal}（fatPct＝体脂肪率。fat7があればその平均を優先）
      ・期とモード：未選択／据え置き＝第1期、バルク＝第2期、維持（選択、または減量計画が維持期）＝維持期
-     ・マスタープランに数値がある項目はそれを使う（第1期＝カロリー・たんぱく質・脂質、第2期＝カロリー）
-     ・マスタープランに無い項目は体組成から出す：たんぱく質＝体重×1.8g（範囲は×1.6〜×2.2）、維持カロリー＝基礎代謝×1.4（範囲は±100kcal）、脂質＝カロリーの25%（範囲は20〜30%）
+     ・マスタープランに数値がある項目はそれを使う（第1期＝カロリー・たんぱく質・脂質、第2期＝カロリー・炭水化物、維持期＝たんぱく質・脂質）
+     ・マスタープランに無い項目は体組成から出す（2026-11-19にGeminiのレビューを受けて調整）：
+       たんぱく質＝体脂肪率20%未満は体重×1.6〜2.2g（目安×1.8）、20%以上は除脂肪量×2.0〜2.5g（目安×2.2）。根拠：Morton 2018（約1.6g/kgで頭打ち・信頼区間上限2.2）、ISSN 2017（1.4〜2.0g/kg）
+       維持カロリー＝基礎代謝×1.35（直近の減量ログから逆算した実測の消費量に近い）、範囲は±150kcal。係数の根拠は数週間の記録なので、体重の推移を見て見直す
+       脂質＝下限は max(40g, カロリーの20%)、上限はカロリーの30%。目安は、炭水化物が決まっているときは「カロリー−たんぱく質−炭水化物」の残りから逆算して下限〜上限に収める。炭水化物が無いときはカロリーの25%
      ・目安のカロリー：減量計画で今週採用された値を、期の範囲に収めて使う（維持期は体重から出した維持カロリー）
-     出せない項目は含めない（呼び出し側が今の値を残す）。炭水化物は含まない */
+     出せない項目は含めない（呼び出し側が今の値を残す）。炭水化物の範囲は画面側で、カロリー・たんぱく質・脂質から別に出す */
   function autoMealGoals(o, rm) {
     rm = rm || ROADMAP; o = o || {};
     var r = resolve(o.date || '2026/11/18', { decision: o.decision, fat7: o.fat7 }, rm);
     var maint = o.decision === 'maintain' || o.planPhase === 'maintain';
     var phase = maint && rm.maintainPhase ? rm.maintainPhase : r.phase;
     var w = Number(o.weightKg) > 0 ? Number(o.weightKg) : 0, bmr = Number(o.bmr) > 0 ? Number(o.bmr) : 0, adopted = Number(o.adoptedKcal) > 0 ? Number(o.adoptedKcal) : 0;
+    var bf = o.fat7 && Number(o.fat7.avg) > 0 ? Number(o.fat7.avg) : (Number(o.fatPct) > 0 ? Number(o.fatPct) : 0);
     var g = {}, src = {};
     function setRange(key, lo, t, hi, from) { g[key] = Math.round(t); g[key + 'Min'] = Math.round(lo); g[key + 'Max'] = Math.round(hi); src[key] = from; }
     if (phase.kcal) {
       var k = adopted > 0 ? Math.min(phase.kcal.max, Math.max(phase.kcal.min, adopted)) : mid(phase.kcal, 10);
       setRange('kcal', phase.kcal.min, k, phase.kcal.max, 'plan');
     } else if (bmr) {
-      var mk = Math.round(bmr * 1.4 / 10) * 10;
-      setRange('kcal', mk - 100, mk, mk + 100, 'body');
+      var mk = Math.round(bmr * 1.35 / 10) * 10;
+      setRange('kcal', mk - 150, mk, mk + 150, 'body');
     }
     if (phase.protein) setRange('protein', phase.protein.min, mid(phase.protein, 1), phase.protein.max, 'plan');
-    else if (w) setRange('protein', w * 1.6, w * 1.8, w * 2.2, 'body');
+    else if (w) {
+      if (bf >= 20) { var lean = w * (1 - bf / 100); setRange('protein', lean * 2.0, lean * 2.2, lean * 2.5, 'lean'); }
+      else setRange('protein', w * 1.6, w * 1.8, w * 2.2, 'body');
+    }
     if (phase.fat) setRange('fat', phase.fat.min, mid(phase.fat, 1), phase.fat.max, 'plan');
-    else if (g.kcal) setRange('fat', g.kcal * 0.20 / 9, g.kcal * 0.25 / 9, g.kcal * 0.30 / 9, 'body');
+    else if (g.kcal) {
+      var floor = Math.max(40, Math.round(g.kcal * 0.20 / 9)), ceil = Math.round(g.kcal * 0.30 / 9), t, back = false;
+      if (phase.carbs && g.protein) { t = Math.round((g.kcal - g.protein * 4 - mid(phase.carbs, 1) * 4) / 9); back = true; }
+      else t = Math.round(g.kcal * 0.25 / 9);
+      setRange('fat', floor, Math.min(Math.max(t, floor), ceil), ceil, back ? 'back' : 'body');
+    }
     var label = phase.label, parts = [];
-    if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? 'マスタープランの範囲' + g.kcalMin + '〜' + g.kcalMax + 'kcal' + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '') : '基礎代謝×1.4の維持カロリー±100kcal'));
-    if (src.protein) parts.push('たんぱく質＝' + (src.protein === 'plan' ? 'マスタープランの範囲' : '体重×1.6〜2.2g（目安は×1.8）'));
-    if (src.fat) parts.push('脂質＝' + (src.fat === 'plan' ? 'マスタープランの範囲' : 'カロリーの20〜30%（目安は25%）'));
+    if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? 'マスタープランの範囲' + g.kcalMin + '〜' + g.kcalMax + 'kcal' + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '') : '基礎代謝×1.35の維持カロリー±150kcal'));
+    if (src.protein) parts.push('たんぱく質＝' + (src.protein === 'plan' ? 'マスタープランの範囲' : src.protein === 'lean' ? '体脂肪率が高めなので除脂肪量×2.0〜2.5g（目安×2.2）' : '体重×1.6〜2.2g（目安×1.8）'));
+    if (src.fat) parts.push('脂質＝' + (src.fat === 'plan' ? 'マスタープランの範囲' : src.fat === 'back' ? 'カロリーから、たんぱく質とマスタープランの炭水化物を引いた残り（下限＝20%か40g、上限＝30%）' : 'カロリーの20〜30%（目安25%）'));
     return { phaseKey: phase.key, phaseLabel: label, goals: g, source: src, summary: label + ' に合わせて自動計算：' + parts.join('、') + '。' };
   }
 
