@@ -30,7 +30,7 @@ var S = { body: null, meal: null, plan: null, V: null, ai: null, range: 'all', b
 function view(){
   if (!S.plan) return null;
   var p = S.plan.plan || {};
-  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat, roadmap: RoadmapLib.adjustCfg(p.roadmapDecision, p.phase) };
+  var cfg = { goalFat: p.goalFat || (S.body && S.body.goalFat) || 0, startDate: p.startDate, weeklyLossKg: p.weeklyLossKg, deadline: p.deadline, activity: p.activity, activityCal: p.activityCal, shape: p.shape, pauses: p.pauses, phase: p.phase, floorFat: p.floorFat, roadmap: RoadmapLib.adjustCfg(p.roadmapDecision, p.phase, null, rmState()) };
   return PL.view({
     today: (S.body && S.body.today) || KT.today(), daily: S.body ? S.body.logs : [], meals: S.meal ? S.meal.logs : [],
     plan: cfg, targets: S.plan.targets || [], mealGoalKcal: S.meal && S.meal.goals ? S.meal.goals.kcal : 0
@@ -124,10 +124,11 @@ function renderRoadmap(){
             return '<div class="row" style="flex-wrap:wrap"><span>'+esc(x.label)+'</span><span class="num">'+(x.value == null ? '－' : f1(x.value)+x.unit)+rng+' <span class="chip '+cls+'">'+lab+'</span></span>'+(x.advice ? '<div class="note" style="width:100%;margin:2px 0 4px">'+esc(x.advice)+'</div>' : '')+'</div>';
           }).join('')+'</div>';
       }
-      h += '<div class="rowbtns"><button class="btn small primary" id="rmApply"'+(S.rmBusy ? ' disabled' : '')+'>この期の食事目標を反映</button></div><div class="note">食事画面の目安・下限・上限を、上の範囲の中央と両端に書き換えます。'+(p.carbs ? 'たんぱく質・脂質はいまの値のままです。' : '')+'</div>';
+      h += '<div class="rowbtns"><button class="btn small primary" id="rmApply"'+(S.rmBusy ? ' disabled' : '')+'>食事の目標を自動（この期）にする</button></div><div class="note">食事画面の目標を、体組成とマスタープランから毎日自動で計算する設定にします（手入力にしていた場合）。期を切り替えると自動で追従します。</div>';
     }
     h += '</div>';
   });
+  h += rmCheckHtml(today);
   h += '<h3 style="margin-top:14px">今日からの実践ルール</h3><ul>'+RM.rules.map(function(x){ return '<li style="font-size:13px;line-height:1.7;color:var(--ink-2)">'+esc(x)+'</li>'; }).join('')+'</ul></div>';
   el.innerHTML = h;
   var b = $('rmApply'); if (b) b.onclick = rmApply;
@@ -142,10 +143,27 @@ function renderRoadmap(){
   var gb = $('rmGoBulk'); if (gb) gb.onclick = function(){ pick('advance', 'advance'); };
   var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ pick('maintain', 'maintain'); };
 }
+// 計画の点検：記録（消費カロリーの見込み・体組成）とマスタープランの数値が噛み合っているか（RoadmapLib.planCheck。AIは使わない）
+function rmEnergy(){
+  var V = S.V || view(), t = V && V.adjust && V.adjust.tdee;
+  if (t && t.kcal > 0) return { kcal: t.kcal, basis: t.basis === 'observed' ? 'observed' : 'estimated', activity: t.activity };
+  var logs = (S.body && S.body.logs) || [], bmr = null, i;
+  for (i = 0; i < logs.length && bmr == null; i++) if (logs[i].bmr != null) bmr = logs[i].bmr;
+  var p = (S.plan && S.plan.plan) || {};
+  return RoadmapLib.energy({ bmr: bmr, activity: p.activityCal || p.activity });
+}
+function rmCheckHtml(today){
+  var p = (S.plan && S.plan.plan) || {}, en = rmEnergy();
+  var items = RoadmapLib.planCheck({ date: today, decision: p.roadmapDecision, planPhase: p.phase, energy: en, state: rmState() });
+  if (!items.length) return '';
+  var lv = { ok: ['good', '問題なし'], info: ['', '参考'], warn: ['warn', '要確認'] };
+  return '<h3 style="margin-top:14px">計画の点検</h3><div class="note" style="margin:0 0 4px">記録から出した消費の見込み '+(en ? comma(en.kcal)+'kcal（'+(en.basis === 'observed' ? '実測' : '基礎代謝×'+en.activity)+'）' : '－')+' と、マスタープランの数値を突き合わせた結果です。範囲を変えるかどうかは自分で決めます。</div>'
+    + items.map(function(x){ var c = lv[x.level] || lv.info; return '<div class="ph" style="margin-top:6px"><h4 style="font-size:14px">'+esc(x.title)+'<span class="chip '+c[0]+'">'+c[1]+'</span></h4><div class="note" style="margin:0">'+esc(x.body)+'</div></div>'; }).join('');
+}
 function rmDecide(d){
   if (S.rmBusy) return;
   S.rmBusy = true; renderRoadmap();
-  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。「この期の食事目標を反映」で食事の範囲も切り替えられます' : d === 'maintain' ? '維持期（現状維持）を選びました。「減量計画を維持期にする」で食事も維持カロリーに切り替わります' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
+  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。食事の目標も自動で第2期に切り替わります（自動計算のとき）' : d === 'maintain' ? '維持期（現状維持）を選びました。「減量計画を維持期にする」で食事も維持カロリーに切り替わります' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
     function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 // 減量計画の「いまの局面」を維持期にする（最低体脂肪率＝第1期の目標）。ほかの設定はそのまま
@@ -159,11 +177,10 @@ function rmMaintPlan(){
       function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 function rmApply(){
-  var today = (S.body && S.body.today) || KT.today(), c = RoadmapLib.resolve(today, rmCtx(today));
+  // 食事の目標を「自動」（体組成とマスタープランから毎日計算）に戻す。期を切り替えると自動で追従する
   if (S.rmBusy) return;
-  var g = RoadmapLib.mealGoals(c.phase);
   S.rmBusy = true; renderRoadmap();
-  KT.call('mealSetGoals', g).then(function(){ S.rmBusy = false; return KT.call('mealInit').catch(function(){ return S.meal; }); }).then(function(m){ if (m) S.meal = m; render(); toast('食事の目標に反映しました'); }, function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
+  KT.call('mealSetGoals', { auto: true }).then(function(){ S.rmBusy = false; return KT.call('mealInit').catch(function(){ return S.meal; }); }).then(function(m){ if (m) S.meal = m; render(); toast('食事の目標を自動（この期の範囲）にしました'); }, function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 
 function renderMsg(){
@@ -688,6 +705,7 @@ function openSettings(){
   $('sWeekly').value = p.weeklyLossKg || PL.DEFAULTS.weeklyLossKg;
   $('sDeadline').value = toInputDate(p.deadline || '');
   $('sAct').value = p.activity || PL.DEFAULTS.activity;
+  var ac = $('sActCal'); if (ac) ac.textContent = p.activityCal ? '記録から逆算した係数：'+p.activityCal+'（実測が出た週に自動更新。推定にはこちらを優先して使います）' : '記録から逆算した係数：まだありません（体組成と食事の記録が揃うと、週1回の自動採用で出ます）';
   $('sShape').value = p.shape === 'linear' ? 'linear' : 'ease';
   $('sPhase').value = p.phase === 'maintain' ? 'maintain' : 'cut';
   $('sFloor').value = p.floorFat || '';

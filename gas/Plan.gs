@@ -52,6 +52,7 @@ function planSettings_() {
     weeklyLossKg: Number(p.getProperty('PLAN_WEEKLY_LOSS')) || PlanLib.DEFAULTS.weeklyLossKg,
     deadline: p.getProperty('PLAN_DEADLINE') || '',
     activity: Number(p.getProperty('PLAN_ACTIVITY')) || PlanLib.DEFAULTS.activity,
+    activityCal: Number(p.getProperty('PLAN_ACTIVITY_CAL')) || 0, // 実測から逆算した係数（planAuto が保存）
     shape: p.getProperty('PLAN_SHAPE') === 'linear' ? 'linear' : 'ease',
     pauses: planPausesRead_(),
     phase: p.getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut',
@@ -173,8 +174,30 @@ function planPauseApply(c) {
 
 function planView_(todayOpt) {
   var today = todayOpt || today_(), pl = planSettings_(), body = bodyGet(), meal = mealGet();
-  pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
+  pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase, null, planBodyNow_(body.logs)); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
   return PlanLib.view({ today: today, daily: body.logs, meals: meal.logs, plan: pl, targets: planTargets_(), mealGoalKcal: meal.goals.kcal });
+}
+
+/** 体組成の最新の体重・体脂肪率（たんぱく質の範囲を出すため） */
+function planBodyNow_(logs) {
+  var w = null, f = null;
+  (logs || []).forEach(function (l) { if (w === null && l.weight != null) w = l.weight; if (f === null && l.fat != null) f = l.fat; });
+  return { weightKg: w, fatPct: f };
+}
+
+/**
+ * 消費カロリーの見積もりの入力（RoadmapLib.energy に渡す）。全画面・全AIがこれを使う。
+ * 減量計画の直近の計算で実測が出ていればその値。無ければ 基礎代謝×係数（実測から逆算した係数 → 設定の係数 → 既定 1.35 の順）。
+ * bodyGet() を呼ばない（bodyGet の中からも呼ばれるため）。bmr は呼び出し側が渡す
+ */
+function planEnergy_(bmr) {
+  var p = PropertiesService.getScriptProperties();
+  try {
+    var lt = planLatestAdvice_(), t = lt && lt.adjust && lt.adjust.tdee;
+    if (t && t.basis === 'observed' && Number(t.kcal) > 0) return { tdeeKcal: Number(t.kcal), tdeeBasis: 'observed' };
+  } catch (e) {}
+  var cal = Number(p.getProperty('PLAN_ACTIVITY_CAL')), act = cal >= 1.1 && cal <= 2 ? cal : (Number(p.getProperty('PLAN_ACTIVITY')) || PlanLib.DEFAULTS.activity);
+  return { bmr: bmr, activity: act };
 }
 
 function planAdviceSystem_() {
@@ -300,6 +323,7 @@ function planApplyCore_(kcal, from, protein, meta) {
       pr.setProperty('MEAL_GOAL_KCAL_NEXT', JSON.stringify({ from: from, kcal: kcal }));
     }
     if (protein > 0 && !Number(pr.getProperty('MEAL_GOAL_P'))) pr.setProperty('MEAL_GOAL_P', String(Math.round(protein)));
+    if (typeof MEAL_AUTO_MEMO_ !== 'undefined') MEAL_AUTO_MEMO_ = null; // 採用値が変わったので、食事の自動目標を計算し直す
   } finally { lock.releaseLock(); }
 }
 
@@ -325,6 +349,8 @@ function planAuto() {
     planApplyCore_(adj.target, weekMon, adj.protein ? adj.protein.targetG : 0, { status: '自動:' + adj.status, json: JSON.stringify(adj).slice(0, 45000) });
     last.kcal = adj.target; last.changed = true;
   } else { last.kcal = prev || adj.target || null; last.changed = false; }
+  // 実測が出せた週は、係数（実測の消費÷基礎代謝）を保存して、次からの推定（バルク・記録が少ない週）に使う
+  if (adj.calibration >= 1.1 && adj.calibration <= 2) { pr.setProperty('PLAN_ACTIVITY_CAL', String(adj.calibration)); last.calibration = adj.calibration; }
   pr.setProperty('PLAN_AUTO_LAST', JSON.stringify(last));
   pr.setProperty('PLAN_AUTO_DONE', weekMon);
   return planGet();

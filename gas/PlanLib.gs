@@ -5,7 +5,7 @@
  */
 var PlanLib = (function () {
   var KCAL_PER_KG = 7200; // 脂肪1kgあたり
-  var DEFAULTS = { goalFat: 12, weeklyLossKg: 0.5, activity: 1.55 };
+  var DEFAULTS = { goalFat: 12, weeklyLossKg: 0.5, activity: 1.35 }; // activity は RoadmapLib.ACTIVITY と同じ値（test/plan-lib.test.js で一致を確認）
   var MIN_BODY_SPAN = 10;   // 実測の消費カロリーを出すのに必要な体組成の期間（日）
   var STEP_LIMIT = 200;     // 1週間で動かす目標カロリーの上限（kcal）
   var EASE_RATIO = 0.6;     // 緩やかな計画：終盤の減量ペースは、前半の何割か
@@ -93,13 +93,16 @@ var PlanLib = (function () {
       weeklyLossKg: Number(plan.weeklyLossKg) > 0 ? Number(plan.weeklyLossKg) : DEFAULTS.weeklyLossKg,
       deadline: plan.deadline || '',
       activity: Number(plan.activity) > 0 ? Number(plan.activity) : DEFAULTS.activity,
+      // 実測から逆算した係数（実測の消費÷基礎代謝）。記録がたまると週1回の自動採用で保存され、推定（実測が出せない週・バルク）に使う
+      activityCal: Number(plan.activityCal) >= 1.1 && Number(plan.activityCal) <= 2 ? Number(plan.activityCal) : 0,
       shape: plan.shape === 'ease' ? 'ease' : 'linear',
       pauses: cleanPauses(plan.pauses),
       phase: plan.phase === 'maintain' ? 'maintain' : 'cut',
       floorFat: Number(plan.floorFat) > 0 ? Number(plan.floorFat) : 0,
       // マスタープラン連動（RoadmapLib.adjustCfg の結果）。無ければ従来どおり（減量計画の phase だけで決める）
       roadmap: plan.roadmap && (plan.roadmap.mode === 'bulk' || plan.roadmap.mode === 'maintain' || plan.roadmap.mode === 'cut')
-        ? { mode: plan.roadmap.mode, kcalMin: Number(plan.roadmap.kcalMin) || 0, kcalMax: Number(plan.roadmap.kcalMax) || 0, floorFat: Number(plan.roadmap.floorFat) || 0 } : null
+        ? { mode: plan.roadmap.mode, kcalMin: Number(plan.roadmap.kcalMin) || 0, kcalMax: Number(plan.roadmap.kcalMax) || 0, floorFat: Number(plan.roadmap.floorFat) || 0,
+            protein: plan.roadmap.protein && Number(plan.roadmap.protein.min) > 0 ? { min: Number(plan.roadmap.protein.min), target: Number(plan.roadmap.protein.target) || Number(plan.roadmap.protein.min), max: Number(plan.roadmap.protein.max) || Number(plan.roadmap.protein.min) } : null } : null
     };
     p.configured = !!(p.goalFat && p.startDate);
     return p;
@@ -293,7 +296,8 @@ var PlanLib = (function () {
     for (k in bodyMap) if (toDays(k) >= from && bodyMap[k].bmr != null) v.push(bodyMap[k].bmr);
     var bmr = v.length ? mean(v) : (base && base.bmr);
     if (!bmr) return null;
-    return { bmr: Math.round(bmr), tdee: Math.round(bmr * plan.activity), activity: plan.activity };
+    var act = plan.activityCal > 0 ? plan.activityCal : plan.activity;
+    return { bmr: Math.round(bmr), tdee: Math.round(bmr * act), activity: act, calibrated: plan.activityCal > 0 };
   }
   function observedTdee(bodyMap, mealMap, today, windowDays) {
     windowDays = windowDays || 28;
@@ -333,7 +337,8 @@ var PlanLib = (function () {
     var deficit = Math.round(rateNow * KCAL_PER_KG / 7); // 休止中は0（維持カロリー）
     var out = {
       today: today, coverage: cov, weightKg: r1(weight),
-      protein: { minG: Math.round(weight * 1.6), targetG: Math.round(weight * 2.0) },
+      // たんぱく質：マスタープランの期の範囲（RoadmapLib.adjustCfg が体組成から出したもの）。無いときだけ体重×1.6〜1.8
+      protein: rmc && rmc.protein ? { minG: rmc.protein.min, targetG: rmc.protein.target, maxG: rmc.protein.max } : { minG: Math.round(weight * 1.6), targetG: Math.round(weight * 1.8) },
       planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain || bulk ? false : b.aggressive, mode: maintain ? 'maintain' : bulk ? 'bulk' : 'cut', shape: b.shape, paused: !!pauseNow, phase: plan.phase },
       floorKcal: floor, previousTarget: prev || null,
       avgIntake7: meals7.length ? Math.round(mean(meals7.map(function (x) { return x.kcal; }))) : null
@@ -345,7 +350,9 @@ var PlanLib = (function () {
     // バルクは筋肉も増えるため、脂肪量の変化からの実測は当てにならない。推定（基礎代謝×係数）を使い、体重の増え方で微調整する
     if (!bulk && obs && obs.tdee >= floor && est && obs.tdee <= est.bmr * 2.3) { tdee = obs.tdee; basis = 'observed'; }
     else { tdee = est ? est.tdee : obs.tdee; basis = 'estimated'; }
-    out.tdee = { kcal: tdee, basis: basis, estimated: est ? est.tdee : null, observed: obs ? obs.tdee : null };
+    out.tdee = { kcal: tdee, basis: basis, estimated: est ? est.tdee : null, observed: obs ? obs.tdee : null, activity: est ? est.activity : null, calibrated: !!(est && est.calibrated) };
+    // 実測が出せた週は、係数（実測÷基礎代謝）を返す。Apps Script が保存して、次からの推定に使う（データがたまるほど推定が正確になる）
+    out.calibration = obs && est && est.bmr ? Math.round(obs.tdee / est.bmr * 100) / 100 : null;
     var raw = bulk ? Math.max(floor, Math.round(tdee * (1 + BULK_SURPLUS) / 10) * 10) : Math.max(floor, Math.round((tdee - deficit) / 10) * 10);
     out.rawTarget = raw;
 
