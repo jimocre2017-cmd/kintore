@@ -252,7 +252,8 @@ function render(){
   $('dateLbl').textContent = dt[0]+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
   if (!S.cal) S.cal = { y: +dt[0], m: +dt[1] };
   if (!S.an.anchor) S.an.anchor = d.today;
-  renderMsg(); renderStats(); renderRm(); renderCal(); renderAn(); renderHist();
+  // 1つの描画が失敗しても、ほかの部分（履歴・カレンダーなど）を止めない
+  [renderMsg, renderStats, renderRm, renderCal, renderAn, renderHist].forEach(function(fn){ try { fn(); } catch (e) { if (window.console) console.error('render', fn.name, e); } });
 }
 /* マスタープランの有酸素：第1期＝時速の範囲を守れているか／第2期＝週の回数。期は計画画面での選択（据え置き・進む）に従う */
 function rmCtx(d){
@@ -269,7 +270,7 @@ function renderRm(){
     if (!c.sessions.length) h += '<div class="empty" style="padding:10px 0">直近7日の有酸素の記録はありません。</div>';
     else h += c.sessions.map(function(x){
       var lb = x.state === 'in' ? '範囲内' : x.state === 'fast' ? '速すぎ' : x.state === 'slow' ? '遅め' : '時速なし（距離か時間が未入力）';
-      return '<div class="num" style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)"><span>'+md(x.date)+'　'+esc(x.type)+(x.km ? '　'+fmtKm(x.km)+'km' : '')+'</span><span style="color:'+(x.state === 'in' ? 'var(--good)' : x.state ? 'var(--danger)' : 'var(--ink-3)')+'">'+(x.speed != null ? x.speed+' km/h　' : '')+lb+'</span></div>';
+      return '<div class="num" style="display:flex;justify-content:space-between;gap:8px;font-size:13px;padding:4px 0;border-bottom:1px dashed var(--line)"><span>'+mdw(x.date)+'　'+esc(x.type)+(x.km ? '　'+fmtKm(x.km)+'km' : '')+'</span><span style="color:'+(x.state === 'in' ? 'var(--good)' : x.state ? 'var(--danger)' : 'var(--ink-3)')+'">'+(x.speed != null ? x.speed+' km/h　' : '')+lb+'</span></div>';
     }).join('');
     if (c.outside) h += '<div class="note">直近7日で範囲から外れた回が '+c.outside+' 回あります。次回は時速を '+c.min+'〜'+c.max+' に合わせてください。</div>';
   } else {
@@ -501,6 +502,7 @@ function registerPlace(pt, hint){
 /* ============================ 追加・編集フォーム ============================ */
 /* S.form: { id, source, type, routeMode:'none'|'course'|'places'|'keep', keepRoute, keepKind, keepFrom, keepTo, keepCourse, createdFromGps } */
 function openForm(o){
+  if (!S.data) S.data = { today: KT.today(), logs: [], courses: [], places: [] }; // 読み込み前でも手動追加を開けるように
   var l = o.log || null, d = S.data, g = o.gps || null;
   var f = S.form = { id: l ? l.id : null, source: l ? l.source : (g ? 'GPS' : '手動'), type: l ? l.type : (g ? g.type : 'ウォーキング'), routeMode: 'none', keepRoute: '', keepKind: 'なし', keepFrom: '', keepTo: '', keepCourse: '', loading: false };
   $('fTitle').textContent = l ? '記録を編集' : (g ? 'GPS記録を保存' : '手動で追加');
