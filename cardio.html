@@ -222,6 +222,7 @@ header .sp{margin-left:auto}
 <script src="advice.js"></script>
 <script src="guide.js"></script>
 <script src="cardio-lib.js"></script>
+<script src="body-lib.js"></script>
 <script src="roadmap-lib.js"></script>
 <script>
 var CL = CardioLib;
@@ -807,8 +808,10 @@ function init(){
     if (!S.rec) setTimeout(function(){ Rec.openSave(Rec.build(saved, saved.endAt || Date.now())); }, 400);
   }
   renderRec();
-  KT.call('planCached').then(function(v){ S.planC = v; renderRm(); }, function(){});
-  KT.call('bodyCached').then(function(v){ S.bodyC = v; renderRm(); }, function(){});
+  // 補助データ（プラン・体組成）の読み込みが失敗しても、有酸素の読み込みを止めない
+  function soft(fn, set){ try { KT.call(fn).then(function(v){ set(v); renderRm(); }, function(){}); } catch (e) { if (window.console) console.error(fn, e); } }
+  soft('planCached', function(v){ S.planC = v; });
+  soft('bodyCached', function(v){ S.bodyC = v; });
   // 端末に保存したデータがあればすぐ表示。無ければ空の画面を先に出して、最新の取得を待たずに手動追加などを使えるようにする
   KT.call('cardioCached').then(function(v){
     if (v) { S.data = v; render(); }
