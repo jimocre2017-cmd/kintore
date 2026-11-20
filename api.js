@@ -456,8 +456,9 @@ var KT = (function () {
     cardioInit: function () {
       if (!cfg()) { var e0 = new Error('NOCFG'); e0.nocfg = true; return Promise.reject(e0); }
       if (navigator.onLine === false) return Promise.resolve(cardioLocal());
-      var pre = queue().length ? sync().catch(function () {}) : Promise.resolve();
-      return pre.then(function () { return api('cardioGet', [], 60000); }).then(function (d) {
+      // 送信待ちの送信は裏で行い、読み込みは待たせない（送信待ちは cardioLocal が重ねて表示するので、順番が前後しても表示は変わらない）
+      if (queue().length) schedule(0);
+      return api('cardioGet', [], 60000).then(function (d) {
         LS.set('kt_cardio', d); LS.set('kt_cardio_at', Date.now());
         return cardioLocal();
       }, function (e) {

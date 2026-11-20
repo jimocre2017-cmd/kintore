@@ -282,6 +282,7 @@ function renderRm(){
 function renderMsg(){
   var h = '';
   if (S.loadErr) h += '<div class="banner">'+esc(S.loadErr)+'</div>';
+  else if (S.loading) h += '<div class="banner">最新の記録を読み込み中です…（そのまま手動追加もできます）</div>';
   var fl = KT.failed().filter(function(o){ return /^cardio/.test(o.type); });
   if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
   $('msg').innerHTML = h;
@@ -808,8 +809,13 @@ function init(){
   renderRec();
   KT.call('planCached').then(function(v){ S.planC = v; renderRm(); }, function(){});
   KT.call('bodyCached').then(function(v){ S.bodyC = v; renderRm(); }, function(){});
-  KT.call('cardioCached').then(function(v){ if (v) { S.data = v; render(); } }, function(e){ healStaleCache(e); });
-  KT.call('cardioInit').then(function(v){ S.data = v; S.loadErr = null; render(); }, function(e){
+  // 端末に保存したデータがあればすぐ表示。無ければ空の画面を先に出して、最新の取得を待たずに手動追加などを使えるようにする
+  KT.call('cardioCached').then(function(v){
+    if (v) { S.data = v; render(); }
+    else if (!S.data) { S.data = { today: KT.today(), logs: [], courses: [], places: [] }; S.loading = true; render(); }
+  }, function(e){ healStaleCache(e); });
+  KT.call('cardioInit').then(function(v){ S.data = v; S.loadErr = null; S.loading = false; render(); }, function(e){
+    S.loading = false;
     if (healStaleCache(e)) return;
     if (e.auth) { KT.clearConfig(); showSetup('合言葉が一致しません。設定をやり直してください。'); return; }
     var hint = /^不明な操作：cardio(Get|Route)$/.test(e.message) ? '（サーバー側の更新が必要です：gas/README.md の「有酸素の導入手順」を実行してください）' : (/^不明な操作/.test(e.message) ? '（アプリの画面ファイルが古いままです。アプリを閉じて開き直してください）' : '');
