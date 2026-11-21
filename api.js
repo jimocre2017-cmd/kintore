@@ -598,12 +598,12 @@ var KT = (function () {
       });
     },
     // 食事内容 → 栄養の見積もり（AIを使うのでオンラインのみ）
-    mealEstimate: function (req) { return api('mealEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    mealEstimate: function (req) { return api('mealEstimate', [req], 120000); }, // 通信できないときの印（e.offline）を画面に渡す（名前だけ保存への切り替え・案内に使う）
     // 食事の相談（AIを使うのでオンラインのみ）
-    mealAsk: function (req) { return api('mealAsk', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    mealAsk: function (req) { return api('mealAsk', [req], 120000); }, // 通信できないときの印（e.offline）を画面に渡す（名前だけ保存への切り替え・案内に使う）
     // 食事の写真 → 栄養の見積もり（確信度が低いときは質問つき）。オンラインのみ
-    mealPhotoEstimate: function (req) { return api('mealPhotoEstimate', [req], 120000).then(function (r) { return r; }, onlineOnly); },
-    mealReview: function (req) { return api('mealReview', [req], 120000).then(function (r) { return r; }, onlineOnly); },
+    mealPhotoEstimate: function (req) { return api('mealPhotoEstimate', [req], 120000); }, // 通信できないときの印（e.offline）を画面に渡す（名前だけ保存への切り替え・案内に使う）
+    mealReview: function (req) { return api('mealReview', [req], 120000); }, // 通信できないときの印（e.offline）を画面に渡す（名前だけ保存への切り替え・案内に使う）
     mealSave: function (entry) {
       entry = clone(entry); entry.id = entry.id || uuid();
       if (!entry.date) return Promise.reject(new Error('日付が正しくありません'));

@@ -308,6 +308,7 @@ header .sp{margin-left:auto}
   <div class="f" style="margin-bottom:8px"><label>この内容を品目として覚える（次から名前で入力できます）</label>
     <div style="display:flex;gap:8px"><input type="text" id="fFoodName" maxlength="30" placeholder="例：オリジナルプロテインシェイク" style="flex:1"><button class="btn small" id="fFoodSave" type="button">覚える</button></div></div>
   <div class="hint" style="margin:-4px 0 12px" id="fHint">見積もりは概算です。分かっている数値があれば直して保存してください。圏外でも、数値を直接入れて保存できます。数値が分からない・通信できないときは「名前だけ保存」で、あとでAIが分析できます。</div>
+  <div class="hint" id="fOffHint" style="display:none;color:var(--warn);margin:0 0 8px">📴 いまはオフラインです。数値を入れずに保存すると「名前だけ保存」になり、オンラインのときにAIが分析できます（数値を入れた場合は、そのまま記録されます）。</div>
   <div class="rowbtns" id="fLaterRow" style="margin:0 0 8px"><button class="btn" id="fLater" type="button" style="flex:1">📝 名前だけ保存（あとでAIが分析）</button></div>
   <div class="mbtns"><button class="btn danger" id="fDel" style="display:none">削除</button><button class="btn primary" id="fSave">保存</button></div>
 </div></div>
@@ -452,8 +453,22 @@ function renderDay(){
 }
 function renderAdd(){
   var past = S.date !== S.data.today;
-  $('addBtn').textContent = past ? '＋ '+mdw(S.date)+' の食事を後から追加' : '＋ 食事を記録（AIが栄養を見積もります）';
+  $('addBtn').textContent = past ? '＋ '+mdw(S.date)+' の食事を後から追加' : (isOffline() ? '＋ 食事を記録（オフライン：名前だけ保存できます）' : '＋ 食事を記録（AIが栄養を見積もります）');
 }
+function isOffline(){ return navigator.onLine === false; }
+function photoOffline(){
+  if (!isOffline()) return false;
+  toast('オフラインのため写真は見積もれません。食べたものを文字で入れて保存すると、あとでAIが分析します', true);
+  var t = $('fText'); if (t && S.form) t.focus();
+  return true;
+}
+// オフラインかどうかで、記録ボタンとフォームの案内を切り替える
+function syncOffline(){
+  var off = isOffline();
+  $('fOffHint').style.display = (off && S.form && !S.form.edit) ? '' : 'none';
+  if (S.data) { renderAdd(); renderLater(); }
+}
+window.addEventListener('online', syncOffline); window.addEventListener('offline', syncOffline);
 function laterSorted(){ return (S.later || []).slice().sort(function(a,b){ return a.date === b.date ? ((a.time||'99') < (b.time||'99') ? -1 : 1) : (a.date < b.date ? -1 : 1); }); }
 function renderLater(){
   var el = $('laterCard');
@@ -635,13 +650,13 @@ function openForm(id, lt){
   $('fPhotoHint').textContent = '撮るとすぐ見積もります。写真はAIに送るだけで、保存しません。';
   $('fMulBox').style.display = 'none'; $('fFoodName').value = ''; renderFoodChips();
   $('fDel').style.display = (ex || lt) ? '' : 'none'; $('fSave').style.gridColumn = (ex || lt) ? '' : '1 / -1';
-  $('formModal').classList.add('open');
+  $('formModal').classList.add('open'); syncOffline();
   if (!ex) setTimeout(function(){ $('fText').focus(); }, 50);
 }
 function closeForm(){ $('formModal').classList.remove('open'); S.form = null; }
 $('addBtn').onclick = function(){ openForm(null); };
-$('camBtn').onclick = function(){ openForm(null); $('fPhoto').click(); }; // 撮影画面を直接開く（1タップ）
-$('picBtn').onclick = function(){ openForm(null); $('fPhotoFile').click(); }; // 手持ちの写真（ギャラリー・添付）から選ぶ
+$('camBtn').onclick = function(){ openForm(null); if (photoOffline()) return; $('fPhoto').click(); }; // 撮影画面を直接開く（1タップ）
+$('picBtn').onclick = function(){ openForm(null); if (photoOffline()) return; $('fPhotoFile').click(); }; // 手持ちの写真（ギャラリー・添付）から選ぶ
 /* ---- 食事の相談 ---- */
 var ASK_SAMPLES = [
   ['外食・会食', '今日は夜に外食（会食）があります。お酒は飲みません。たくさん食べたいのですが、どうしたらいいですか？'],
@@ -688,12 +703,13 @@ $('fEst').onclick = function(){
   var f = S.form, text = $('fText').value.trim();
   if (!f || f.busy) return;
   if (text.length < 2) { toast('食べたものを入力してください', true); return; }
+  if (isOffline() && !f.edit) { saveAsLater('offline'); return; } // 通信できないので、見積もらずに名前だけ保存
   f.busy = true; $('fEst').disabled = true; $('fEst').textContent = '見積もり中…（数秒かかります）';
   KT.call('mealEstimate', { text: text, type: f.type }).then(function(r){
     if (S.form !== f) return;
     showEst(f, r);
     toast('見積もりました。内容を確認して保存してください');
-  }, errToast).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
+  }, function(e){ if (e.offline && S.form === f && !f.edit) { saveAsLater('offline'); return; } errToast(e); }).then(function(){ f.busy = false; $('fEst').disabled = false; $('fEst').textContent = '🤖 もう一度見積もる'; });
 };
 
 /* ---- 写真で見積もる：撮影 → 縮小（端末側） → すぐ送信。確信度が低いときだけ質問 → 答えると見積もり直す。写真は保存しない ---- */
@@ -745,8 +761,8 @@ function renderQuestions(f, qs){
     if (f.pending.every(function(p){ return p.a; })) { f.qa = (f.qa || []).concat(f.pending); photoRun(f); }
   };
 }
-$('fPhotoBtn').onclick = function(){ if (S.form && !S.form.busy) $('fPhoto').click(); };
-$('fPickBtn').onclick = function(){ if (S.form && !S.form.busy) $('fPhotoFile').click(); };
+$('fPhotoBtn').onclick = function(){ if (S.form && !S.form.busy && !photoOffline()) $('fPhoto').click(); };
+$('fPickBtn').onclick = function(){ if (S.form && !S.form.busy && !photoOffline()) $('fPhotoFile').click(); };
 $('fPhoto').onchange = $('fPhotoFile').onchange = function(){
   var file = this.files && this.files[0], f = S.form; this.value = '';
   if (!file || !f) return;
@@ -760,6 +776,8 @@ $('fSave').onclick = function(){
   var e = { id: f.id, date: fromInputDate($('fDate').value), time: $('fTime').value, type: f.type, text: $('fText').value.trim(), kcal: num('fKcal'), protein: num('fP'), fat: num('fF'), carbs: num('fC'), items: f.items || '', note: f.note || '' };
   if (!e.date) { toast('日付を入力してください', true); return; }
   if (!e.text && !e.kcal) { toast('食べたものかカロリーを入力してください', true); return; }
+  var noNums = !e.kcal && !e.protein && !e.fat && !e.carbs;
+  if (e.text && noNums && !f.edit && (isOffline() || f.laterId)) { saveAsLater(f.laterId && !isOffline() ? 'keep' : 'offline'); return; } // オフライン（または分析待ちのまま）なら、確認なしで名前だけ保存
   if (e.text && !e.kcal && !f.edit) { if (!confirm('カロリーが未入力です。AIで見積もらずに保存しますか？')) return; }
   var chk = [['kcal','カロリー',6000],['protein','たんぱく質',500],['fat','脂質',500],['carbs','炭水化物',1000]];
   for (var i = 0; i < chk.length; i++) { var x = e[chk[i][0]]; if (isNaN(x) || x < 0 || x > chk[i][2]) { toast(chk[i][1]+'は0〜'+chk[i][2]+'で入力してください', true); return; } }
@@ -770,7 +788,8 @@ $('fSave').onclick = function(){
     closeForm(); render(); toast('保存しました');
   }, function(er){ if (healStaleCache(er)) return; toast(er.message, true); });
 };
-$('fLater').onclick = function(){
+// 名前だけ保存（分析待ち）。mode：false＝ボタン／'offline'＝オフラインのため自動／'keep'＝分析待ちの食事を、数値なしのまま更新
+function saveAsLater(mode){
   var f = S.form; if (!f) return;
   var text = $('fText').value.trim(), date = fromInputDate($('fDate').value);
   if (text.length < 2) { toast('食べたものを入力してください', true); return; }
@@ -778,9 +797,12 @@ $('fLater').onclick = function(){
   if (date > S.data.today) { toast('未来の日付は記録できません', true); return; }
   KT.call('mealLaterSave', { id: f.id, date: date, time: $('fTime').value, type: f.type, text: text.slice(0, 600), at: Date.now() }).then(function(a){
     S.later = a; S.date = date; closeForm(); render();
-    toast('名前だけ保存しました。オンラインのときに「まとめてAI分析」を押してください');
+    toast(mode === 'offline' ? 'オフラインなので、名前だけ保存しました。オンラインのときに「まとめてAI分析」を押してください'
+        : mode === 'keep' ? '分析待ちのまま保存しました'
+        : '名前だけ保存しました。オンラインのときに「まとめてAI分析」を押してください');
   }, function(er){ toast(er.message, true); });
-};
+}
+$('fLater').onclick = function(){ saveAsLater(false); };
 $('fDel').onclick = function(){
   var f = S.form; if (!f) return;
   if (f.laterId && !f.edit) {
