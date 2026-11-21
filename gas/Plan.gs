@@ -186,7 +186,7 @@ function planPauseApply(c) {
 
 function planView_(todayOpt) {
   var today = todayOpt || today_(), pl = planSettings_(), body = bodyGet(), meal = mealGet();
-  var bn = planBodyNow_(body.logs), bmr0 = null;
+  var bn = planBodyNow_(body.logs, today), bmr0 = null;
   (body.logs || []).forEach(function (l) { if (bmr0 === null && l.bmr != null) bmr0 = l.bmr; });
   // 第2期バルクのカロリー範囲は消費の見込みに連動（RoadmapLib.effective）。見込みは全画面と同じ planEnergy_
   pl.roadmap = RoadmapLib.adjustCfg(pl.roadmapDecision, pl.phase, null, bn, RoadmapLib.energy(planEnergy_(bmr0))); // マスタープランのモード（第1期／バルク／維持）と目標カロリーの範囲
@@ -194,10 +194,9 @@ function planView_(todayOpt) {
 }
 
 /** 体組成の最新の体重・体脂肪率（たんぱく質の範囲を出すため） */
-function planBodyNow_(logs) {
-  var w = null, f = null;
-  (logs || []).forEach(function (l) { if (w === null && l.weight != null) w = l.weight; if (f === null && l.fat != null) f = l.fat; });
-  return { weightKg: w, fatPct: f };
+function planBodyNow_(logs, today) {
+  // 全画面共通：体重＝最新、体脂肪率＝直近7日平均（無ければ最新）。RoadmapLib.bodyState
+  return RoadmapLib.bodyState(logs, today || today_());
 }
 
 /**

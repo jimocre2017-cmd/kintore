@@ -43,7 +43,7 @@ var PlanLib = (function () {
     });
     return out;
   }
-  // 食事ログ → {日付: {kcal, protein, fat, carbs, meals, complete}}。3食以上または1200kcal以上で「記録が揃った日」とみなす
+  // 食事ログ → {日付: {kcal, protein, fat, carbs, meals, complete}}。食事を1件でも記録した日（「これで全部」の印＝0kcalの行も含む）を「記録した日」とみなす。今日は途中なので平均・実測には入れない
   function mealDays(logs) {
     var out = {};
     (logs || []).forEach(function (l) {
@@ -52,7 +52,7 @@ var PlanLib = (function () {
     });
     Object.keys(out).forEach(function (k) {
       var d = out[k]; d.kcal = Math.round(d.kcal); d.protein = r1(d.protein); d.fat = r1(d.fat); d.carbs = r1(d.carbs);
-      d.complete = d.meals >= 3 || d.kcal >= 1200;
+      d.complete = d.meals > 0; // 記録した日はすべて数える（1日1〜2食の日もある。記録忘れは画面のアラートで「追加」か「これで全部」を選んでもらう）。今日（途中）は呼び出し側で外す
     });
     return out;
   }
@@ -216,7 +216,7 @@ var PlanLib = (function () {
     var out = [], e = toDays(today);
     for (var i = 0; i < n; i++) {
       var ds = fromDays(e - i), bd = bodyMap[ds], ml = mealMap[ds], active = toDays(ds) >= toDays(b.startDate);
-      var row = { date: ds, active: active, body: !!(bd && bd.fatMass != null), count: bd ? bd.count : 0, kcal: ml ? ml.kcal : null, meals: ml ? ml.meals : 0, protein: ml ? ml.protein : null, complete: !!(ml && ml.complete), target: targetFor(targets, ds, fallback) };
+      var row = { date: ds, active: active, body: !!(bd && bd.fatMass != null), count: bd ? bd.count : 0, kcal: ml ? ml.kcal : null, meals: ml ? ml.meals : 0, protein: ml ? ml.protein : null, complete: !!(ml && ml.complete) && ds !== today, target: targetFor(targets, ds, fallback) };
       if (row.body) { row.fat = bd.fat; row.fatMass = bd.fatMass; row.weight = bd.weight; }
       if (active) {
         row.plannedFat = plannedFatPct(b, ds); row.plannedFatMass = plannedFatMass(b, ds);
@@ -235,7 +235,7 @@ var PlanLib = (function () {
         var ds = fromDays(d), bd = bodyMap[ds], ml = mealMap[ds];
         actDays++;
         if (bd && bd.fatMass != null) { bodyList.push(bd); planned.push(plannedFatMass(b, ds)); }
-        if (ml) { used += ml.kcal; if (ml.complete) logged.push(ml); }
+        if (ml) { used += ml.kcal; if (ml.complete && ds !== today) logged.push(ml); } // 平均は今日（途中）を除く
       }
       var target = targetFor(targets, start, fallback), cur = (w === last);
       var row = {
@@ -257,7 +257,7 @@ var PlanLib = (function () {
       if (row.avgKcal != null && target) row.kcalGap = row.avgKcal - target;
       if (cur && target) {
         // 今週の残り予算：記録済みの全kcal（途中の日も含む）を引き、今日が未完なら今日も残り日数に数える
-        var tm = mealMap[today], todayOpen = !(tm && tm.complete), left = Math.max(0, w + 6 - t) + (todayOpen ? 1 : 0);
+        var left = Math.max(0, w + 6 - t) + 1; // 今日は途中なので残り日数に数える
         row.remainingKcal = target * 7 - used; row.remainingDays = left;
         row.perDayRemaining = left > 0 ? Math.round(row.remainingKcal / left) : null;
       }
@@ -277,7 +277,7 @@ var PlanLib = (function () {
       var ds = fromDays(d), m = monthOf(ds), bd = bodyMap[ds], ml = mealMap[ds];
       var x = map[m]; if (!x) { x = map[m] = { month: m, body: [], planned: [], kcal: [] }; order.push(m); }
       if (bd && bd.fatMass != null) { x.body.push(bd); x.planned.push(plannedFatMass(b, ds)); }
-      if (ml && ml.complete) x.kcal.push(ml.kcal);
+      if (ml && ml.complete && ds !== today) x.kcal.push(ml.kcal);
     }
     return order.map(function (m) {
       var x = map[m], r = { month: m, bodyDays: x.body.length, mealDays: x.kcal.length };
@@ -305,10 +305,10 @@ var PlanLib = (function () {
     var to = today, from = addDays(today, -(windowDays - 1)), tr = trendOf(bodyMap, 'fatMass', from, to);
     if (!tr || tr.span < MIN_BODY_SPAN) return null;
     var inWin = [], d;
-    for (d = toDays(from); d <= toDays(to); d++) { var ml = mealMap[fromDays(d)]; if (ml && ml.complete) inWin.push(ml.kcal); }
+    for (d = toDays(from); d < toDays(to); d++) { var ml = mealMap[fromDays(d)]; if (ml && ml.complete) inWin.push(ml.kcal); } // 今日（途中）は入れない
     var firstBody = null, k;
     for (k in bodyMap) if (bodyMap[k].fatMass != null && toDays(k) >= toDays(from) && (firstBody === null || toDays(k) < firstBody)) firstBody = toDays(k);
-    var span = toDays(to) - firstBody + 1, cover = span > 0 ? inWin.length / span : 0;
+    var span = toDays(to) - firstBody, cover = span > 0 ? inWin.length / span : 0; // 今日を除いた日数に対する、食事を記録した日の割合
     if (inWin.length < 7 || cover < 0.7) return null;
     var intake = mean(inWin), tdee = intake - tr.perDay * KCAL_PER_KG;
     return { tdee: Math.round(tdee), intake: Math.round(intake), fatPerWeek: tr.perWeek, bodyPoints: tr.n, span: tr.span, mealDays: inWin.length, coverage: cover };
@@ -319,9 +319,9 @@ var PlanLib = (function () {
     var b = ctx.built, bodyMap = ctx.bodyMap, mealMap = ctx.mealMap, today = ctx.today, plan = ctx.plan;
     var prev = ctx.prevTarget || 0, reasons = [], status;
     var from7 = addDays(today, -6), meals7 = [], body7 = 0, d;
+    for (d = toDays(today) - 7; d < toDays(today); d++) { var mlp = mealMap[fromDays(d)]; if (mlp && mlp.complete) meals7.push(mlp); } // 食事は今日を除く直近7日
     for (d = toDays(from7); d <= toDays(today); d++) {
-      var ds = fromDays(d), ml = mealMap[ds], bd = bodyMap[ds];
-      if (ml && ml.complete) meals7.push(ml);
+      var ds = fromDays(d), bd = bodyMap[ds];
       if (bd && bd.fatMass != null) body7++;
     }
     var cov = { mealDays: meals7.length, bodyDays: body7, mealNeed: 5, bodyNeed: 3 };

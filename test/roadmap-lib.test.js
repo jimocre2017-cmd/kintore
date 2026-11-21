@@ -132,7 +132,11 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   // 第1期：カロリーは消費（基礎代謝1400×1.35＝1890）の75〜90%＝1420〜1700。体脂肪率が無いとき、たんぱく質は控えの120〜130g
   var cut = a({ weightKg: 60, bmr: 1400, adoptedKcal: 1600 }).goals;
   assert.deepStrictEqual([cut.kcalMin, cut.kcal, cut.kcalMax, cut.proteinMin, cut.protein, cut.proteinMax], [1420, 1600, 1700, 120, 125, 130], '第1期：消費に連動＋採用カロリー');
-  assert.deepStrictEqual([cut.fatMin, cut.fatMax], [40, 53], '脂質はカロリーの20〜30%（下限40g）');
+  assert.deepStrictEqual([cut.fatMin, cut.fatMax], [40, 52], '脂質はカロリー範囲の中央の20〜30%（下限40g）');
+  // 食事画面の脂質の範囲は、計画画面（RoadmapLib.effective）と同じ（採用カロリーがあっても）
+  var ef = R.effective(R.ROADMAP.phases[0], { kcal: 1890, bmr: 1400 }, { weightKg: 60 });
+  assert.deepStrictEqual([cut.fatMin, cut.fatMax], [ef.fat.min, ef.fat.max], '脂質：食事画面＝計画画面');
+  assert.ok(cut.fat >= cut.fatMin && cut.fat <= cut.fatMax);
   assert.strictEqual(a({ weightKg: 60, bmr: 1400, adoptedKcal: 1320 }).goals.kcal, 1420, '採用値が範囲の外なら範囲に収める');
   assert.strictEqual(a({ weightKg: 60, bmr: 1400 }).goals.kcal, 1560, '採用値が無ければ範囲の中央');
   var lp = a({ weightKg: 64.8, fatPct: 25, bmr: 1530, tdeeKcal: 2218, tdeeBasis: 'observed' });
@@ -274,3 +278,18 @@ t('一貫性：絞り込み中は計画が維持期でも絞り込み扱い・�
   assert.ok(k(R.planCheck({ date: '2026/12/01', decision: 'advance', energy: en, state: st })).indexOf('bulk-surplus') >= 0);
 });
 console.log(n + ' 件OK');
+(function () {
+  // 全画面共通の「今の体」：体重＝最新、体脂肪率＝直近7日平均（3日以上）→ 無ければ最新
+  var L = [{ date: '2026/11/22', weight: 65, fat: 23.5 }, { date: '2026/11/21', weight: 65.2, fat: 25.5 }, { date: '2026/11/20', weight: 65.4, fat: 26 }];
+  var s = R.bodyState(L, '2026/11/22');
+  assert.deepStrictEqual([s.weightKg, s.fatPct, s.leanKg, s.fatBasis], [65, 25, 48.8, '7日平均']);
+  var s2 = R.bodyState(L.slice(0, 2), '2026/11/22');
+  assert.deepStrictEqual([s2.fatPct, s2.fatBasis], [23.5, '最新'], '3日未満は最新');
+  assert.deepStrictEqual(R.bodyState([], '2026/11/22'), {});
+  // 食事画面（autoMealGoals）と減量計画（adjustCfg）のたんぱく質が一致する
+  var en = { kcal: 2218, basis: 'observed', bmr: 1530 };
+  var meal = R.autoMealGoals({ date: '2026/11/22', weightKg: s.weightKg, fatPct: 23.5, fat7: R.fat7(L, '2026/11/22'), tdeeKcal: 2218, tdeeBasis: 'observed', bmr: 1530 }).goals;
+  var plan = R.adjustCfg('', 'cut', null, s, en).protein;
+  assert.deepStrictEqual([meal.proteinMin, meal.proteinMax], [plan.min, plan.max], 'たんぱく質：食事画面＝減量計画');
+  console.log('ok  体の状態は全画面で同じ（体脂肪率は7日平均）');
+})();

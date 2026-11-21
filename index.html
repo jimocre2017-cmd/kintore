@@ -61,6 +61,12 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .exbtn .badge{margin-left:auto;min-width:32px;height:28px;border-radius:14px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;padding:0 8px;color:var(--ink-2)}
 .exbtn .badge.on{background:var(--accent);color:var(--accent-ink)}
 .exbtn.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset;background:var(--accent-soft)}
+.exsearch{position:sticky;top:-1px;z-index:3;display:flex;gap:6px;align-items:center;background:var(--surface);padding:2px 0 10px;margin-bottom:4px}
+.exsearch input{flex:1;min-width:0;font-size:16px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2);color:inherit}
+.exsearch input:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
+.exsearch button{flex:none;width:40px;height:40px;border-radius:12px;border:1px solid var(--line);background:var(--surface-2);font-size:18px;color:var(--ink-2)}
+.exsearch button[hidden]{display:none}
+.srchnote{font-size:12px;color:var(--ink-3);margin:4px 0 10px}
 .progsel{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
 .progsel button{border:1px solid var(--line);background:var(--surface-2);border-radius:999px;padding:8px 12px;font-size:13px;font-weight:700;color:var(--ink-2)}
 .progsel button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
@@ -479,8 +485,9 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <script src="guide.js"></script>
 <script src="yk-lib.js"></script>
 <script src="counsel-lib.js"></script>
+<script src="ex-search-lib.js"></script>
 <script>
-var APP = { navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
+var APP = { q:'', navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
 try { APP.grp = localStorage.getItem('kt_grp') || ''; } catch(e){ APP.grp = ''; }
 /* タグ：種目ごとのタグで絞り込み（複数選択＝すべて含む種目だけ）。
@@ -627,7 +634,49 @@ function renderSummary(){
   $('kKcalLbl').textContent = kC ? '消費kcal（筋'+fmt(kS)+'・有'+fmt(kC)+'）' : '推定 kcal';
 }
 
+// ===== 種目の検索窓 =====
+// 検索窓は一度だけ作って残し、下の一覧だけを描き直す（日本語入力の変換中に入力欄が消えないように）
+function listHost(){
+  var el = $('exList');
+  if (!$('exSearch')){
+    el.innerHTML = '<div class="exsearch"><input id="exSearch" type="search" enterkeyhint="search" autocomplete="off" placeholder="種目を検索（例：フェイスプル／肩 チューブ）" aria-label="種目を検索">'
+      + '<button id="exSearchClr" aria-label="検索を消す" hidden>×</button></div><div id="exListBody"></div>';
+    var inp = $('exSearch'), clr = $('exSearchClr');
+    inp.value = APP.q || '';
+    inp.addEventListener('input', function(){ APP.q = inp.value; clr.hidden = !APP.q; renderList(); });
+    inp.addEventListener('keydown', function(ev){
+      if (ev.key === 'Escape'){ clearSearch(); }
+      else if (ev.key === 'Enter' && !ev.isComposing){ var hits = searchHits(); if (hits.length === 1){ inp.blur(); select(hits[0].id); } else inp.blur(); }
+    });
+    clr.addEventListener('click', function(){ clearSearch(); inp.focus(); });
+  }
+  $('exSearchClr').hidden = !APP.q;
+  return $('exListBody');
+}
+function clearSearch(){ APP.q = ''; var i = $('exSearch'); if (i) i.value = ''; renderList(); }
+function searchHits(){ return ExSearch.filter((APP.data && APP.data.exercises) || [], APP.q); }
+function renderSearch(){
+  var d = APP.data, hits = searchHits();
+  var partGroup = {}; d.parts.forEach(function(p){ partGroup[p.part]=p.group; });
+  var h = '<h2>検索結果　<span class="progcount">'+hits.length+' 種目</span></h2>';
+  if (!hits.length) h += '<div class="empty">「'+esc(APP.q)+'」に当てはまる種目がありません</div>'
+    + '<div class="srchnote">表示設定でオフにした種目は出てきません。新しい種目は下の「＋ 種目を追加」から登録できます。</div>';
+  else h += '<div class="srchnote">部位やタグの絞り込みに関係なく、すべての表示中の種目から探しています</div>';
+  hits.forEach(function(e){
+    var n = (d.todaySets[e.id]||[]).length;
+    h += '<button class="exbtn'+(APP.sel===e.id?' sel':'')+'" data-ex="'+esc(e.id)+'">'
+      + '<div><div class="nm">'+esc(e.name)+'</div><div class="sub">'+esc(partGroup[e.part] && partGroup[e.part]!==e.part ? partGroup[e.part]+'／' : '')+esc(e.part)+((e.secondary||[]).length ? '＋'+esc(e.secondary.join('・')) : '')+'・'+esc(e.equipment)+'</div>'
+      + ((e.tags||[]).length ? '<div class="extags">'+e.tags.map(function(t){ return '<span>#'+esc(t)+'</span>'; }).join('')+'</div>' : '')+'</div>'
+      + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
+  });
+  h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button>';
+  listHost().innerHTML = h;
+  bindListCommon();
+  $('openAdd').addEventListener('click', function(){ openAdd(); var f = $('fName'); if (f && !f.value) f.value = APP.q; });
+}
+
 function renderList(){
+  if (APP.q && String(APP.q).trim()){ renderSearch(); return; }
   var d = APP.data, groups = {}, gorder = [];
   var partGroup = {}; d.parts.forEach(function(p){ partGroup[p.part]=p.group; if (gorder.indexOf(p.group)<0) gorder.push(p.group); });
   pruneTags();
@@ -658,7 +707,7 @@ function renderList(){
         + '<div class="badge'+(n?' on':'')+'">'+n+'</div></button>';
     });
     h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-    $('exList').innerHTML = h + ykCardHtml();
+    listHost().innerHTML = h + ykCardHtml();
     bindListCommon();
     renderTodayParts();
     return;
@@ -698,7 +747,7 @@ function renderList(){
   });
   h += '<button class="addbtn" id="openAdd">＋ 種目を追加</button><button class="addbtn" id="openVis" style="margin-top:8px">種目の表示設定（オン／オフ）</button><button class="addbtn" id="openCs" style="margin-top:8px">カウンセリングシート（回答・見直し）</button>';
   h += '<div style="margin-top:16px"><h2>今日の部位別</h2><div class="today-parts" id="todayParts"></div></div>';
-  $('exList').innerHTML = counselBannerHtml() + h + ykCardHtml();
+  listHost().innerHTML = counselBannerHtml() + h + ykCardHtml();
   bindListCommon();
   $('openAdd').addEventListener('click', openAdd);
   $('openVis').addEventListener('click', openVis);

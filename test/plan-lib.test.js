@@ -110,7 +110,7 @@ t('減りすぎ(週0.9kg相当)は「速すぎ」。目標を引き上げる（�
 });
 
 t('記録不足の週は調整せず、今の目標を維持する', function () {
-  var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850], skipMeal: function (i) { return i >= 30 && i % 2 === 0; } });
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850], skipMeal: function (i) { return i >= 28 && i % 2 === 0; } }); // 今日を除く直近7日のうち3日が未記録
   var v = run(s);
   assert.strictEqual(v.adjust.status, 'insufficient');
   assert.strictEqual(v.adjust.target, 1850);
@@ -138,8 +138,8 @@ t('週予算の残り：今週の使用kcalから1日あたりの残りを出す
   assert.strictEqual(w.weekBudget, 1850 * 7);
   assert.strictEqual(w.usedKcal, 1850 + 2400 + 1000);
   assert.strictEqual(w.remainingKcal, 1850 * 7 - 5250);
-  assert.strictEqual(w.remainingDays, 4); // 木金土日（水は記録が揃った日）
-  assert.strictEqual(w.perDayRemaining, Math.round((1850 * 7 - 5250) / 4));
+  assert.strictEqual(w.remainingDays, 5); // 今日（水）は途中なので残りに数える＋木金土日
+  assert.strictEqual(w.perDayRemaining, Math.round((1850 * 7 - 5250) / 5));
 });
 
 t('目標が未設定ならモードだけ返す', function () {

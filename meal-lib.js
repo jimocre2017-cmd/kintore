@@ -3,17 +3,43 @@ var MealLib = (function () {
   function r1(n) { return Math.round(n * 10) / 10; }
   function toDays(s) { var p = s.split('/'); return Math.round(Date.UTC(+p[0], +p[1] - 1, +p[2]) / 86400000); }
   function fromDays(n) { var d = new Date(n * 86400000); return d.getUTCFullYear() + '/' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '/' + ('0' + d.getUTCDate()).slice(-2); }
-  function zero() { return { kcal: 0, protein: 0, fat: 0, carbs: 0, meals: 0 }; }
+  function zero() { return { kcal: 0, protein: 0, fat: 0, carbs: 0, meals: 0, confirmed: false, logged: false }; }
 
-  // 1日の合計
+  /* 「この日はこれで全部」の印（記録の確認）。食事ログに 0kcal の行として保存する（オフラインの送信待ち・サーバーの集計にそのまま乗る）。
+     食事の数には数えないが、その日は「記録した日」になる（食べていない日＝0kcal として平均に入る） */
+  var DAY_MARK_NOTE = 'day-confirmed', DAY_MARK_TEXT = '【この日はこれで全部（記録確認）】';
+  function isMark(l) { return !!l && l.note === DAY_MARK_NOTE; }
+  function markEntry(id, date) { return { id: id, date: date, time: '', type: 'その他', text: DAY_MARK_TEXT, kcal: 0, protein: 0, fat: 0, carbs: 0, items: '', note: DAY_MARK_NOTE }; }
+
+  // 1日の合計。logged＝平均などに数える日（食事が1件以上、または「これで全部」の確認あり）
   function dayTotal(logs, date) {
     var t = zero();
     logs.forEach(function (l) {
       if (l.date !== date) return;
+      if (isMark(l)) { t.confirmed = true; return; }
       t.kcal += l.kcal || 0; t.protein += l.protein || 0; t.fat += l.fat || 0; t.carbs += l.carbs || 0; t.meals++;
     });
     t.kcal = Math.round(t.kcal); t.protein = r1(t.protein); t.fat = r1(t.fat); t.carbs = r1(t.carbs);
+    t.logged = t.meals > 0 || t.confirmed;
     return t;
+  }
+
+  /* 記録忘れの可能性がある日（今日より前の n 日。最初に記録した日より前は見ない。「これで全部」を確認した日は出さない）
+     none＝何も記録が無い／low＝カロリーが少ない（下限の65%未満。下限が無いときは1,000kcal未満） */
+  function suspects(logs, today, kcalMin, n) {
+    n = n || 7;
+    var first = null;
+    (logs || []).forEach(function (l) { if (l.date && (!first || l.date < first)) first = l.date; });
+    if (!first) return [];
+    var lim = kcalMin > 0 ? Math.round(kcalMin * 0.65) : 1000, out = [], t0 = toDays(today);
+    for (var i = 1; i <= n; i++) {
+      var ds = fromDays(t0 - i); if (ds < first) break;
+      var t = dayTotal(logs, ds);
+      if (t.confirmed) continue;
+      if (!t.meals) out.push({ date: ds, reason: 'none', meals: 0, kcal: 0 });
+      else if (t.kcal < lim) out.push({ date: ds, reason: 'low', meals: t.meals, kcal: t.kcal, limit: lim });
+    }
+    return out;
   }
 
   // 終了日までの直近 n 日（古い順）。記録の無い日は meals=0
@@ -23,9 +49,9 @@ var MealLib = (function () {
     return out;
   }
 
-  // 記録がある日だけの平均
-  function average(days) {
-    var a = days.filter(function (d) { return d.meals > 0; }), t = { kcal: 0, protein: 0, fat: 0, carbs: 0, days: a.length };
+  // 記録した日だけの平均（全画面・AI共通の数え方）。excludeDate（今日＝途中の日）は入れない
+  function average(days, excludeDate) {
+    var a = days.filter(function (d) { return d.logged && d.date !== excludeDate; }), t = { kcal: 0, protein: 0, fat: 0, carbs: 0, days: a.length };
     if (!a.length) return t;
     a.forEach(function (d) { t.kcal += d.kcal; t.protein += d.protein; t.fat += d.fat; t.carbs += d.carbs; });
     t.kcal = Math.round(t.kcal / a.length); t.protein = r1(t.protein / a.length); t.fat = r1(t.fat / a.length); t.carbs = r1(t.carbs / a.length);
@@ -63,7 +89,7 @@ var MealLib = (function () {
     var start = weekStart(date), today = toDays(date), used = 0, sum = 0, rec = 0;
     for (var d = start; d < today; d++) {
       var t = dayTotal(logs, fromDays(d));
-      if (t.meals > 0) { used += t[key]; sum += t[key]; rec++; } else used += goal;
+      if (t.logged) { used += t[key]; sum += t[key]; rec++; } else used += goal;
     }
     var left = 7 - (today - start), raw = (goal * 7 - used) / left, target = raw, clamp = null;
     if (hi && target > hi) { target = hi; clamp = 'hi'; }
@@ -143,7 +169,7 @@ var MealLib = (function () {
     var used = 0, miss = 0;
     for (var d = start; d < t; d++) {
       var x = dayTotal(logs, fromDays(d));
-      if (x.meals > 0) used += x[key]; else { used += goal; miss++; }
+      if (x.logged) used += x[key]; else { used += goal; miss++; }
     }
     return { used: r1(used), week: r1(goal * 7), pace: r1(goal * el), diff: r1(used - goal * el), elapsed: el, miss: miss };
   }
@@ -192,6 +218,23 @@ var MealLib = (function () {
   function focacciaPieces(carbsG) { return Math.max(0, Math.round(carbsG / FOCACCIA_C_PER_PIECE * 2) / 2); }
   function riceG(carbsG) { return Math.max(0, Math.round(carbsG / RICE_C_PER_G / 5) * 5); }
 
-  return { carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  /** 「名前だけ記録」した食事（later）に、AIの見積もり結果（r＝mealEstimate の戻り値）を合わせて、保存用の記録にする */
+  function fromEstimate(later, r) {
+    var t = (r && r.total) || {};
+    var items = ((r && r.items) || []).map(function (it) { return it.line || it.name; }).join('\n');
+    var note = '確からしさ：' + ((r && r.confidence) || '中') + ((r && r.note) ? '　' + r.note : '') + '（あとからAIが分析）';
+    return {
+      id: later.id, date: later.date, time: later.time || '', type: later.type || 'その他', text: String(later.text || '').trim(),
+      kcal: Math.round(Number(t.kcal) || 0), protein: r1(Number(t.protein) || 0), fat: r1(Number(t.fat) || 0), carbs: r1(Number(t.carbs) || 0),
+      items: items.slice(0, 1500), note: note.slice(0, 300)
+    };
+  }
+  /** 分析待ちのうち、同じIDの記録がもう保存済みのものは外す（保存のあと、待ちから消す前に閉じられた場合の重複防止） */
+  function dropSaved(laters, logs) {
+    var have = {}; (logs || []).forEach(function (l) { have[l.id] = 1; });
+    return (laters || []).filter(function (x) { return !have[x.id]; });
+  }
+
+  return { isMark: isMark, markEntry: markEntry, suspects: suspects, DAY_MARK_NOTE: DAY_MARK_NOTE, fromEstimate: fromEstimate, dropSaved: dropSaved, carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;

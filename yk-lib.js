@@ -13,12 +13,12 @@ var YkLib = (function () {
   var TAG = 'YKトレーニング';   // 固定テンプレートのタグ（gas/Yk.gs の ykInstallTemplate が作る）
   var TAG_TODAY = 'YK今日';     // 今日の推奨セッション（端末の中だけの一時タグ）
   var WINDOW = 7;               // 不足度を見る期間（日）。直近7日のローリング
-  var OVER = 1.25;              // 目標のこの倍率を超えたら、今日は主働筋にしない
+  var OVER = 1.2;               // 上限（無い部位は目標）のこの倍率を超えたら、今日は主働筋にしない。マスタープランの「今週のバランス」（RoadmapLib.OVER_SETS）と同じ線
 
   // 部位（5つの充足度）。parts が先に、なければ groups（exclude を除く）で振り分ける
   var AREAS = [
-    { key: 'chest',    label: '胸',         groups: ['胸'], target: 9,  weight: 1.5, minGap: 2, reps: [8, 12] },
-    { key: 'legs',     label: '脚',         groups: ['脚'], target: 7,  weight: 1.5, minGap: 2, reps: [10, 15] },
+    { key: 'chest',    label: '胸',         groups: ['胸'], target: 9,  max: 10, weight: 1.5, minGap: 2, reps: [8, 12] },
+    { key: 'legs',     label: '脚',         groups: ['脚'], target: 7,  max: 8,  weight: 1.5, minGap: 2, reps: [10, 15] },
     { key: 'back',     label: '背中',       groups: ['背中'], exclude: ['僧帽筋'], target: 10, weight: 1.0, minGap: 1, reps: [6, 12] },
     { key: 'shoulder', label: '肩・僧帽筋', parts: ['三角筋', '腱板（インナーマッスル）', '僧帽筋'], target: 7, weight: 1.0, minGap: 1, reps: [10, 15] },
     { key: 'core',     label: '腹',         groups: ['腹'], target: 5,  weight: 0.9, minGap: 1, reps: [6, 12] }
@@ -117,7 +117,7 @@ var YkLib = (function () {
     return { done: done, last: last, lastAny: lastAny };
   }
 
-  /* 不足度。score＝優先度×(目標−消化)/目標。目標の1.25倍を超えたら今日の対象外、前回から間隔が足りない部位も外す */
+  /* 不足度。score＝優先度×(目標−消化)/目標。上限（無い部位は目標）の1.2倍を超えたら今日の対象外、前回から間隔が足りない部位も外す */
   function deficits(input) {
     var ctx = prepare(input), pr = progress(input, ctx), mul = ctx.cfg.phaseMul[ctx.cfg.phase] || 1, now = toDays(ctx.today);
     var list = ctx.cfg.areas.map(function (a) {
@@ -126,7 +126,7 @@ var YkLib = (function () {
       var since = pr.last[a.key] === undefined ? null : now - pr.last[a.key];
       return {
         key: a.key, label: a.label, target: target, done: done, ratio: ratio, score: r1(a.weight * ratio * 100) / 100,
-        daysSince: since, over: done >= target * OVER, tooSoon: since !== null && since < a.minGap
+        daysSince: since, over: done > Math.max(target, (a.max || 0) * mul) * OVER, tooSoon: since !== null && since < a.minGap
       };
     });
     return { areas: list, lastAny: pr.lastAny, gap: pr.lastAny === null ? null : now - pr.lastAny, ctx: ctx };

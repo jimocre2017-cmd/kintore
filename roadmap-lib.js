@@ -247,7 +247,8 @@ var RoadmapLib = (function () {
     }
     var pr = proteinFor(phase, w, bf);
     if (pr) setRange('protein', pr.min, pr.target, pr.max, pr.source);
-    if (phase.fat && !(phase.fatFromKcal && phase.dynamic)) setRange('fat', phase.fat.min, mid(phase.fat, 1), phase.fat.max, 'plan');
+    // 脂質：期の範囲（計算式の期は effective が出した「カロリー範囲の中央の20〜30%」）をそのまま使う。計画画面と同じ値になる
+    if (phase.fat) setRange('fat', phase.fat.min, Math.min(phase.fat.max, Math.max(phase.fat.min, phase.fatFromKcal && g.kcal ? Math.round(g.kcal * 0.25 / 9) : mid(phase.fat, 1))), phase.fat.max, 'plan');
     else if (g.kcal) {
       var floor = Math.max(40, Math.round(g.kcal * 0.20 / 9)), ceil = Math.round(g.kcal * 0.30 / 9), t, back = false;
       if (phase.carbs && g.protein) { t = Math.round((g.kcal - g.protein * 4 - mid(phase.carbs, 1) * 4) / 9); back = true; }
@@ -441,6 +442,18 @@ var RoadmapLib = (function () {
 
   /* 体脂肪率の直近7日平均（その日の体組成の日平均から）。測定が3日未満なら判断しない（体重計の体脂肪率は日々±1%ぶれるため）
      daily＝[{date, fat}]、today＝'yyyy/MM/dd'。戻り値 {avg, days} または null */
+  /* 計算に使う「今の体」（全画面・全AIで共通）。体重＝最新、体脂肪率＝直近7日平均（3日分以上あれば）→ 無ければ最新。除脂肪量はこの2つから。
+     daily＝日ごとの体組成（新しい順でも古い順でもよい）。日々の体脂肪率のぶれで、たんぱく質の範囲などが動かないようにする */
+  function bodyState(daily, today) {
+    var w = null, f = null, wd = '', fd = '';
+    (daily || []).forEach(function (l) {
+      if (l.weight != null && (!wd || l.date > wd)) { w = Number(l.weight); wd = l.date; }
+      if (l.fat != null && (!fd || l.date > fd)) { f = Number(l.fat); fd = l.date; }
+    });
+    if (w == null) return {};
+    var f7 = today ? fat7(daily, today) : null, bf = f7 ? f7.avg : f;
+    return { weightKg: w, fatPct: bf, leanKg: bf != null ? r1(w * (1 - bf / 100)) : null, fatBasis: f7 ? '7日平均' : (bf != null ? '最新' : '') };
+  }
   function fat7(daily, today) {
     var from = toDays(today) - 6, to = toDays(today), v = [];
     (daily || []).forEach(function (l) {
@@ -572,6 +585,6 @@ var RoadmapLib = (function () {
     };
   }
 
-  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, approach: approach, APPROACH_PCT: APPROACH_PCT, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { bodyState: bodyState, ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, approach: approach, APPROACH_PCT: APPROACH_PCT, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;
