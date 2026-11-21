@@ -215,7 +215,7 @@ function bodyExtra(b){
   var since = logs.filter(function(l){ return l.date >= s0 && l.weight != null && l.fat != null; }).map(function(l){ return nf(l.weight, l.fat); }).filter(function(x){ return x != null; });
   return { height: ht, muscle: [mean(base, 'muscle'), mean(now, 'muscle')], visceral: [mean(base, 'visceral'), mean(now, 'visceral')], ffmiBase: nf(b.baseWeight, b.baseFat), ffmiGoal: nf(b.targetWeight, b.goalFat), ffmiNow: null, ffmiAvg: since.length ? FfmiLib.r1(since.reduce(function(a, c){ return a + c; }, 0) / since.length) : null, ffmiDays: since.length, nf: nf };
 }
-// 数値の背景に敷く折れ線グラフ：横＝開始〜目標日、縦＝進み具合 0〜100%（脂肪の量で）。実線＝実績、点線＝計画。数値の読みを邪魔しない薄さにしている
+// 数値の背景に敷く折れ線グラフ：横＝開始〜目標日、縦＝進み具合 0〜100%（脂肪の量で）。太線＝実績の7日平均、細線＝日々の実測、点線＝計画。数値の読みを邪魔しない薄さにしている
 function chartBg(b, n){
   if (b.baseFatMass == null || !(b.baseFatMass > b.targetFatMass) || !b.deadline) return '';
   var tot = b.baseFatMass - b.targetFatMass, s0 = PL.toDays(b.startDate), e0 = PL.toDays(b.deadline), today = (S.body && S.body.today) || KT.today(), t0 = PL.toDays(today);
@@ -225,12 +225,16 @@ function chartBg(b, n){
   for (i = 0; i <= steps; i++) { var d = s0 + (e0 - s0) * i / steps, fm = PL.plannedFatMass(b, PL.fromDays(Math.round(d))); if (fm != null && !isNaN(fm)) plan.push(X(d).toFixed(2)+','+Y((b.baseFatMass - fm) / tot * 100).toFixed(2)); }
   var logs = ((S.body && S.body.logs) || []).filter(function(l){ return l.date >= b.startDate && l.weight != null && l.fat != null; }).sort(function(a, c){ return a.date < c.date ? -1 : 1; });
   var act = logs.map(function(l){ return { x: X(PL.toDays(l.date)), y: Y((b.baseFatMass - l.weight * l.fat / 100) / tot * 100) }; });
-  var pts = act.map(function(p){ return p.x.toFixed(2)+','+p.y.toFixed(2); }), last = act.length ? act[act.length - 1] : null;
-  var area = pts.length > 1 ? '<polygon points="'+act[0].x.toFixed(2)+',100 '+pts.join(' ')+' '+last.x.toFixed(2)+',100" fill="url(#cbg)"/>' : '';
+  // 直近7日の移動平均（体組成計の日々のぶれをならす。「現在」の数値と同じ考え方）
+  var days = logs.map(function(l){ return PL.toDays(l.date); });
+  var avg = act.map(function(p, i){ var sm = 0, k = 0; for (var j = i; j >= 0 && days[i] - days[j] < 7; j--) { sm += act[j].y; k++; } return { x: p.x, y: sm / k }; });
+  var pts = act.map(function(p){ return p.x.toFixed(2)+','+p.y.toFixed(2); }), apts = avg.map(function(p){ return p.x.toFixed(2)+','+p.y.toFixed(2); }), last = avg.length ? avg[avg.length - 1] : null;
+  var area = apts.length > 1 ? '<polygon points="'+avg[0].x.toFixed(2)+',100 '+apts.join(' ')+' '+last.x.toFixed(2)+',100" fill="url(#cbg)"/>' : '';
   var svg = '<svg class="cbg" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true"><defs><linearGradient id="cbg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--accent)" stop-opacity=".28"/><stop offset="1" style="stop-color:var(--accent)" stop-opacity="0"/></linearGradient></defs>'
     + '<line x1="0" y1="0" x2="100" y2="0" class="gl"/><line x1="0" y1="50" x2="100" y2="50" class="gl mid"/><line x1="0" y1="100" x2="100" y2="100" class="gl"/>'
     + (plan.length > 1 ? '<polyline points="'+plan.join(' ')+'" class="pl"/>' : '') + area
-    + (pts.length > 1 ? '<polyline points="'+pts.join(' ')+'" class="ac"/>' : '') + '</svg>'
+    + (pts.length > 1 ? '<polyline points="'+pts.join(' ')+'" class="ad"/>' : '')
+    + (apts.length > 1 ? '<polyline points="'+apts.join(' ')+'" class="ac"/>' : '') + '</svg>'
     + '<span class="yl" style="top:0">100%</span><span class="yl" style="top:50%">50%</span><span class="yl" style="top:100%">0%</span>'
     + (last ? '<i class="cdot" style="left:'+last.x.toFixed(2)+'%;top:'+last.y.toFixed(2)+'%"></i>' : '');
   return svg;
@@ -271,7 +275,7 @@ function progressHtml(b, n, pre){
     + row('骨格筋率', ex.muscle[0], ex.muscle[1], null, '%', 1, 'up')
     + row('内臓脂肪', ex.visceral[0], ex.visceral[1], null, '', 1, 'down')
     + row('FFMI（補正後）', ex.ffmiBase, ffNow, ex.ffmiGoal, '', 1, 'up') + '</div>'
-    + (bg ? '<div class="sngx"><span>▲ 開始 '+md(b.startDate)+'</span><span>背景：脂肪の量の進み 0〜100%（実線＝実績／点線＝計画）</span><span>目標日 '+md(b.deadline)+' ▲</span></div>' : '') + '</div>';
+    + (bg ? '<div class="sngx"><span>▲ 開始 '+md(b.startDate)+'</span><span>背景：脂肪の量の進み 0〜100%（太線＝7日平均／細線＝日々の実測／点線＝計画）</span><span>目標日 '+md(b.deadline)+' ▲</span></div>' : '') + '</div>';
   h += '<div class="sngtx">FFMIの開始以降の平均：<b class="num">'+(ex.ffmiAvg == null ? '－' : ex.ffmiAvg.toFixed(1))+'</b>'+(ex.ffmiDays ? '（'+ex.ffmiDays+'日分）' : '')+'　／　骨格筋率・内臓脂肪レベルに目標はありません（推移を見る指標です）</div>';
   h += trackHtml(b, n);
   return h;

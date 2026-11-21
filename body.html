@@ -480,7 +480,7 @@ function renderNow(){
 function heightNow(){ var L = S.view ? S.view.logs : []; for (var i = 0; i < L.length; i++) if (L[i].height) return L[i].height; return 0; }
 function normSvg(snap, refKey, gain){
   var r = snap.refs.filter(function(x){ return x.key === refKey; })[0] || snap.refs[0];
-  var m = (heightNow()||164)/100, limRaw = snap.limit == null ? null : snap.limit - 6.3*(1.8-m);
+  var m = (heightNow()||164)/100, limRaw = snap.limit == null ? null : snap.limit - FfmiLib.NORM_K*(1.8-m);
   var vals = [snap.now.raw, snap.target.raw].concat(limRaw == null ? [] : [limRaw]);
   var lo = Math.min(r.mean - 3.5*r.sd, Math.min.apply(null, vals) - 0.8), hi = Math.max(r.mean + 3.5*r.sd, Math.max.apply(null, vals) + 0.8);
   var W = 340, H = 150, pl = 8, pr = 8, pt = 22, pb = 26, N = 80, top = FfmiLib.pdf(r.mean, r.mean, r.sd);
@@ -536,7 +536,7 @@ function renderFfmi(){
   if (snap.limit != null) h += '<div class="plan" style="margin-top:4px">ナチュラル（薬物なし）の上限の目安は補正FFMI 約'+snap.limit+'。今は<b>'+snap.now.norm+'</b>で、あと <b>'+snap.limitGap+'</b>（筋肉量に換算して約<b>'+snap.toLimitKg+'kg</b>）。上限は目安で、超える人も届かない人もいます。</div>';
   h += '<details class="guide" style="margin-top:10px"><summary>FFMIとは？ 数字の見方</summary><div style="font-size:13px;line-height:1.8;color:var(--ink-2)">'
     + '<p><b>FFMI＝除脂肪体重（kg）÷ 身長（m）²</b>。体重から脂肪を除いた「筋肉・骨・水分・内臓」を、身長で割った指数です。体重やBMIと違い、脂肪が減っても筋肉が減っていなければ下がらないので、「筋肉がどれだけ付いているか」を見るのに向いています。</p>'
-    + '<p><b>補正FFMI</b>は、身長の違いをならした値（FFMI＋6.3×(1.8−身長m)）。背の低い人は補正すると少し上がります。上限の目安（25）との比較にだけ使います。</p>'
+    + '<p><b>補正FFMI</b>は、身長の違いをならした値（FFMI＋6.1×(1.8−身長m)、Kouri 1995）。背の低い人は補正すると少し上がります。上限の目安（25）との比較にだけ使います。</p>'
     + '<p><b>目安</b>：一般の成人は、男性で約18〜19、女性で約15〜16が平均です。男性で20を超えるとよく鍛えている水準、22を超えると非常に高い水準（補正FFMIで25前後がナチュラルの上限付近）。女性は18を超えると非常に高い水準です。</p>'
     + '<p><b>上位◯％</b>：同性・同年代の人を並べたとき、上から何％にいるか。グラフの山は人の分布で、真ん中が平均です。</p>'
     + '<p><b>注意</b>：体組成計（BIA）の体脂肪率は±数％の誤差があり、水分量や食事・運動の直後でぶれます。体脂肪率が1%違うと、FFMIは約0.2動きます。数日の平均で見てください。日本の若い世代の全国データは見つからず、「日本」は韓国の年代別データでの代用、「世界」は欧州系の研究をもとにした推定です。あくまで概算の目安です。</p>'

@@ -1,6 +1,6 @@
 /* FFMI（除脂肪量指数）の計算と、同性・同年代の分布との比較（画面とテストで共通）
  * FFMI = 除脂肪体重(kg) ÷ 身長(m)²。除脂肪体重 = 体重 × (1 − 体脂肪率/100)。
- * 補正FFMI = FFMI + 6.3 × (1.80 − 身長m)（Kouri 1995。身長の違いをならす）。
+ * 補正FFMI = FFMI + 6.1 × (1.80 − 身長m)（Kouri 1995 の原式。身長の違いをならす）。
  * ※ 家庭用の体組成計（BIA）の推定値で、体脂肪率の誤差・水分の影響を受ける。分布も「概算の目安」。
  *
  * 出典（すべてBIA測定）
@@ -19,6 +19,7 @@ var FfmiLib = (function () {
   var WORLD_OFFSET = { M: 0.1, F: 0.4 };   // 欧州系18–34歳の中央値 − 韓国20代の平均
   var WORLD_SD_MIN = { M: 2.0, F: 1.7 };   // 仮定
   var NATURAL_LIMIT = 25;
+  var NORM_K = 6.1;   // Kouri 1995 の身長補正係数（6.3 は出典なしの流用値なので使わない）
 
   function r1(n) { return Math.round(n * 10) / 10; }
   function r2(n) { return Math.round(n * 100) / 100; }
@@ -27,7 +28,7 @@ var FfmiLib = (function () {
     if (!(weight > 0) || !(fatPct >= 0) || fatPct >= 100 || !(heightCm > 0)) return null;
     var m = heightCm / 100; return ffm(weight, fatPct) / (m * m);
   }
-  function normalized(v, heightCm) { return v == null ? null : v + 6.3 * (1.8 - heightCm / 100); }
+  function normalized(v, heightCm) { return v == null ? null : v + NORM_K * (1.8 - heightCm / 100); }
 
   function korea(sex, age) {
     var L = KOREA[sex === 'F' ? 'F' : 'M'], a = Math.max(10, Math.min(80, Math.round(age) || 25));
@@ -85,10 +86,10 @@ var FfmiLib = (function () {
     return {
       lean: r1(lean), goalWeight: goalW == null ? null : r1(goalW), refs: rs, now: now, target: tgt, limit: lim,
       limitGap: lim == null ? null : r1(lim - now.norm),
-      toLimitKg: lim == null ? null : r1(Math.max(0, (lim - 6.3 * (1.8 - m) - f) * m * m))
+      toLimitKg: lim == null ? null : r1(Math.max(0, (lim - NORM_K * (1.8 - m) - f) * m * m))
     };
   }
 
-  return { ffm: ffm, ffmi: ffmi, normalized: normalized, refs: refs, percentile: percentile, pdf: pdf, rankText: rankText, levelText: levelText, naturalLimit: naturalLimit, snapshot: snapshot, r1: r1 };
+  return { NORM_K: NORM_K, ffm: ffm, ffmi: ffmi, normalized: normalized, refs: refs, percentile: percentile, pdf: pdf, rankText: rankText, levelText: levelText, naturalLimit: naturalLimit, snapshot: snapshot, r1: r1 };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = FfmiLib;
