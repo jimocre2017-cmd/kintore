@@ -278,4 +278,31 @@ t('たんぱく質：マスタープランの期の範囲を使う（無けれ�
   var v2 = run(s);
   assert.strictEqual(v2.adjust.protein.targetG, Math.round(v2.adjust.weightKg * 1.8));
 });
+t('絞り込み期：赤字は小さい範囲（消費の90〜97%）に収め、計画が維持期の設定でも絞り込みを優先する', function () {
+  var en = { kcal: 2400, basis: 'observed', bmr: 1500 }, body = { weightKg: 65, fatPct: 16 };
+  var cfg = RL.adjustCfg('shred', 'cut', null, body, en);
+  assert.strictEqual(cfg.mode, 'shred'); assert.strictEqual(cfg.kcalMin, 2160); assert.strictEqual(cfg.kcalMax, 2330); assert.strictEqual(cfg.floorFat, 12);
+  var v = run(synth({ days: 35, tdee: 2400, avgIntake: 1700, intake: [1700] }), { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: cfg } });
+  assert.strictEqual(v.adjust.mode, 'shred'); assert.strictEqual(v.adjust.planned.aggressive, false);
+  assert.ok(v.adjust.target >= 2160 || v.adjust.status === 'floor_reached', '範囲の下限まで引き上げる: ' + v.adjust.target + ' ' + v.adjust.status);
+  var vm = run(synth({ days: 35, tdee: 2400, avgIntake: 2300, intake: [2300] }), { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, phase: 'maintain', floorFat: 12, roadmap: RL.adjustCfg('shred', 'maintain', null, body, en) } });
+  assert.strictEqual(vm.adjust.mode, 'shred', '計画が維持期の設定でも、絞り込みを選んでいれば絞り込み');
+});
+t('第3期：減量中の食事から維持カロリーへ、毎週+100kcalずつ戻す（回復）。戻りきったら維持', function () {
+  var s = synth({ days: 35, tdee: 2400, avgIntake: 2400, intake: [2400] });
+  var cur = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, phase: 'maintain', floorFat: 20 } }).adjust.floor.currentFat;
+  var mk = function (prevKcal) {
+    var cfg = RL.adjustCfg('maintain', 'maintain');
+    return run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, phase: 'maintain', floorFat: Math.floor(cur) - 0.5, roadmap: cfg }, targets: [{ from: '2026/11/01', kcal: prevKcal }], mealGoalKcal: prevKcal }).adjust;
+  };
+  assert.strictEqual(RL.adjustCfg('maintain', 'cut').recover, true); assert.strictEqual(RL.adjustCfg('', 'cut').recover, false);
+  var a = mk(1800), mt = Math.round(a.tdee.kcal / 10) * 10;
+  assert.strictEqual(a.status, 'recovering'); assert.strictEqual(a.target, 1900);
+  assert.strictEqual(a.recovery.toKcal, mt); assert.strictEqual(a.recovery.fromKcal, 1800); assert.ok(a.recovery.weeksLeft >= 1);
+  assert.strictEqual(mk(mt - 60).status, 'maintaining', '差が小さければ回復ではなく維持');
+  assert.strictEqual(mk(mt - 100).status, 'maintaining');
+  var last = mk(mt - 150); assert.strictEqual(last.status, 'recovering'); assert.strictEqual(last.target, mt - 50 > mt ? mt : Math.min(mt, mt - 150 + 100));
+  var noRec = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, phase: 'maintain', floorFat: Math.floor(cur) - 0.5 }, mealGoalKcal: 1800 }).adjust;
+  assert.strictEqual(noRec.status, 'maintaining', 'マスタープランの設定が無ければ従来どおり');
+});
 console.log('\n' + n + ' 件すべて成功');

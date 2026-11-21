@@ -139,6 +139,21 @@ t('planPauseApply：サーバー側で検証し、休止期間を追加・取消
 });
 
 
+t('roadmapSet：絞り込み期（shred／shred8）を保存でき、不正な値は未選択に戻る', function () {
+  sandbox.__d = 'shred'; var r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.roadmapDecision, 'shred');
+  sandbox.__d = 'shred8'; r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.roadmapDecision, 'shred8');
+  sandbox.__d = 'maintain'; r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.phase, 'maintain'); assert.strictEqual(r.plan.floorFat, 8, '絞り込み8%から第3期へ：最低ライン＝8%');
+  sandbox.__d = 'advance'; r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.phase, 'cut', '第3期から別の道へ：減量計画も減量期に戻す'); assert.strictEqual(r.plan.floorFat, 0);
+  sandbox.__d = 'maintain'; r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.floorFat, 15, 'バルク・第1期から第3期へ：最低ライン＝第1期の目標');
+  sandbox.__d = 'xxx'; r = run('roadmapSet(__d)');
+  assert.strictEqual(r.plan.roadmapDecision, ''); assert.strictEqual(r.plan.phase, 'cut');
+});
+
 t('planAuto：先週の日曜までの記録で次の目標を自動採用する。1週1回、記録不足・変更なしは据え置き', function () {
   props.BODY_GOAL_FAT = '12'; props.PLAN_START = '2026/11/09'; props.MEAL_GOAL_KCAL = '1700'; props.ROADMAP_DECISION = 'advance';
   delete props.PLAN_AUTO_DONE; delete props.PLAN_AUTO_LAST;

@@ -11,6 +11,8 @@ var PlanLib = (function () {
   var EASE_DAYS = 60;       // 終盤とみなす日数（期間が短いときは全体の3割）
   var MAINT_BAND = 1.5;     // 維持期：最低体脂肪率の上にこの幅(%)までを許容帯とする
   var BAND_KG = 0.3;        // 計画との差が±この脂肪量(kg)以内なら「ほぼ計画どおり」
+  var REVERSE_STEP = 100;   // 第3期の回復：毎週この量ずつ食事を維持カロリーへ戻す（kcal）
+  var REVERSE_GAP = 100;    // 前の週の目標が維持カロリーよりこの差以上低いときだけ「回復」にする（kcal）
   var HOLD_BAND = 50;       // この差未満なら目標を変えない（kcal）
   var BULK_SURPLUS = 0.075; // バルク：消費の見込みに上乗せする割合（マスタープランの+5〜10%の中央）
   var BULK_GAIN_MIN = 0.25; // バルク：体重の増え方の目安（%/週）。これ未満は遅い、超えると速い
@@ -99,8 +101,8 @@ var PlanLib = (function () {
       phase: plan.phase === 'maintain' ? 'maintain' : 'cut',
       floorFat: Number(plan.floorFat) > 0 ? Number(plan.floorFat) : 0,
       // マスタープラン連動（RoadmapLib.adjustCfg の結果）。無ければ従来どおり（減量計画の phase だけで決める）
-      roadmap: plan.roadmap && (plan.roadmap.mode === 'bulk' || plan.roadmap.mode === 'maintain' || plan.roadmap.mode === 'cut')
-        ? { mode: plan.roadmap.mode, kcalMin: Number(plan.roadmap.kcalMin) || 0, kcalMax: Number(plan.roadmap.kcalMax) || 0, floorFat: Number(plan.roadmap.floorFat) || 0,
+      roadmap: plan.roadmap && (plan.roadmap.mode === 'bulk' || plan.roadmap.mode === 'maintain' || plan.roadmap.mode === 'cut' || plan.roadmap.mode === 'shred')
+        ? { mode: plan.roadmap.mode, kcalMin: Number(plan.roadmap.kcalMin) || 0, kcalMax: Number(plan.roadmap.kcalMax) || 0, floorFat: Number(plan.roadmap.floorFat) || 0, recover: !!plan.roadmap.recover,
             protein: plan.roadmap.protein && Number(plan.roadmap.protein.min) > 0 ? { min: Number(plan.roadmap.protein.min), target: Number(plan.roadmap.protein.target) || Number(plan.roadmap.protein.min), max: Number(plan.roadmap.protein.max) || Number(plan.roadmap.protein.min) } : null } : null
     };
     p.configured = !!(p.goalFat && p.startDate);
@@ -329,8 +331,9 @@ var PlanLib = (function () {
     var floor = Math.round(Math.max(est ? est.bmr : 1200, 1200));
     var pauseNow = pausedOn(b.pauses, today), rateNow = rateAt(b, today);
     var rmc = plan.roadmap || null, mode = rmc ? rmc.mode : (plan.phase === 'maintain' ? 'maintain' : 'cut');
-    var maintain = mode === 'maintain' || plan.phase === 'maintain', bulk = mode === 'bulk' && !maintain;
-    var ff = plan.floorFat > 0 ? plan.floorFat : (rmc && rmc.floorFat) || 0; // 維持期の最低体脂肪率（未設定ならマスタープランの第1期の目標）
+    var shred = mode === 'shred'; // 絞り込み期（12%→8%）：減量と同じく赤字で進むが、赤字は小さく範囲に収める。計画が維持期の設定でも、絞り込みを選んでいればそちらを優先
+    var maintain = mode === 'maintain' || (plan.phase === 'maintain' && !shred), bulk = mode === 'bulk' && !maintain;
+    var ff = shred && rmc && rmc.floorFat > 0 ? rmc.floorFat : (plan.floorFat > 0 ? plan.floorFat : (rmc && rmc.floorFat) || 0); // 維持期の最低体脂肪率（未設定ならマスタープランの第1期の目標）。絞り込み期は、その段階の目標（12%か8%）
     if (maintain || bulk) rateNow = 0; // 維持期・バルク：減量の赤字なし
     function stepTo(r) { if (!prev) return r; var df = r - prev; if (Math.abs(df) < HOLD_BAND) return prev; return prev + Math.max(-STEP_LIMIT, Math.min(STEP_LIMIT, df)); }
     var deficit = Math.round(rateNow * KCAL_PER_KG / 7); // 休止中は0（維持カロリー）
@@ -338,7 +341,7 @@ var PlanLib = (function () {
       today: today, coverage: cov, weightKg: r1(weight),
       // たんぱく質：マスタープランの期の範囲（RoadmapLib.adjustCfg が体組成から出したもの）。無いときだけ体重×1.6〜1.8
       protein: rmc && rmc.protein ? { minG: rmc.protein.min, targetG: rmc.protein.target, maxG: rmc.protein.max } : { minG: Math.round(weight * 1.6), targetG: Math.round(weight * 1.8) },
-      planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain || bulk ? false : b.aggressive, mode: maintain ? 'maintain' : bulk ? 'bulk' : 'cut', shape: b.shape, paused: !!pauseNow, phase: plan.phase },
+      planned: { weeklyLossKg: r2(rateNow), deficitKcalPerDay: deficit, aggressive: maintain || bulk || shred ? false : b.aggressive, mode: maintain ? 'maintain' : bulk ? 'bulk' : shred ? 'shred' : 'cut', shape: b.shape, paused: !!pauseNow, phase: plan.phase },
       floorKcal: floor, previousTarget: prev || null,
       avgIntake7: meals7.length ? Math.round(mean(meals7.map(function (x) { return x.kcal; }))) : null
     };
@@ -402,7 +405,14 @@ var PlanLib = (function () {
       if (maintain && status !== 'insufficient') {
         if (fat7 < ff) { status = 'below_floor'; target = Math.round((tdee + STEP_LIMIT) / 10) * 10; reasons.unshift('体脂肪率が最低ライン' + ff + '%を下回っています。維持カロリーより' + STEP_LIMIT + 'kcal多く食べて、筋トレは維持します'); }
         else if (fat7 > upper) { status = 'above_band'; target = Math.max(floor, Math.round((tdee - STEP_LIMIT) / 10) * 10); reasons.unshift('体脂肪率が許容帯の上限' + r1(upper) + '%を超えています。維持カロリーより' + STEP_LIMIT + 'kcal控えめにします'); }
-        else { status = 'maintaining'; target = Math.max(floor, Math.round(tdee / 10) * 10); reasons.unshift('体脂肪率は許容帯（' + ff + '〜' + r1(upper) + '%）の中。維持カロリーで過ごします'); }
+        else {
+          var mt = Math.max(floor, Math.round(tdee / 10) * 10);
+          if (rmc && rmc.recover && prev && prev < mt - REVERSE_GAP) { // 第3期の回復：減量中の食事から維持カロリーへ、毎週 REVERSE_STEP ずつ戻す
+            status = 'recovering'; target = Math.min(mt, prev + REVERSE_STEP);
+            out.recovery = { fromKcal: prev, toKcal: mt, stepKcal: REVERSE_STEP, weeksLeft: Math.max(0, Math.ceil((mt - target) / REVERSE_STEP)) };
+            reasons.unshift('第3期の回復：減量中の食事（' + prev + 'kcal）から維持カロリー（' + mt + 'kcal）まで、毎週+' + REVERSE_STEP + 'kcalずつ戻しています（あと約' + out.recovery.weeksLeft + '週）。体重が少し増えるのは水分とグリコーゲンが戻るためなので、慌てなくて大丈夫です');
+          } else { status = 'maintaining'; target = mt; reasons.unshift('体脂肪率は許容帯（' + ff + '〜' + r1(upper) + '%）の中。維持カロリーで過ごします'); }
+        }
       } else if (!maintain && fat7 <= ff) {
         status = 'floor_reached'; target = Math.max(floor, Math.round(tdee / 10) * 10); out.floorReached = true;
         reasons.unshift('体脂肪率が最低ライン' + ff + '%に届きました。これ以上は減らさず、維持期へ切り替えるのがおすすめです');
@@ -418,7 +428,7 @@ var PlanLib = (function () {
       var lo = Math.max(rmc.kcalMin, floor), hi = Math.max(lo, rmc.kcalMax), cl = Math.min(hi, Math.max(lo, target));
       if (cl !== target) { reasons.push('マスタープランの範囲（' + rmc.kcalMin + '〜' + rmc.kcalMax + 'kcal）に収めるため、' + target + 'kcalを' + cl + 'kcalにしました'); target = cl; }
     }
-    out.mode = maintain ? 'maintain' : bulk ? 'bulk' : 'cut'; out.range = rmc && rmc.kcalMax > 0 && !maintain ? { min: rmc.kcalMin, max: rmc.kcalMax } : null;
+    out.mode = maintain ? 'maintain' : bulk ? 'bulk' : shred ? 'shred' : 'cut'; out.range = rmc && rmc.kcalMax > 0 && !maintain ? { min: rmc.kcalMin, max: rmc.kcalMax } : null;
     out.status = status; out.reasons = reasons; out.target = target;
     out.deltaFromPrevious = prev ? target - prev : null;
     out.weeklyBudget = target * 7;
