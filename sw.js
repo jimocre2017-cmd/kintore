@@ -2,11 +2,12 @@
  * 画面ファイルを端末に保存し、オフラインでも開けるようにする。
  * 通信（Google Apps Script への送信）は扱わない（api.js 側で送信待ちとして保存）。
  */
-var VERSION = 'kt-v83';
+var VERSION = 'kt-v84';
 var FILES = ['./', './index.html', './analytics.html', './cardio.html', './cardio-lib.js', './body.html', './body-lib.js', './photo.html', './photo-lib.js', './meal.html', './meal-lib.js', './plan.html', './plan-lib.js', './roadmap-lib.js', './plan-page.js', './yk-lib.js', './counsel-lib.js', './ex-search-lib.js', './ffmi-lib.js', './api.js', './coach.js', './advice.js', './guide.js', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', function (e) {
-  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FILES); }).then(function () { return self.skipWaiting(); }));
+  // 新しい版を入れるときは、ブラウザのHTTPキャッシュを通さずに取り直す（古いファイルを新しい版として保存しないため。GitHub Pages は10分キャッシュされる）
+  e.waitUntil(caches.open(VERSION).then(function (c) { return c.addAll(FILES.map(function (f) { return new Request(f, { cache: 'reload' }); })); }).then(function () { return self.skipWaiting(); }));
 });
 
 self.addEventListener('activate', function (e) {
