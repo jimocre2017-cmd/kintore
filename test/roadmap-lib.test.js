@@ -205,4 +205,72 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.ok(b.planCheck && b.planCheck.length >= 2, '総合コーチにも点検結果を渡す');
   console.log('ok  energy / proteinFor / planCheck');
 })();
+/* ---- 絞り込み期（12%→8%・微増筋） ---- */
+t('絞り込み期：選ぶと期になり、日付では入らない。第1期より赤字が小さい', function () {
+  var r = R.resolve('2026/12/01', { decision: 'shred', fat7: { avg: 14, days: 5 } });
+  assert.strictEqual(r.phase.key, 'shred'); assert.strictEqual(r.needChoice, false); assert.strictEqual(r.overdue, false);
+  assert.strictEqual(R.resolve('2026/12/01', { decision: 'shred8' }).phase.key, 'shred8');
+  assert.strictEqual(R.resolve('2026/12/01', { decision: '' }).phase.key, 'recomp');
+  var en = { kcal: 2200, basis: 'observed', bmr: 1500 }, body = { weightKg: 60, fatPct: 14 };
+  var cut = R.effective(R.ROADMAP.phases[0], en, body), sh = R.effective(R.ROADMAP.shredPhase, en, body), s8 = R.effective(R.ROADMAP.shred8Phase, en, body);
+  assert.ok(sh.kcal.min > cut.kcal.max - 1 || sh.kcal.min >= cut.kcal.max, '絞り込み期の下限は減量期の上限付近以上：' + sh.kcal.min + ' / ' + cut.kcal.max);
+  assert.deepStrictEqual([sh.kcal.min, sh.kcal.max], [1980, 2130]); assert.deepStrictEqual([s8.kcal.min, s8.kcal.max], [2020, 2160]);
+  assert.ok(sh.protein.target > cut.protein.target, 'たんぱく質は減量期より高め'); assert.ok(sh.carbs.min >= 160 && !cut.carbs, '炭水化物の下限がある');
+  assert.ok(R.ROADMAP.shredPhase.sets.chest.min > R.ROADMAP.phases[0].sets.chest.min && R.ROADMAP.shredPhase.sets.legs.min > R.ROADMAP.phases[0].sets.legs.min, '胸・脚のセットは減量期より多い');
+  assert.strictEqual(R.ROADMAP.shredPhase.targets.fatPct, 12); assert.strictEqual(R.ROADMAP.shred8Phase.targets.fatPct, 8);
+});
+t('絞り込み期：マスタープランのモードと食事の目標', function () {
+  var en = { kcal: 2200, basis: 'observed', bmr: 1500 }, body = { weightKg: 60, fatPct: 14 };
+  assert.strictEqual(R.adjustCfg('shred', 'cut', null, body, en).mode, 'shred');
+  assert.strictEqual(R.adjustCfg('shred8', 'cut', null, body, en).floorFat, 8);
+  assert.strictEqual(R.adjustCfg('shred', 'maintain', null, body, en).mode, 'shred', '絞り込みを選べば、計画が維持期の設定でも絞り込み');
+  assert.strictEqual(R.adjustCfg('maintain', 'cut', null, body, en).mode, 'maintain');
+  var g = R.autoMealGoals({ date: '2026/12/01', decision: 'shred', planPhase: 'cut', weightKg: 60, fatPct: 14, bmr: 1500, tdeeKcal: 2200, tdeeBasis: 'observed' });
+  assert.strictEqual(g.phaseKey, 'shred'); assert.strictEqual(g.goals.kcalMin, 1980); assert.strictEqual(g.goals.kcalMax, 2130);
+  assert.ok(g.goals.proteinMin >= 125 && g.goals.fatMin >= 40);
+});
+t('絞り込み期：到達・下がりすぎ・8%の注意を、助言と計画の点検で出す', function () {
+  var k = function (a) { return a.map(function (x) { return x.key; }); };
+  assert.ok(k(R.advice({ date: '2026/12/01', decision: 'shred', fat7: { avg: 11.9, days: 5 } })).indexOf('shred-reached') >= 0);
+  assert.ok(k(R.advice({ date: '2026/12/01', decision: 'shred8', fat7: { avg: 8, days: 5 } })).indexOf('shred8-reached') >= 0);
+  assert.ok(k(R.advice({ date: '2026/12/01', decision: 'shred', fat7: { avg: 10.5, days: 5 } })).indexOf('shred-below') >= 0);
+  assert.strictEqual(R.advice({ date: '2026/12/01', decision: 'shred', fat7: { avg: 15, days: 5 } }).length, 0, '途中は静か');
+  var pc = k(R.planCheck({ date: '2026/12/01', decision: 'shred8', energy: { kcal: 2200, basis: 'observed', bmr: 1500 }, state: { weightKg: 60, fatPct: 14 } }));
+  assert.ok(pc.indexOf('shred-range') >= 0 && pc.indexOf('shred-pace') >= 0 && pc.indexOf('shred-lean') >= 0 && pc.indexOf('shred-8warn') >= 0);
+  assert.strictEqual(k(R.planCheck({ date: '2026/12/01', decision: 'shred', energy: { kcal: 2200, basis: 'observed', bmr: 1500 }, state: { weightKg: 60, fatPct: 14 } })).indexOf('shred-8warn'), -1, '8%の注意は仕上げのときだけ');
+});
+t('絞り込み期：今週のバランスと総合コーチへの要約', function () {
+  var ph = R.effective(R.ROADMAP.shredPhase, { kcal: 2200, basis: 'observed', bmr: 1500 }, { weightKg: 60, fatPct: 14 });
+  var b = R.balance(ph, { meal: { kcal: 1800, protein: 140, fat: 55, carbs: 200 }, sets: { chest: 6, legs: 9 }, cardio: { mode: 'frequency', min: 2, max: 3, days: 4, state: 'over' } });
+  var by = {}; b.items.forEach(function (x) { by[x.key] = x; });
+  assert.strictEqual(by.kcal.state, 'under'); assert.ok(by.kcal.advice.indexOf('絞り込み期') >= 0);
+  assert.strictEqual(by.chest.state, 'under'); assert.strictEqual(by.legs.state, 'in'); assert.strictEqual(by.cardio.state, 'over');
+  var br = R.brief('2026/12/01', { weightKg: 60, fatPct: 14, leanKg: 51.6 }, null, { decision: 'shred', energy: { kcal: 2200, basis: 'observed', bmr: 1500 } });
+  assert.strictEqual(br.nowPhaseKey, 'shred'); assert.strictEqual(br.targets.fatPct, 12);
+});
+t('次のステップを選ぶ段階までの案内（第1期→第2期、絞り込み12%→8%）', function () {
+  var a = R.approach({ decision: '', fat7: { avg: 18, days: 5 } });
+  assert.strictEqual(a.kind, 'cut'); assert.strictEqual(a.goal, 15); assert.strictEqual(a.gap, 3); assert.strictEqual(a.near, false); assert.strictEqual(a.weeks, null);
+  var b = R.approach({ decision: '', fat7: { avg: 16.5, days: 5 }, weightKg: 60, lossKgPerWeek: 0.2 });
+  assert.strictEqual(b.near, true); assert.ok(b.weeks >= 1 && b.text.indexOf('もうすぐ') >= 0 && b.text.indexOf('週間') >= 0);
+  var c = R.approach({ decision: 'shred', fat7: { avg: 11.8, days: 5 } });
+  assert.strictEqual(c.reached, true); assert.ok(c.text.indexOf('8%') >= 0);
+  var d = R.approach({ decision: 'shred', fat7: { avg: 15, days: 5 }, weightKg: 60, lossKgPerWeek: 0.1 });
+  assert.strictEqual(d.near, false); assert.strictEqual(d.kind, 'shred');
+  assert.strictEqual(R.approach({ decision: 'maintain', fat7: { avg: 14, days: 5 } }), null);
+  assert.strictEqual(R.approach({ decision: 'advance', fat7: { avg: 14, days: 5 } }), null);
+  assert.strictEqual(R.approach({ decision: '', fat7: null }), null);
+  var k = R.advice({ date: '2026/12/01', decision: 'shred', fat7: { avg: 13.2, days: 5 } }).map(function (x) { return x.key; });
+  assert.ok(k.indexOf('approach-shred') >= 0, 'あと2%以内で、選ぶ段階が近いと知らせる');
+  assert.strictEqual(R.advice({ date: '2026/12/01', decision: 'shred', fat7: { avg: 14.5, days: 5 } }).length, 0, 'まだ遠いときは静か');
+});
+t('一貫性：絞り込み中は計画が維持期でも絞り込み扱い・バルクの点検は第1期かバルク中だけ', function () {
+  var k = function (a) { return a.map(function (x) { return x.key; }); };
+  assert.strictEqual(k(R.advice({ date: '2026/12/01', decision: 'shred', planPhase: 'maintain', floorFat: 15, fat7: { avg: 13, days: 5 } })).indexOf('maint-below'), -1);
+  var en = { kcal: 2200, basis: 'observed', bmr: 1500 }, st = { weightKg: 60, fatPct: 14 };
+  assert.strictEqual(k(R.planCheck({ date: '2026/12/01', decision: 'shred', energy: en, state: st })).indexOf('bulk-surplus'), -1);
+  assert.strictEqual(k(R.planCheck({ date: '2026/12/01', decision: 'maintain', energy: en, state: st })).indexOf('bulk-surplus'), -1);
+  assert.ok(k(R.planCheck({ date: '2026/12/01', decision: '', energy: en, state: st })).indexOf('bulk-surplus') >= 0);
+  assert.ok(k(R.planCheck({ date: '2026/12/01', decision: 'advance', energy: en, state: st })).indexOf('bulk-surplus') >= 0);
+});
 console.log(n + ' 件OK');

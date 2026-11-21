@@ -21,7 +21,7 @@ function comma(n){ return n == null || isNaN(n) ? '－' : Math.round(n).toString
 function gapCls(x, band){ if (x == null || Math.abs(x) < (band || 0.001)) return 'mut'; return x > 0 ? 'pos' : 'neg'; }
 var STATUS = {
   on_track: ['順調', 'good'], behind: ['遅れ', 'bad'], ahead: ['先行（速め）', 'warn'], learning: ['計測中', ''], insufficient: ['記録不足', 'warn'],
-  paused: ['休止中（維持カロリー）', ''], maintaining: ['維持：許容帯の中', 'good'], below_floor: ['最低ライン割れ', 'bad'], above_band: ['許容帯の上', 'warn'], floor_reached: ['最低ラインに到達', 'good'],
+  paused: ['休止中（維持カロリー）', ''], maintaining: ['維持：許容帯の中', 'good'], recovering: ['回復中：食事を段階的に戻す', 'good'], below_floor: ['最低ライン割れ', 'bad'], above_band: ['許容帯の上', 'warn'], floor_reached: ['最低ラインに到達', 'good'],
   bulk_ok: ['増量：順調', 'good'], bulk_fast: ['増え方が速い', 'warn'], bulk_slow: ['増え方が遅い', 'warn']
 };
 
@@ -72,31 +72,57 @@ function rmFfmiRow(goal, st){
   if (typeof FfmiLib !== 'undefined' && ht && st && st.weightKg != null && st.fatPct != null) { var v = FfmiLib.ffmi(st.weightKg, st.fatPct, ht); if (v != null) now = FfmiLib.r1(FfmiLib.normalized(v, ht)); }
   return '<div class="note" style="margin:6px 0 0">参考：いまの補正後FFMI <b class="num">'+(now == null ? '－' : f1(now))+'</b> → '+f1(goal)+'（除脂肪量の目標と対になる指標。体組成計の推定値なので目安です）</div>';
 }
+// お知らせ：いま出ている案内を、ポップアップとは別に、いつでも見返せる一覧にする（記録だけのモードでは止める）
+function rmNoticesHtml(rec, AP, today, f7, R){
+  var pl = (S.plan && S.plan.plan) || {};
+  if (rec) return '<div class="note" style="margin:10px 0 0"><b>お知らせ</b>：記録だけのモードのため止めています。</div>';
+  var list = RoadmapLib.advice({ date: today, fat7: f7, decision: pl.roadmapDecision || '', planPhase: pl.phase, floorFat: pl.floorFat }).filter(function(x){ return x.key.indexOf('approach-') !== 0; });
+  if (AP && !AP.reached) list.unshift({ key: 'approach', level: AP.near ? 'good' : 'info', title: AP.near ? '🎯 もうすぐ、次のステップを選ぶ段階です' : '次のステップまで', body: AP.text });
+  var h = '<div style="margin-top:10px"><div class="note" style="margin:0 0 4px"><b>お知らせ</b>（'+list.length+'件）</div>';
+  if (!list.length) return h + '<div class="note" style="margin:0">いまのところ、お知らせはありません。</div></div>';
+  return h + list.map(function(x){
+    var cls = x.level === 'warn' ? 'warn' : x.level === 'good' ? 'good' : 'info';
+    return '<div class="banner '+cls+'" style="margin:0 0 6px"><b>'+esc(x.title)+'</b><div style="margin-top:2px">'+esc(x.body)+'</div></div>';
+  }).join('') + '</div>';
+}
 function renderRoadmap(){
   var el = $('roadmapCard'); if (!el || typeof RoadmapLib === 'undefined') return;
   var RM = RoadmapLib.ROADMAP, today = (S.body && S.body.today) || KT.today(), ctx = rmCtx(today), R = RoadmapLib.resolve(today, ctx);
   var st = rmState(), avg = rmMealAvg(today), h = '<div class="rm"><h3>マスタープラン　'+esc(RM.title)+'<button type="button" class="tlink" data-term="diff">ⓘ 違いと意味</button></h3>';
   var first = RM.phases[0], f7 = ctx.fat7;
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
-  var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : 'first', dis = S.rmBusy ? ' disabled' : '', rec = !!(window.KTAdvice && KTAdvice.isOff());
-  var modeName = { first: '第1期（減量）', advance: '第2期 バルク', maintain: '第2期 維持' }[modeKey];
+  var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : (R.decision === 'shred' || R.decision === 'shred8') ? 'shred' : 'first', dis = S.rmBusy ? ' disabled' : '', rec = !!(window.KTAdvice && KTAdvice.isOff());
+  var modeName = { first: '第1期（減量）', advance: '第2期 バルク', maintain: '第3期 維持・回復', shred: R.decision === 'shred8' ? '第2期 絞り込み（8%）' : '第2期 絞り込み（12%）' }[modeKey];
   h += '<div class="modesw"><div class="note" style="margin:8px 0 4px"><b>いまのモード</b>（押すとすぐ切り替わります。「記録だけ」は助言・判定を止めて記録に集中するモードで、直前の道は覚えています）</div><div class="seg">'
     + '<button type="button" class="'+(rec ? 'on' : '')+'" id="rmGoRec"'+dis+'>記録だけ<small>助言なし</small></button>'
     + '<button type="button" class="'+(!rec && modeKey === 'first' ? 'on' : '')+'" id="rmGo1"'+dis+'>第1期<small>減量</small></button>'
     + '<button type="button" class="'+(!rec && modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期<small>バルク</small></button>'
-    + '<button type="button" class="'+(!rec && modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第2期<small>維持</small></button></div></div>';
+    + '<button type="button" class="'+(!rec && modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第3期<small>維持・回復</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'shred' ? 'on' : '')+'" id="rmGoShred"'+dis+'>第2期<small>絞り込み</small></button></div></div>';
+  var apV = S.V, apN = apV && apV.now, apA = apV && apV.adjust;
+  var AP = rec ? null : RoadmapLib.approach({ decision: R.decision, fat7: f7, weightKg: apN ? apN.weight : null, lossKgPerWeek: apA && apA.expectedLossKgPerWeek > 0 ? apA.expectedLossKgPerWeek : null });
+  h += rmNoticesHtml(rec, AP, today, f7, R);
   if (rec) {
     h += '<div class="banner" style="margin-top:10px">記録だけのモードです（助言のポップアップ・切り替えの案内・今週の判定は止めています）。直前の道は「'+modeName+'」。上のボタンで、いつでも戻せます。</div>';
   } else if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
-      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>維持期（現状維持）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
-      + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／維持期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（消費の75〜90%）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
+      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmGoShred2"'+(S.rmBusy ? ' disabled' : '')+'>第2期（絞り込み 12%）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>第3期（維持・回復）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
+      + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／絞り込み＝赤字を小さくして体脂肪率12%まで落としつつ筋肉を少し増やす道／第3期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（消費の75〜90%）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
   } else if (R.decision === 'hold') {
     h += '<div class="banner warn" style="margin-top:10px">いまのプラン（第1期）を据え置いています。<div class="rowbtns"><button class="btn small primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期へ進む</button></div></div>';
   } else if (R.decision === 'maintain') {
     var pl0 = (S.plan && S.plan.plan) || {};
-    h += '<div class="banner info" style="margin-top:10px">維持期（現状維持）を選んでいます。'+(pl0.phase === 'maintain' ? '減量計画も維持期の設定です。' : '減量計画はまだ減量期の設定です。下のボタンで維持期に切り替えると、食事のカロリーが維持カロリーになります。')
+    h += '<div class="banner info" style="margin-top:10px">第3期（維持・回復）を選んでいます。'+(pl0.phase === 'maintain' ? '減量計画も維持期の設定です。' : '減量計画はまだ減量期の設定です。下のボタンで維持期に切り替えると、食事のカロリーが維持カロリーになります。')
       + '<div class="rowbtns">'+(pl0.phase === 'maintain' ? '' : '<button class="btn small primary" id="rmMaintPlan"'+(S.rmBusy ? ' disabled' : '')+'>減量計画を維持期にする（最低 '+first.targets.fatPct+'%）</button>')+'</div></div>';
+  } else if (R.decision === 'shred' || R.decision === 'shred8') {
+    var s8 = R.decision === 'shred8', sph = s8 ? RM.shred8Phase : RM.shredPhase, reachedS = f7 && f7.avg <= sph.targets.fatPct;
+    h += '<div class="banner '+(reachedS ? 'warn' : 'info')+'" style="margin-top:10px"><b>絞り込み期（体脂肪率 '+sph.targets.fatPct+'%・微増筋）を選んでいます。</b>'
+      + '第1期（減量）より赤字が小さく（消費の'+Math.round(sph.kcalFromEnergy.min*100)+'〜'+Math.round(sph.kcalFromEnergy.max*100)+'%）、たんぱく質は高め、筋トレは落とさず胸・脚のセットを増やします。ペースが遅いので期限は置かず、体脂肪率の到達で判断します。'
+      + (reachedS ? '<br><b>'+sph.targets.fatPct+'% に届きました（直近7日平均 '+f1(f7.avg)+'%）。'+(s8 ? 'ここから減らさず、第3期（維持・回復）に切り替えてください。' : '次は維持にするか、8%を目指すか選んでください。')+'</b>' : '')
+      + '<div class="rowbtns">'+(!s8 && reachedS ? '<button class="btn small primary" id="rmShred8"'+(S.rmBusy ? ' disabled' : '')+'>8%を目指す（仕上げ）</button>' : '')+(s8 ? '<button class="btn small" id="rmShred12"'+(S.rmBusy ? ' disabled' : '')+'>12%の段階に戻す</button>' : '')
+      + (reachedS ? '<button class="btn small" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>第3期（維持・回復）にする</button>' : '')+'</div>'
+      + (!s8 && !reachedS ? '<div class="note">目標の変更（8%など）は、12%に届いた時に選びます。いまは選ばなくて大丈夫です。</div>' : '')
+      + '<div class="note">8%は男性でも体への負担が大きい水準です。睡眠7時間以上・週1回の維持カロリー日・4〜6週ごとの維持期（ダイエットブレイク）を条件にして、届いたら必ず維持へ。</div></div>';
   } else if (R.decision === 'advance') {
     h += '<div class="banner info" style="margin-top:10px">第2期（リーンバルク）に進んでいます。</div>';
   } else if (R.overdue) {
@@ -104,12 +130,12 @@ function renderRoadmap(){
   }
   var enNow = rmEnergy();
   var stNow = rmState();
-  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).map(function(p){ return RoadmapLib.effective(p, enNow, stNow); }).forEach(function(p, i){
+  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).concat(RM.shredPhase ? [RM.shredPhase] : []).concat(RM.shred8Phase ? [RM.shred8Phase] : []).map(function(p){ return RoadmapLib.effective(p, enNow, stNow); }).forEach(function(p, i){
     var now = R.phase.key === p.key;
-    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期のあと、選んだとき' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
+    h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key === 'shred8' ? 'shred' : p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期・第2期のあと、選んだとき' : p.key === 'shred' || p.key === 'shred8' ? '第1期のあと、選んだとき（期限なし）' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
     h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b>'+(p.dynamic ? '<small class="mut" style="display:block;font-size:11px">消費 '+comma(p.dynamic.energyKcal)+'kcal（'+(p.dynamic.basis === 'observed' ? '実測' : '推定')+'）の'+esc(RoadmapLib.kcalRuleText(p).replace('消費の', ''))+(p.dynamic.floored ? '・下限は基礎代謝' : '')+'</small>' : (p.kcalFromEnergy ? '<small class="mut" style="display:block;font-size:11px">消費が分かるまでの控え</small>' : ''))+'</div>'
-      + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>'+(p.dynamicProtein ? '<small class="mut" style="display:block;font-size:11px">除脂肪量 '+p.dynamicProtein.leanKg+'kg×'+p.proteinPerLean.min+'〜'+p.proteinPerLean.max+'g</small>' : ''))+'</div>'
-      + '<div>'+(p.fat ? '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>' : '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>')+'</div></div>';
+      + '<div>'+(p.carbs && p.key.indexOf('shred') !== 0 ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>'+(p.dynamicProtein ? '<small class="mut" style="display:block;font-size:11px">除脂肪量 '+p.dynamicProtein.leanKg+'kg×'+p.proteinPerLean.min+'〜'+p.proteinPerLean.max+'g</small>' : ''))+'</div>'
+      + '<div>'+(p.key.indexOf('shred') === 0 && p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : p.fat ? '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>' : '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>')+'</div></div>';
     h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
     if (p.targets && p.targets.ffmiAdj) h += rmFfmiRow(p.targets.ffmiAdj, st);
     if (now) {
@@ -144,6 +170,10 @@ function renderRoadmap(){
   var g1 = $('rmGo1'); if (g1) g1.onclick = function(){ pick('first', ''); };
   var gb = $('rmGoBulk'); if (gb) gb.onclick = function(){ pick('advance', 'advance'); };
   var gm = $('rmGoMaint'); if (gm) gm.onclick = function(){ pick('maintain', 'maintain'); };
+  var gs2 = $('rmGoShred2'); if (gs2) gs2.onclick = function(){ rmDecide('shred'); };
+  var gs = $('rmGoShred'); if (gs) gs.onclick = function(){ pick('shred', R.decision === 'shred8' ? 'shred8' : 'shred'); };
+  var s12 = $('rmShred12'); if (s12) s12.onclick = function(){ if (R.decision !== 'shred') rmDecide('shred'); };
+  var s8b = $('rmShred8'); if (s8b) s8b.onclick = function(){ if (R.decision !== 'shred8') rmDecide('shred8'); };
 }
 // 計画の点検：記録（消費カロリーの見込み・体組成）とマスタープランの数値が噛み合っているか（RoadmapLib.planCheck。AIは使わない）
 // 消費の見込み（計算の前に使う版）：減量計画の直近の結果（実測ならそれ）→ 基礎代謝×係数。Apps Script の planEnergy_ と同じ順
@@ -173,7 +203,9 @@ function rmCheckHtml(today){
 function rmDecide(d){
   if (S.rmBusy) return;
   S.rmBusy = true; renderRoadmap();
-  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.rmBusy = false; render(); toast(d === 'advance' ? '第2期に進みました。食事の目標も自動で第2期に切り替わります（自動計算のとき）' : d === 'maintain' ? '維持期（現状維持）を選びました。「減量計画を維持期にする」で食事も維持カロリーに切り替わります' : d === 'hold' ? 'いまのプランを据え置きにしました' : '第1期に戻しました'); },
+  // 減量計画の「いまの局面」（減量期／維持期）と最低ラインは、Apps Script の roadmapSet が選択に合わせて揃える
+  KT.call('roadmapSet', d).then(function(r){ S.plan = r; S.ai = null; return KT.call('bodyInit').catch(function(){ return S.body; }); }).then(function(b){ if (b) S.body = b; S.rmBusy = false; render();
+    toast(d === 'advance' ? '第2期に進みました。食事の目標も自動で第2期に切り替わります（自動計算のとき）' : d === 'maintain' ? '第3期（維持・回復）にしました。食事は毎週少しずつ維持カロリーへ戻します' : d === 'hold' ? 'いまのプランを据え置きにしました' : d === 'shred' ? '絞り込み期（体脂肪率12%・微増筋）を選びました。食事の目標も自動で切り替わります（自動計算のとき）' : d === 'shred8' ? '絞り込み期の仕上げ（体脂肪率8%）を選びました。睡眠と回復を優先してください' : '第1期に戻しました'); },
     function(e){ S.rmBusy = false; renderRoadmap(); toast(e.message, true); });
 }
 // 減量計画の「いまの局面」を維持期にする（最低体脂肪率＝第1期の目標）。ほかの設定はそのまま
@@ -302,7 +334,8 @@ function renderHero(){
   var b = V.built, n = V.now, ad = V.adjust, st = STATUS[ad.status] || ['', ''];
   var h = '<h3>目標に対する現在地（直近7日の平均）</h3>';
   if (!n) { el.innerHTML = h + '<div class="empty">直近7日に体組成の測定がありません。測れる時に測ると、ここに現在地が出ます。</div>'; return; }
-  if (V.plan && V.plan.phase === 'maintain') { el.innerHTML = h + maintainHero(V, n, ad, st); return; }
+  if (V.plan && V.plan.phase === 'maintain' && ad.mode !== 'shred') { el.innerHTML = h + maintainHero(V, n, ad, st); return; }
+  if (ad.mode === 'shred') { el.innerHTML = h + shredHero(V, n, ad, st); return; }
   h += dayCountHtml(b, V.today);
   var gap = n.gapKg, band = PL.BAND_KG, pre = PL.toDays(V.today) < PL.toDays(b.startDate);
   var verdict = pre ? '開始前' : (Math.abs(gap) < band ? 'ほぼ計画どおり' : (gap > 0 ? '計画より遅れ' : '計画より先行'));
@@ -337,6 +370,19 @@ function maintainHero(V, n, ad, st){
   return h;
 }
 
+// 絞り込み期：現在 → 目標（12%か8%）。期限は置かず、体脂肪率の直近7日平均で到達を判断する。体重は除脂肪量が変わらない前提で換算
+function shredHero(V, n, ad, st){
+  var dec = (S.plan && S.plan.plan && S.plan.plan.roadmapDecision) || '', goal = ad && ad.floor && ad.floor.floorFat ? ad.floor.floorFat : (dec === 'shred8' ? 8 : 12);
+  var h = '<div class="top"><div class="big num">'+f1(n.fat)+'<small>%</small></div><span class="chip '+st[1]+'">'+(st[0] || '絞り込み期')+'</span></div>';
+  h += '<div style="font-size:14px;margin-top:6px;color:var(--ink-2)">絞り込み期：目標 <b class="num">'+f1(goal)+'%</b>（あと <b class="num">'+f1(n.fat - goal)+'%</b>）。期限は置きません。</div>';
+  if (n.weight != null && n.fat != null && n.fat > goal) {
+    var lean = n.weight * (1 - n.fat / 100), gw = lean / (1 - goal / 100), tl = n.weight - gw, wk = ad && ad.expectedLossKgPerWeek > 0 ? tl / ad.expectedLossKgPerWeek : null;
+    h += '<div class="kv"><div><b class="num">'+f1(tl)+'kg</b><span>目標までに落とす脂肪（筋肉を保つ前提）</span></div><div><b class="num">'+f1(gw)+'kg</b><span>目標のときの体重の目安</span></div><div><b class="num">'+(wk ? '約'+Math.round(wk)+'週' : '－')+'</b><span>今の赤字のままの見込み</span></div></div>';
+  }
+  h += '<div class="note">赤字は第1期より小さく、筋トレの出力と回復を守りながらゆっくり落とします。判断は日ではなく直近7日の平均で。除脂肪量が1か月続けて下がるときは、食事を範囲の上寄りに戻してください。</div>';
+  return h;
+}
+
 function renderAdjust(){
   var V = S.V, el = $('adjustCard');
   if (!V || !V.configured || !V.adjust) { el.style.display = 'none'; return; }
@@ -344,7 +390,7 @@ function renderAdjust(){
   var ai = S.ai, ad = ai ? ai.adjust : V.adjust, st = STATUS[ad.status] || ['', ''];
   var from = ai ? ai.effectiveFrom : PL.nextMonday(V.today);
   var bulkM = ad.mode === 'bulk', maintM = ad.mode === 'maintain', off = window.KTAdvice && KTAdvice.isOff();
-  var modeTx = bulkM ? '第2期バルク' : maintM ? '第2期 維持' : '第1期（減量）';
+  var modeTx = bulkM ? '第2期バルク' : maintM ? '第3期 維持・回復' : ad.mode === 'shred' ? '第2期 絞り込み（'+(ad.floor && ad.floor.floorFat ? ad.floor.floorFat : (S.plan && S.plan.plan && S.plan.plan.roadmapDecision === 'shred8' ? 8 : 12))+'%）' : '第1期（減量）';
   var h = '<h3>次週のカロリー調整（'+mdw(from)+'から）</h3>';
   h += '<div class="note" style="margin:0 0 8px">モード：<b>'+modeTx+'</b>'+(ad.range ? '（目標の範囲 '+comma(ad.range.min)+'〜'+comma(ad.range.max)+'kcal）' : '')+(off ? ' ／ 記録だけのモード：自動では変えません' : ' ／ 毎週、先週の記録で自動採用されます')+'</div>';
   var al = S.plan && S.plan.autoLast;
@@ -362,6 +408,7 @@ function renderAdjust(){
     h += '<div><span class="chip '+st[1]+'">'+st[0]+'</span></div>';
   }
   if (ad.reasons && ad.reasons.length) h += '<ul class="reasons">'+ad.reasons.map(function(r){ return '<li>'+esc(r)+'</li>'; }).join('')+'</ul>';
+  if (ad.recovery) h += '<div class="banner good" style="margin-top:10px"><b>第3期の回復：'+comma(ad.recovery.fromKcal)+' → '+comma(ad.recovery.toKcal)+'kcal（毎週+'+ad.recovery.stepKcal+'kcal、あと約'+ad.recovery.weeksLeft+'週）</b></div>';
   if (ad.leanWarning) h += '<div class="banner warn" style="margin-top:10px">'+esc(ad.leanWarning)+'</div>';
   if (ad.actual && ad.actual.weeklyGainPct != null) h += '<div class="note">実績（直近'+ad.actual.spanDays+'日の傾向）：体重が週 '+f2(ad.actual.weeklyGainKg)+'kg（'+f2(ad.actual.weeklyGainPct)+'%）のペースで増加。目安は週0.25〜0.5%です。</div>';
   else if (ad.actual) h += '<div class="note">実績（直近'+ad.actual.spanDays+'日の傾向）：脂肪が週 '+f2(ad.actual.weeklyLossKg)+'kg のペースで減少、平均摂取 '+comma(ad.actual.avgIntake)+'kcal。期間が短いほど誤差は大きくなります。</div>';

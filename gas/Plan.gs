@@ -32,14 +32,26 @@ function planPausesRead_() {
   try { return PlanLib.cleanPauses(JSON.parse(PropertiesService.getScriptProperties().getProperty('PLAN_PAUSES') || '[]')); } catch (e) { return []; }
 }
 
-/** マスタープランの選択：''＝未選択／'advance'＝第2期へ進む／'maintain'＝維持期（現状維持）／'hold'＝いまのプラン（第1期）を据え置く */
+/** マスタープランの選択：''＝未選択／'advance'＝第2期へ進む／'maintain'＝維持期（現状維持）／'shred'＝絞り込み期（体脂肪率12%・微増筋）／'shred8'＝絞り込み期の仕上げ（8%）／'hold'＝いまのプラン（第1期）を据え置く */
 function roadmapDecisionRead_() {
   var v = PropertiesService.getScriptProperties().getProperty('ROADMAP_DECISION');
-  return v === 'advance' || v === 'hold' || v === 'maintain' ? v : '';
+  return v === 'advance' || v === 'hold' || v === 'maintain' || v === 'shred' || v === 'shred8' ? v : '';
 }
 function roadmapSet(d) {
-  var v = d === 'advance' || d === 'hold' || d === 'maintain' ? d : '';
-  PropertiesService.getScriptProperties().setProperty('ROADMAP_DECISION', v);
+  var v = d === 'advance' || d === 'hold' || d === 'maintain' || d === 'shred' || d === 'shred8' ? d : '';
+  var pr = PropertiesService.getScriptProperties(), prev = roadmapDecisionRead_(), RM = RoadmapLib.ROADMAP;
+  // 減量計画の「いまの局面」を、マスタープランの選択と揃える（どちらか片方だけ変わって食い違わないように）
+  if (v === 'maintain') {
+    // 第3期：最低ライン＝直前の道の目標（絞り込み12%／8%から来たらその値、それ以外は今の設定か第1期の目標）
+    var fl = prev === 'shred8' ? RM.shred8Phase.targets.fatPct : prev === 'shred' ? RM.shredPhase.targets.fatPct : (Number(pr.getProperty('PLAN_FLOOR_FAT')) || RM.phases[0].targets.fatPct);
+    pr.setProperty('PLAN_PHASE', 'maintain');
+    pr.setProperty('PLAN_FLOOR_FAT', String(fl));
+  } else if (pr.getProperty('PLAN_PHASE') === 'maintain') {
+    // 第3期から別の道へ：減量計画も減量期に戻す（最低ラインは各期の目標が引き継ぐ）
+    pr.setProperty('PLAN_PHASE', 'cut');
+    pr.setProperty('PLAN_FLOOR_FAT', '');
+  }
+  pr.setProperty('ROADMAP_DECISION', v);
   return planGet();
 }
 

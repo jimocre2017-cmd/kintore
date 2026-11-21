@@ -51,20 +51,67 @@ var RoadmapLib = (function () {
     ],
     // 第1期のあとの「もう一つの道」＝現状維持。本人が選んだときだけ使う（日付では入らない）。カロリーは固定せず、減量計画の維持期（体重から計算した維持カロリー）に任せる
     maintainPhase: {
-      key: 'maintain', label: '第2期（もう一つの道）：維持期（現状維持）',
+      key: 'maintain', label: '第3期：維持・回復期',
       from: null, to: null, approx: true,
       kcal: null,
       protein: { min: 120, max: 130 },
       fat: { min: 40, max: 50 },
       carbs: null,
       training: [
-        '第1期で作った筋肉と体脂肪率を保つ（重さ・セット数は落とさず、無理に増やさない）',
+        '最初の数週は「回復」：減量中の食事から維持カロリーまで、毎週+100kcalずつ戻す（一気に戻さない）',
+        '第1期・第2期で作った筋肉と体脂肪率を保つ（重さ・セット数は落とさず、無理に増やさない）',
         '有酸素は週1〜2回に減らし、回復を優先',
         '体脂肪率は「最低ライン〜許容帯の上限」で見守る（減量計画の維持期の設定）'
       ],
       cardio: { speedMin: null, speedMax: null, perWeek: { min: 1, max: 2 } },
       sets: null,
       targets: { fatPct: null, leanKg: null, weightKg: null, ffmiAdj: null }
+    },
+    // 絞り込み期（2026-11-22 追加）：第1期（減量）のあとの「もう一つの道」。体脂肪率を12%→8%まで落としつつ、筋肉をわずかに増やす。本人が選んだときだけ使う（日付では入らない）。
+    //  減量期（第1期）との違い：赤字を小さく（消費の90〜97%＝不足3〜10%。第1期は不足10〜25%）／たんぱく質を高く（除脂肪量×2.5〜3.3g）／炭水化物の下限を設けて筋トレの出力を守る／
+    //  筋トレは落とさず胸・脚のセットを増やし、重さ・レップを少しずつ伸ばす／有酸素は週2〜3回に絞る／ペースが遅いので期限は置かない（体脂肪率の到達で判断）
+    //  カロリー・たんぱく質・脂質・炭水化物は RoadmapLib.effective で計算。下の kcal は消費が分からないときは持たない（維持期と同じ扱い）。根拠と注意点は docs/references.md
+    shredPhase: {
+      key: 'shred', label: '第2期（選ぶ道）：絞り込み期（体脂肪率12%・微増筋）',
+      from: null, to: null, approx: true,
+      kcalFromEnergy: { min: 0.90, max: 0.97 },
+      proteinPerLean: { min: 2.5, target: 2.8, max: 3.3 },
+      fatFromKcal: true,
+      kcal: null,
+      protein: { min: 130, max: 150 },
+      fat: { min: 40, max: 60 },
+      carbs: { min: 160, max: 260 }, carbsMaxPct: 0.5,
+      training: [
+        '筋トレは落とさず、重さとレップを少しずつ伸ばす（レップの上限に届いたら次の重さへ）。狙いは月+0.1〜0.2kg程度の「微増筋」',
+        '大胸筋（週10〜12セット）と脚（週8〜10セット）を最優先。プレス前の肩インナー（E009／E014）は必須で固定',
+        '有酸素は週2〜3回、時速5.0〜5.4km（右足首・すねを守る）。赤字は小さく保ち、筋トレ後の回復を削らない',
+        '体脂肪率の直近7日平均が12%に届いたら、第3期（維持・回復）か「絞り込み（8%）」を選ぶ。急がず、期限は置かない'
+      ],
+      cardio: { speedMin: null, speedMax: null, perWeek: { min: 2, max: 3 } },
+      sets: { chest: { min: 10, max: 12 }, legs: { min: 8, max: 10 } },
+      targets: { fatPct: 12, leanKg: null, weightKg: null, ffmiAdj: null }
+    },
+    // 絞り込み期の8%ステージ。男性でも8%は体への負担が大きい水準なので、赤字をさらに小さく（消費の92〜98%）、たんぱく質を最も高くし、休息日・ダイエットブレイク・睡眠を条件にする。到達したら必ず維持へ
+    shred8Phase: {
+      key: 'shred8', label: '第2期（選ぶ道）：絞り込み期・仕上げ（体脂肪率8%・微増筋）',
+      from: null, to: null, approx: true,
+      kcalFromEnergy: { min: 0.92, max: 0.98 },
+      proteinPerLean: { min: 2.6, target: 3.0, max: 3.3 },
+      fatFromKcal: true,
+      kcal: null,
+      protein: { min: 135, max: 155 },
+      fat: { min: 40, max: 60 },
+      carbs: { min: 160, max: 260 }, carbsMaxPct: 0.5,
+      training: [
+        '筋トレは落とさず、重さとレップを少しずつ伸ばす。ここでの微増筋は「減らさずに少し乗る」くらいで十分（月+0.1kg前後）',
+        '大胸筋（週10〜12セット）と脚（週8〜10セット）を最優先。肩インナー（E009／E014）は必須',
+        '有酸素は週2〜3回、時速5.0〜5.4km。睡眠は7時間以上を条件にし、足りない週は赤字を作らない',
+        '週1回は維持カロリー（消費と同じ量）の日を入れ、4〜6週ごとに1週間は維持期に戻す（ダイエットブレイク）',
+        '8%に届いたら、それ以上は減らさず必ず維持へ。8%は長く保つ水準ではなく、短期間の仕上げとして使う'
+      ],
+      cardio: { speedMin: null, speedMax: null, perWeek: { min: 2, max: 3 } },
+      sets: { chest: { min: 10, max: 12 }, legs: { min: 8, max: 10 } },
+      targets: { fatPct: 8, leanKg: null, weightKg: null, ffmiAdj: null }
     },
     rules: [
       '大筋群（胸・脚）の週間セット数を貯金する。気まぐれな日でも、まず胸（ダンベルプレス・インクライン・プッシュアッププラス）と脚（スクワット・ブルガリアン）から消化する。背中・腕は維持に留める',
@@ -171,7 +218,8 @@ var RoadmapLib = (function () {
 
   function phaseFor(o, rm) {
     var r = resolve(o.date || '2026/11/18', { decision: o.decision, fat7: o.fat7 }, rm);
-    var maint = o.decision === 'maintain' || o.planPhase === 'maintain';
+    var shred = o.decision === 'shred' || o.decision === 'shred8';
+    var maint = o.decision === 'maintain' || (o.planPhase === 'maintain' && !shred);
     return { phase: maint && rm.maintainPhase ? rm.maintainPhase : r.phase, maintain: maint, resolved: r };
   }
 
@@ -244,7 +292,24 @@ var RoadmapLib = (function () {
         }
       }
     }
-    if (second && second.kcal) {
+    var sk = pf.phase.key;
+    if (sk === 'shred' || sk === 'shred8') {
+      var sh = pf.phase, se = effective(sh, o.energy, s), sgoal = sh.targets.fatPct, scm = mid(se.kcal, 10), sdef = E - scm, sloss = sdef * 7 / 7200;
+      if (se.dynamic) out.push({ key: 'shred-range', level: 'ok', title: '絞り込み期のカロリーは' + kcalRuleText(se) + 'に自動で合わせます',
+        body: 'いまの消費の見込み ' + E + 'kcal' + ebasis + 'なら、1日の範囲は ' + se.kcal.min + '〜' + se.kcal.max + 'kcal（炭水化物 ' + se.carbs.min + '〜' + se.carbs.max + 'g' + (se.dynamicProtein ? '、たんぱく質 ' + se.protein.min + '〜' + se.protein.max + 'g' : '') + '）。第1期（減量）より赤字が小さく、筋トレの出力と回復を守りながらゆっくり落とします。' + (se.dynamic.floored ? '下限は基礎代謝（' + se.dynamic.floorKcal + 'kcal）を割らないように止めています。' : '') });
+      if (sdef < 50) out.push({ key: 'shred-deficit', level: 'warn', title: '絞り込み期のカロリーでは、ほとんど減りません', body: '消費の見込み ' + E + 'kcal' + ebasis + 'に対して、範囲の中央 ' + scm + 'kcal では1日 ' + sdef + 'kcal の赤字しかありません。基礎代謝に近く食事で赤字を作る余地が小さい状態です。有酸素を週2〜3回きちんと入れるか、記録（消費の見込み）を見直してください。' });
+      if (s.weightKg > 0 && s.fatPct > 0 && sgoal) {
+        var slean = s.weightKg * (1 - s.fatPct / 100), sgw = slean / (1 - sgoal / 100), stl = s.weightKg - sgw;
+        if (stl > 0 && sloss > 0) {
+          var seta = fromDays(toDays(o.date || '2026/11/18') + Math.round(stl / sloss * 7));
+          out.push({ key: 'shred-pace', level: 'info', title: '体脂肪率 ' + sgoal + '% までの見込み',
+            body: '筋肉を保つ前提で、体重 約' + r1(sgw) + 'kg（あと ' + r1(stl) + 'kg）。範囲の中央 ' + scm + 'kcal なら週 約' + Math.round(sloss * 100) / 100 + 'kg 減で、到達は ' + seta + ' ごろの見込み。ペースが遅いのは設計どおりです（赤字が大きいと筋肉が落ち、微増筋になりません）。期限は置きません。' });
+        }
+      }
+      out.push({ key: 'shred-lean', level: 'info', title: '「微増筋」の現実的な目安', body: '赤字の中で筋肉が増えるのは、筋トレ歴が浅い・ブランク明け・体脂肪が多めの人ほど出やすく、鍛え込んだ人は「減らさない」が上限になりがちです。目安は月+0.1〜0.2kg。体組成計の除脂肪量は日々ぶれるので、7日平均が1か月続けて下がるときは、食事を範囲の上寄りに戻してください。' });
+      if (sk === 'shred8') out.push({ key: 'shred-8warn', level: 'warn', title: '体脂肪率8%は、期間を区切って使う水準です', body: '男性でも8%付近まで落とすと、睡眠の質・疲労・免疫・ホルモン・気分に影響が出やすくなります。睡眠7時間以上、週1回の維持カロリー日、4〜6週ごとの1週間の維持期（ダイエットブレイク）を入れ、8%に届いたら減らさず維持へ。体調が崩れたらすぐ維持期に戻してください（持病・服薬がある場合は医師に相談を）。' });
+    }
+    if (second && second.kcal && (inFirst || o.decision === 'advance')) { // バルクの点検は、第1期（次の候補）かバルク中だけ
       var sp = effective(second, { kcal: E, basis: o.energy.basis }), sur = sp.kcal.max - E, decided = o.decision === 'advance';
       if (sp.dynamic) out.push({ key: 'bulk-surplus', level: 'ok', title: '第2期バルクは消費の+5〜10%に自動で合わせます',
         body: 'いまの消費の見込み ' + E + 'kcal' + ebasis + 'なら、第2期のカロリーは ' + sp.kcal.min + '〜' + sp.kcal.max + 'kcal（炭水化物 ' + sp.carbs.min + '〜' + sp.carbs.max + 'g）。第2期に入った時点の消費に合わせて動きます。' });
@@ -321,6 +386,15 @@ var RoadmapLib = (function () {
       legs:    { under: '', over: '' },
       cardio:  { under: '有酸素の記録がありません。週1回は入れて、心肺と回復を保ってください。', over: '有酸素が多めです。維持期は回復を優先し、週1〜2回に収めてください。' }
     },
+    shred: {
+      kcal:    { under: '食事が少なすぎます。絞り込み期の赤字は小さく保つ設計です。下限まで戻さないと筋トレの出力と回復が落ちます。', over: '食事が多めで、体脂肪が減りにくい状態です。間食と脂質から調整してください。' },
+      protein: { under: 'たんぱく質が足りません。赤字の中で筋肉を増やすには最優先です。1日の中で足す場所（朝・間食）を決めて補ってください。', over: 'たんぱく質が多めです。カロリーの枠（特に炭水化物）を圧迫していないか確認してください。' },
+      fat:     { under: '脂質が少なすぎます。下限は守ってください（ホルモンと満足感のため）。', over: '脂質でカロリーの枠を使いすぎています。炭水化物とたんぱく質を優先してください。' },
+      carbs:   { under: '炭水化物が足りません。筋トレの出力と回復を守るため、下限までは確保してください（特に筋トレの前後）。', over: '炭水化物が多めです。上限に収めてください。' },
+      chest:   { under: '胸のセット数が足りません。微増筋にはボリュームが要ります。まず胸から消化してください。', over: '胸のやり過ぎです。右肩の保護と回復を優先し、数日は減らしてください。' },
+      legs:    { under: '脚のセット数が足りません。スクワット・ブルガリアンを優先して貯金してください。', over: '脚のやり過ぎです。回復を優先し、数日は減らしてください。' },
+      cardio:  { under: '有酸素が少なめです。週2回は入れて、赤字を食事だけに頼らないようにしてください。', over: '有酸素が多すぎます。回復が追いつかず筋肉が落ちやすいので、週2〜3回に収めてください。' }
+    },
     leanbulk: {
       kcal:    { under: '食事が少なく、増量が進みません。下限まで増やしてください（炭水化物から）。', over: '食事が多すぎます。脂肪が付きやすくなるので、上限に収めてください。' },
       protein:  { under: '', over: '' },
@@ -331,6 +405,7 @@ var RoadmapLib = (function () {
       cardio:  { under: '有酸素が少なすぎます。週1回は入れて、心肺と回復を保ってください。', over: '有酸素が多すぎます。回復と筋肥大を優先して、週1〜2回に減らしてください。' }
     }
   };
+  ADVICE.shred8 = ADVICE.shred;
   var BAL_LABEL = { kcal: ['カロリー', 'kcal'], protein: ['たんぱく質', 'g'], fat: ['脂質', 'g'], carbs: ['炭水化物', 'g'], chest: ['胸のセット数', 'セット'], legs: ['脚のセット数', 'セット'], cardio: ['有酸素', ''] };
 
   /* d＝{meal:{kcal,protein,fat,carbs}|null（直近7日の平均）, sets:{chest,legs}|null（直近7日のセット数）, cardio:cardioCheck の結果|null}
@@ -378,16 +453,17 @@ var RoadmapLib = (function () {
   }
 
   /* いまどの期のプランで動くか。第1期の体脂肪率目標に、直近7日平均で届いたら「選ぶ」状態になる。自動では切り替えない。
-     ctx＝{fat7, decision}。decision：''＝未選択（第1期のまま）／'advance'＝第2期へ進む／'maintain'＝維持期（現状維持）にする／'hold'＝いまのプラン（第1期）を据え置く
+     ctx＝{fat7, decision}。decision：''＝未選択（第1期のまま）／'advance'＝第2期へ進む／'maintain'＝第3期（維持・回復）にする／'hold'＝いまのプラン（第1期）を据え置く
      戻り値 {phase, index, ready, decision, needChoice, overdue} */
   function resolve(date, ctx, rm) {
     rm = rm || ROADMAP; ctx = ctx || {};
-    var first = rm.phases[0], dec = ctx.decision === 'advance' || ctx.decision === 'hold' || ctx.decision === 'maintain' ? ctx.decision : '';
+    var first = rm.phases[0], dec = ctx.decision === 'advance' || ctx.decision === 'hold' || ctx.decision === 'maintain' || ctx.decision === 'shred' || ctx.decision === 'shred8' ? ctx.decision : '';
     var goal = first.targets.fatPct, f = ctx.fat7;
     var ready = !!(f && goal != null && f.avg <= goal);
-    var idx = dec === 'advance' || dec === 'maintain' ? 1 : 0;
+    var idx = dec === 'advance' || dec === 'maintain' || dec === 'shred' || dec === 'shred8' ? 1 : 0;
+    var shred = dec === 'shred' && rm.shredPhase ? rm.shredPhase : dec === 'shred8' && rm.shred8Phase ? rm.shred8Phase : null;
     return {
-      phase: dec === 'maintain' && rm.maintainPhase ? rm.maintainPhase : rm.phases[idx], index: idx, ready: ready, decision: dec,
+      phase: shred || (dec === 'maintain' && rm.maintainPhase ? rm.maintainPhase : rm.phases[idx]), index: idx, ready: ready, decision: dec,
       needChoice: idx === 0 && ready && dec === '',
       overdue: idx === 0 && !ready && toDays(date) > toDays(first.to)
     };
@@ -400,10 +476,11 @@ var RoadmapLib = (function () {
   function advice(ctx, rm) {
     rm = rm || ROADMAP; ctx = ctx || {};
     var out = [], first = rm.phases[0], goal = first.targets.fatPct, f = ctx.fat7, r = resolve(ctx.date || '2026/11/18', ctx, rm);
-    var maintMode = ctx.decision === 'maintain' || ctx.planPhase === 'maintain';
+    var shredMode = ctx.decision === 'shred' || ctx.decision === 'shred8';
+    var maintMode = ctx.decision === 'maintain' || (ctx.planPhase === 'maintain' && !shredMode); // 絞り込みを選んでいれば、計画が維持期の設定でも絞り込み（phaseFor・adjustCfg と同じ優先順）
     var avg = f ? f.avg : null;
     if (r.needChoice && !maintMode) {
-      out.push({ key: 'choose', level: 'info', title: '第1期の目標に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + goal + '%）になりました。次の道を選んでください：第2期のバルク（増量）／維持（現状維持）／据え置き。減量計画の「いまの道」で切り替えられます。' });
+      out.push({ key: 'choose', level: 'info', title: '第1期の目標に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + goal + '%）になりました。次の道を選んでください：第2期のバルク（増量）／第2期の絞り込み（体脂肪率12%・微増筋）／第3期（維持・回復）／据え置き。減量計画の「いまの道」で切り替えられます。' });
     }
     if (maintMode && avg != null) {
       var floor = Number(ctx.floorFat) > 0 ? Number(ctx.floorFat) : goal, upper = r1(floor + MAINT_BAND_PCT);
@@ -411,22 +488,66 @@ var RoadmapLib = (function () {
       else if (avg < floor) out.push({ key: 'maint-below', level: 'warn', title: '最低ラインを下回りました', body: '体脂肪率が直近7日平均で ' + avg + '%。最低ライン ' + floor + '% を下回っています。維持カロリーより少し多めに食べて、筋量を守ってください。' });
     }
     if (ctx.decision === 'advance' && avg != null && goal != null && avg > goal + BULK_OVER_PCT) {
-      out.push({ key: 'bulk-over', level: 'warn', title: '脂肪が乗りすぎています', body: '体脂肪率が直近7日平均で ' + avg + '%。第1期の目標（' + goal + '%）より ' + r1(avg - goal) + '% 高くなりました。バルクの食事を少し控えるか、維持（現状維持）に切り替える、または第1期に戻す目安です。' });
+      out.push({ key: 'bulk-over', level: 'warn', title: '脂肪が乗りすぎています', body: '体脂肪率が直近7日平均で ' + avg + '%。第1期の目標（' + goal + '%）より ' + r1(avg - goal) + '% 高くなりました。バルクの食事を少し控えるか、第3期（維持・回復）に切り替える、または第1期に戻す目安です。' });
+    }
+    var ap = approach(ctx, rm);
+    if (ap && ap.near && !ap.reached && !(maintMode)) out.push({ key: 'approach-' + ap.kind, level: 'info', title: 'もうすぐ、次のステップを選ぶ段階です', body: ap.text });
+    if (ctx.decision === 'shred' && avg != null && avg <= rm.shredPhase.targets.fatPct) {
+      out.push({ key: 'shred-reached', level: 'info', title: '絞り込み（12%）に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + rm.shredPhase.targets.fatPct + '%）になりました。次を選んでください：さらに8%を目指す（「絞り込み 8%」）／第3期（維持・回復）。維持にするときは、減量計画の最低体脂肪率を ' + rm.shredPhase.targets.fatPct + '% にしてください。8%を目指す場合は、睡眠・疲労・コンディションが良好なことが条件です。' });
+    }
+    if (ctx.decision === 'shred8' && avg != null && avg <= rm.shred8Phase.targets.fatPct) {
+      out.push({ key: 'shred8-reached', level: 'warn', title: '絞り込み（8%）に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + rm.shred8Phase.targets.fatPct + '%）。ここから減らさず、第3期（維持・回復）に切り替えてください。減量計画の最低体脂肪率は ' + rm.shred8Phase.targets.fatPct + '〜' + (rm.shred8Phase.targets.fatPct + 2) + '% を目安に。8%は長く保つ水準ではないので、慣れたら少し戻して構いません。' });
+    }
+    if ((ctx.decision === 'shred' || ctx.decision === 'shred8') && avg != null) {
+      var sg = (ctx.decision === 'shred8' ? rm.shred8Phase : rm.shredPhase).targets.fatPct;
+      if (avg < sg - 1) out.push({ key: 'shred-below', level: 'warn', title: '目標より下がりすぎています', body: '体脂肪率が直近7日平均で ' + avg + '%。目標 ' + sg + '% を1%以上下回っています。食事を維持カロリー付近まで戻し、第3期（維持・回復）に切り替える目安です。' });
     }
     if (r.overdue) out.push({ key: 'overdue', level: 'info', title: '第1期の期限を過ぎました', body: '期限（' + first.to + '）を過ぎましたが、体脂肪率 ' + goal + '% にはまだ届いていません。期限の見直しは総合コーチに相談できます。' });
     return out;
   }
 
+  /* ---- 「次のステップを選ぶ段階」まであとどれくらいか（第1期→第2期、絞り込み12%→8%／維持）。
+     ctx＝{decision, fat7:{avg,days}|null, weightKg, lossKgPerWeek}（体重と週の減少量は、あれば見込みの週数に使う）
+     戻り値 null（判断できない／今の道に選ぶ段階が無い）または {kind:'cut'|'shred'|'shred8', goal, avg, gap, weeks, near, reached, next, text}
+     near＝あと体脂肪率2%以内、または見込み4週以内。reached＝もう届いている（選ぶ段階）。 */
+  var APPROACH_PCT = 2, APPROACH_WEEKS = 4;
+  function approach(ctx, rm) {
+    rm = rm || ROADMAP; ctx = ctx || {};
+    var dec = ctx.decision, f = ctx.fat7, kind, goal, next;
+    if (!f || f.avg == null) return null;
+    if (dec === 'shred') { kind = 'shred'; goal = rm.shredPhase.targets.fatPct; next = '維持にするか、8%を目指すか'; }
+    else if (dec === 'shred8') { kind = 'shred8'; goal = rm.shred8Phase.targets.fatPct; next = '維持（これ以上は減らさない）'; }
+    else if (dec === '' || dec === 'hold' || dec == null) { kind = 'cut'; goal = rm.phases[0].targets.fatPct; next = '第2期（バルク・維持・絞り込み）のどれにするか'; }
+    else return null;
+    if (goal == null) return null;
+    var gap = r1(f.avg - goal), weeks = null;
+    if (gap <= 0) return { kind: kind, goal: goal, avg: f.avg, gap: gap, weeks: 0, near: false, reached: true, next: next, text: '体脂肪率 ' + goal + '% に届きました。次のステップを選ぶ段階です：' + next + '。' };
+    var w = Number(ctx.weightKg), loss = Number(ctx.lossKgPerWeek);
+    if (w > 0 && loss > 0 && f.avg > 0 && f.avg < 100) {
+      var lean = w * (1 - f.avg / 100), toLose = w - lean / (1 - goal / 100);
+      if (toLose > 0) weeks = Math.max(1, Math.ceil(toLose / loss));
+    }
+    var near = gap <= APPROACH_PCT || (weeks != null && weeks <= APPROACH_WEEKS);
+    var pace = weeks != null ? '（今のペースで約' + weeks + '週間後）' : '';
+    var text = near
+      ? 'もうすぐ、次のステップを選ぶ段階です。目標の ' + goal + '% まで あと ' + gap + '%' + pace + '。ここまで積み上げてきた成果です。届いたら「' + next + '」を選びます。'
+      : '次のステップ（' + next + '）を選ぶ段階まで、あと体脂肪率 ' + gap + '%' + pace + '。';
+    return { kind: kind, goal: goal, avg: f.avg, gap: gap, weeks: weeks, near: near, reached: false, next: next, text: text };
+  }
+
   /* 次週のカロリー調整（PlanLib.adjust）に渡す設定。モードはマスタープランの選択で決まる：
-     ''/'hold'＝第1期（減量）、'advance'＝第2期バルク、'maintain'（または減量計画が維持期）＝維持。
+     ''/'hold'＝第1期（減量）、'advance'＝第2期バルク、'shred'／'shred8'＝絞り込み期（12%／8%）、'maintain'（または減量計画が維持期）＝維持。
      kcalMin/kcalMax＝そのモードの目標カロリーの範囲（維持は範囲なし＝0）。floorFat＝維持期の最低ラインの既定（第1期の体脂肪率目標） */
   function adjustCfg(decision, planPhase, rm, body, en) {
     rm = rm || ROADMAP; body = body || {};
-    var mode = decision === 'maintain' || planPhase === 'maintain' ? 'maintain' : decision === 'advance' ? 'bulk' : 'cut';
-    var ph = effective(mode === 'maintain' ? (rm.maintainPhase || rm.phases[0]) : mode === 'bulk' ? rm.phases[1] : rm.phases[0], en, body);
+    var shred = decision === 'shred' || decision === 'shred8';
+    var mode = decision === 'maintain' || (planPhase === 'maintain' && !shred) ? 'maintain' : decision === 'advance' ? 'bulk' : shred ? 'shred' : 'cut';
+    var sp = decision === 'shred8' ? rm.shred8Phase : rm.shredPhase;
+    var ph = effective(mode === 'maintain' ? (rm.maintainPhase || rm.phases[0]) : mode === 'bulk' ? rm.phases[1] : mode === 'shred' && sp ? sp : rm.phases[0], en, body);
     var k = mode === 'maintain' ? null : ph.kcal, pr = proteinFor(ph, body.weightKg, body.fatPct);
     // protein：その期のたんぱく質の範囲（食事の目標・総合コーチと同じ）。体組成が無く期にも数値が無いときは null
-    return { mode: mode, kcalMin: k ? k.min : 0, kcalMax: k ? k.max : 0, floorFat: rm.phases[0].targets.fatPct || 0, protein: pr ? { min: pr.min, target: pr.target, max: pr.max } : null };
+    // floorFat：絞り込み期は、その段階の目標（12%か8%）。減量計画の「最低ライン」として、届いたらそれ以上は減らさない
+    return { mode: mode, recover: mode === 'maintain', kcalMin: k ? k.min : 0, kcalMax: k ? k.max : 0, floorFat: mode === 'shred' && sp ? sp.targets.fatPct : rm.phases[0].targets.fatPct || 0, protein: pr ? { min: pr.min, target: pr.target, max: pr.max } : null };
   }
 
   /* AI（総合コーチ・AIトレーナー）に渡す要約。AIはこの数値を引用するだけで、再計算しない */
@@ -436,8 +557,8 @@ var RoadmapLib = (function () {
     var r = resolve(date, ctx, rm), p = effective(r.phase, en, state), next = rm.phases[r.index + 1] ? effective(rm.phases[r.index + 1], en, state) : null;
     return {
       title: rm.title, decidedAt: rm.decidedAt, today: date,
-      nowPhase: p.label, nowPhaseKey: p.key, phaseEnd: p.to, phaseEndApprox: !!p.approx, daysLeftInPhase: toDays(p.to) - toDays(date),
-      switchRule: '第1期の体脂肪率目標に直近7日平均で届いたら、本人が「第2期（リーンバルク）へ進む」「維持期（現状維持）にする」「いまのプランを据え置く」のどれかを選ぶ（日付では自動で切り替わらない）',
+      nowPhase: p.label, nowPhaseKey: p.key, phaseEnd: p.to, phaseEndApprox: !!p.approx, daysLeftInPhase: p.to ? toDays(p.to) - toDays(date) : null, // 第3期・絞り込みは期限なし
+      switchRule: '第1期の体脂肪率目標に直近7日平均で届いたら、本人が「第2期（リーンバルク）へ進む」「第3期（維持・回復）にする」「いまのプランを据え置く」のどれかを選ぶ。さらに体脂肪率を下げたいときは「絞り込み期（12%→8%・微増筋）」も選べる（日付では自動で切り替わらない）',
       fat7: ctx && ctx.fat7 ? ctx.fat7 : null,
       reachedFirstPhaseGoal: r.ready, userChoice: r.decision || '未選択', waitingForUserChoice: r.needChoice, pastPhaseEndWithoutReaching: r.overdue,
       nextPhase: next ? { label: next.label, kcal: next.kcal, carbs: next.carbs, targets: next.targets } : null,
@@ -451,6 +572,6 @@ var RoadmapLib = (function () {
     };
   }
 
-  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, approach: approach, APPROACH_PCT: APPROACH_PCT, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;
