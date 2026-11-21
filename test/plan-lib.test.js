@@ -271,7 +271,10 @@ t('たんぱく質：マスタープランの期の範囲を使う（無けれ�
   var R = require('../roadmap-lib.js');
   var s = synth({ days: 35, tdee: 2400, avgIntake: 1850, intake: [1850] });
   var v = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: R.adjustCfg('', 'cut', null, { weightKg: 65, fatPct: 25 }) } });
-  assert.deepStrictEqual(v.adjust.protein, { minG: 120, targetG: 125, maxG: 130 });
+  assert.deepStrictEqual(v.adjust.protein, { minG: 112, targetG: 127, maxG: 151 }, '第1期：除脂肪量（65kg×75%）×2.3〜3.1g');
+  var v3 = run(s, { plan: { goalFat: 12, startDate: '2026/11/09', weeklyLossKg: 0.5, roadmap: R.adjustCfg('', 'cut', null, { weightKg: 65, fatPct: 25 }, { kcal: 2400 }) } });
+  assert.deepStrictEqual(v3.adjust.range, { min: 1800, max: 2160 }, '第1期のカロリー範囲は消費2400の75〜90%');
+  assert.ok(v3.adjust.target >= 1800 && v3.adjust.target <= 2160, String(v3.adjust.target));
   var v2 = run(s);
   assert.strictEqual(v2.adjust.protein.targetG, Math.round(v2.adjust.weightKg * 1.8));
 });

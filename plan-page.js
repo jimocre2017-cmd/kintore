@@ -90,7 +90,7 @@ function renderRoadmap(){
   } else if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
       + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>維持期（現状維持）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
-      + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／維持期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（1,660〜1,800kcal）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
+      + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／維持期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（消費の75〜90%）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
   } else if (R.decision === 'hold') {
     h += '<div class="banner warn" style="margin-top:10px">いまのプラン（第1期）を据え置いています。<div class="rowbtns"><button class="btn small primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期へ進む</button></div></div>';
   } else if (R.decision === 'maintain') {
@@ -103,11 +103,12 @@ function renderRoadmap(){
     h += '<div class="banner warn" style="margin-top:10px">第1期の期限（'+md(first.to)+'）を過ぎましたが、体脂肪率 '+first.targets.fatPct+'% にはまだ届いていません。期限の見直しは総合コーチに相談できます。</div>';
   }
   var enNow = rmEnergy();
-  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).map(function(p){ return RoadmapLib.effective(p, enNow); }).forEach(function(p, i){
+  var stNow = rmState();
+  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).map(function(p){ return RoadmapLib.effective(p, enNow, stNow); }).forEach(function(p, i){
     var now = R.phase.key === p.key;
     h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期のあと、選んだとき' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
-    h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b>'+(p.dynamic ? '<small class="mut" style="display:block;font-size:11px">消費 '+comma(p.dynamic.energyKcal)+'kcalの+5〜10%</small>' : '')+'</div>'
-      + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>')+'</div>'
+    h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b>'+(p.dynamic ? '<small class="mut" style="display:block;font-size:11px">消費 '+comma(p.dynamic.energyKcal)+'kcal（'+(p.dynamic.basis === 'observed' ? '実測' : '推定')+'）の'+esc(RoadmapLib.kcalRuleText(p).replace('消費の', ''))+(p.dynamic.floored ? '・下限は基礎代謝' : '')+'</small>' : (p.kcalFromEnergy ? '<small class="mut" style="display:block;font-size:11px">消費が分かるまでの控え</small>' : ''))+'</div>'
+      + '<div>'+(p.carbs ? '炭水化物<b class="num">'+rmRange(p.carbs, 'g')+'</b>' : 'たんぱく質<b class="num">'+rmRange(p.protein, 'g')+'</b>'+(p.dynamicProtein ? '<small class="mut" style="display:block;font-size:11px">除脂肪量 '+p.dynamicProtein.leanKg+'kg×'+p.proteinPerLean.min+'〜'+p.proteinPerLean.max+'g</small>' : ''))+'</div>'
       + '<div>'+(p.fat ? '脂質<b class="num">'+rmRange(p.fat, 'g')+'</b>' : '有酸素<b class="num">週'+rmRange(p.cardio.perWeek, '回')+'</b>')+'</div></div>';
     h += '<ul>'+p.training.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
     if (p.targets && p.targets.ffmiAdj) h += rmFfmiRow(p.targets.ffmiAdj, st);
@@ -148,16 +149,16 @@ function renderRoadmap(){
 // 消費の見込み（計算の前に使う版）：減量計画の直近の結果（実測ならそれ）→ 基礎代謝×係数。Apps Script の planEnergy_ と同じ順
 function rmEnergyStored(){
   var lt = S.plan && S.plan.latest, t = lt && lt.adjust && lt.adjust.tdee;
-  if (t && t.basis === 'observed' && t.kcal > 0) return { kcal: t.kcal, basis: 'observed' };
   var logs = (S.body && S.body.logs) || [], bmr = null, i, p = (S.plan && S.plan.plan) || {};
   for (i = 0; i < logs.length && bmr == null; i++) if (logs[i].bmr != null) bmr = logs[i].bmr;
+  if (t && t.basis === 'observed' && t.kcal > 0) return RoadmapLib.energy({ tdeeKcal: t.kcal, tdeeBasis: 'observed', bmr: bmr });
   return RoadmapLib.energy({ bmr: bmr, activity: p.activityCal || p.activity });
 }
 function rmEnergy(){
   var V = S.V || view(), t = V && V.adjust && V.adjust.tdee;
-  if (t && t.kcal > 0) return { kcal: t.kcal, basis: t.basis === 'observed' ? 'observed' : 'estimated', activity: t.activity };
   var logs = (S.body && S.body.logs) || [], bmr = null, i;
   for (i = 0; i < logs.length && bmr == null; i++) if (logs[i].bmr != null) bmr = logs[i].bmr;
+  if (t && t.kcal > 0) return { kcal: t.kcal, basis: t.basis === 'observed' ? 'observed' : 'estimated', activity: t.activity, bmr: bmr || undefined };
   var p = (S.plan && S.plan.plan) || {};
   return RoadmapLib.energy({ bmr: bmr, activity: p.activityCal || p.activity });
 }

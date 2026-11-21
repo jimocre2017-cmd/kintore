@@ -129,10 +129,20 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
 })();
 (function () {
   var a = function (o) { o.date = '2026/11/19'; return R.autoMealGoals(o); };
-  var cut = a({ weightKg: 60, bmr: 1400, adoptedKcal: 1720 }).goals;
-  assert.deepStrictEqual(cut, { kcal: 1720, kcalMin: 1660, kcalMax: 1800, protein: 125, proteinMin: 120, proteinMax: 130, fat: 45, fatMin: 40, fatMax: 50 }, '第1期：マスタープランの数値＋採用カロリー');
-  assert.strictEqual(a({ weightKg: 60, bmr: 1400, adoptedKcal: 1320 }).goals.kcal, 1660, '採用値が範囲の外なら範囲に収める');
-  assert.strictEqual(a({ weightKg: 60, bmr: 1400 }).goals.kcal, 1730, '採用値が無ければ範囲の中央');
+  // 第1期：カロリーは消費（基礎代謝1400×1.35＝1890）の75〜90%＝1420〜1700。体脂肪率が無いとき、たんぱく質は控えの120〜130g
+  var cut = a({ weightKg: 60, bmr: 1400, adoptedKcal: 1600 }).goals;
+  assert.deepStrictEqual([cut.kcalMin, cut.kcal, cut.kcalMax, cut.proteinMin, cut.protein, cut.proteinMax], [1420, 1600, 1700, 120, 125, 130], '第1期：消費に連動＋採用カロリー');
+  assert.deepStrictEqual([cut.fatMin, cut.fatMax], [40, 53], '脂質はカロリーの20〜30%（下限40g）');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400, adoptedKcal: 1320 }).goals.kcal, 1420, '採用値が範囲の外なら範囲に収める');
+  assert.strictEqual(a({ weightKg: 60, bmr: 1400 }).goals.kcal, 1560, '採用値が無ければ範囲の中央');
+  var lp = a({ weightKg: 64.8, fatPct: 25, bmr: 1530, tdeeKcal: 2218, tdeeBasis: 'observed' });
+  assert.deepStrictEqual([lp.goals.kcalMin, lp.goals.kcalMax, lp.goals.proteinMin, lp.goals.protein, lp.goals.proteinMax], [1660, 2000, 112, 126, 151], '実測2218kcal→1660〜2000、除脂肪量48.6kg×2.3〜3.1g');
+  assert.ok(/2218kcal（記録からの実測）の75〜90%/.test(lp.summary) && /除脂肪量48.6kg/.test(lp.summary), '根拠を要約に出す：' + lp.summary);
+  var fl = a({ weightKg: 60, bmr: 1600, tdeeKcal: 1900, tdeeBasis: 'observed' });
+  assert.deepStrictEqual([fl.goals.kcalMin, fl.goals.kcalMax], [1600, 1750], '下限は基礎代謝を割らない・幅は最低150kcal');
+  assert.ok(/基礎代謝1600kcalで止めています/.test(fl.summary), fl.summary);
+  var fb = a({}).goals;
+  assert.deepStrictEqual([fb.kcalMin, fb.kcalMax, fb.proteinMin, fb.proteinMax, fb.fatMin, fb.fatMax], [1660, 1800, 120, 130, 40, 50], '消費も体組成も無いときは控えの固定値');
   // 第2期バルク：カロリーは消費（基礎代謝1520×1.35＝2050）の+5〜10%＝2150〜2260、炭水化物は230g〜カロリーの55%
   var bulk = a({ decision: 'advance', weightKg: 60, bmr: 1520, adoptedKcal: 2200, fatPct: 15 }).goals;
   assert.deepStrictEqual([bulk.kcalMin, bulk.kcal, bulk.kcalMax, bulk.proteinMin, bulk.protein, bulk.proteinMax], [2150, 2200, 2260, 96, 108, 132], 'バルク：カロリーは消費に連動、たんぱく質は体重基準');
@@ -156,10 +166,12 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
 })();
 (function () {
   // 消費カロリー・たんぱく質・計画の点検（全画面で共通の計算）
-  assert.deepStrictEqual(R.energy({ bmr: 1530 }), { kcal: 2070, basis: 'estimated', activity: 1.35 });
-  assert.deepStrictEqual(R.energy({ bmr: 1530, tdeeKcal: 2010, tdeeBasis: 'observed' }), { kcal: 2010, basis: 'observed' }, '実測があれば実測');
+  assert.deepStrictEqual(R.energy({ bmr: 1530 }), { kcal: 2070, basis: 'estimated', activity: 1.35, bmr: 1530 }, '基礎代謝も返す（範囲の下限に使う）');
+  assert.deepStrictEqual(R.energy({ bmr: 1530, tdeeKcal: 2010, tdeeBasis: 'observed' }), { kcal: 2010, basis: 'observed', bmr: 1530 }, '実測があれば実測');
   assert.strictEqual(R.energy({}), null);
-  assert.deepStrictEqual(R.adjustCfg('', 'cut', null, { weightKg: 64.8, fatPct: 25 }).protein, { min: 120, target: 125, max: 130 }, '第1期はマスタープランの範囲');
+  assert.deepStrictEqual(R.adjustCfg('', 'cut', null, { weightKg: 64.8, fatPct: 25 }).protein, { min: 112, target: 126, max: 151 }, '第1期は除脂肪量（64.8kg×75%＝48.6kg）×2.3〜3.1g');
+  assert.deepStrictEqual(R.adjustCfg('', 'cut').protein, { min: 120, target: 125, max: 130 }, '体組成が無ければ控えの範囲');
+  assert.deepStrictEqual([R.adjustCfg('', 'cut', null, {}, { kcal: 2218 }).kcalMin, R.adjustCfg('', 'cut', null, {}, { kcal: 2218 }).kcalMax], [1660, 2000], '第1期のカロリー範囲も消費に連動');
   assert.deepStrictEqual(R.adjustCfg('advance', 'cut', null, { weightKg: 60, fatPct: 15 }).protein, { min: 96, target: 108, max: 132 }, 'バルクは体組成から（食事の目標と同じ）');
   assert.strictEqual(R.adjustCfg('advance', 'cut').protein, null);
   var mt = R.autoMealGoals({ date: '2026/11/19', decision: 'maintain', bmr: 1530, tdeeKcal: 2010, tdeeBasis: 'observed' }).goals;
@@ -168,18 +180,26 @@ t('今週のバランス：第2期（増量）は同じ「少ない」でも助�
   assert.strictEqual(R.autoMealGoals({ date: '2026/11/19', decision: 'maintain', bmr: 1530, adoptedKcal: 1660, adoptedMode: 'cut' }).goals.kcal, 2070, '減量期の採用値は維持期に持ち込まない');
   var c = R.planCheck({ date: '2026/11/19', energy: R.energy({ bmr: 1530 }), state: { weightKg: 64.8, fatPct: 25 } });
   var by = {}; c.forEach(function (x) { by[x.key] = x; });
-  assert.strictEqual(by.pace.level, 'ok'); assert.ok(/2027\/04\/29/.test(by.pace.body), by.pace.body);
+  assert.strictEqual(by.pace.level, 'ok'); assert.ok(/1710kcal/.test(by.pace.body) && /2027\/04\/20/.test(by.pace.body), by.pace.body);
   assert.strictEqual(by.lean.level, 'info');
   assert.strictEqual(by['bulk-surplus'].level, 'ok', '第2期は消費に連動するので余剰が確保される');
   assert.ok(/2170〜2280/.test(by['bulk-surplus'].body), by['bulk-surplus'].body);
   var ef = R.effective(R.ROADMAP.phases[1], { kcal: 2218 });
   assert.deepStrictEqual([ef.kcal.min, ef.kcal.max, ef.carbs.min, ef.carbs.max], [2330, 2440, 230, 336]);
   assert.strictEqual(R.ROADMAP.phases[1].kcal.max, 2100, '元の表は書き換えない');
-  assert.strictEqual(R.effective(R.ROADMAP.phases[0], { kcal: 2218 }).kcal.max, 1800, '第1期は固定のまま');
+  var e1 = R.effective(R.ROADMAP.phases[0], { kcal: 2218 });
+  assert.deepStrictEqual([e1.kcal.min, e1.kcal.max, e1.fat.min, e1.fat.max], [1660, 2000, 41, 61], '第1期：消費の75〜90%、脂質は中央1830kcalの20〜30%');
+  assert.strictEqual(R.effective(R.ROADMAP.phases[0], null), R.ROADMAP.phases[0], '消費も体組成も無ければ元の表のまま');
+  assert.strictEqual(R.ROADMAP.phases[0].kcal.max, 1800, '元の表（控え）は書き換えない');
+  assert.strictEqual(R.kcalRuleText(R.ROADMAP.phases[0]), '消費の75〜90%（不足10〜25%）');
+  assert.strictEqual(R.kcalRuleText(R.ROADMAP.phases[1]), '消費の+5〜10%');
   assert.deepStrictEqual([R.adjustCfg('advance', 'cut', null, {}, { kcal: 2218 }).kcalMin, R.adjustCfg('advance', 'cut', null, {}, { kcal: 2218 }).kcalMax], [2330, 2440]);
-  var late = R.planCheck({ date: '2026/11/19', energy: { kcal: 1950, basis: 'observed' }, state: { weightKg: 64.8, fatPct: 25 } }).filter(function (x) { return x.key === 'pace'; })[0];
-  assert.strictEqual(late.level, 'warn', '消費が少なければ期限に間に合わない');
-  assert.ok(R.planCheck({ date: '2026/11/19', energy: { kcal: 1800, basis: 'observed' }, state: {} }).some(function (x) { return x.key === 'cut-deficit'; }), '赤字が小さすぎる');
+  var late = R.planCheck({ date: '2026/11/19', energy: { kcal: 1750, basis: 'observed', bmr: 1600 }, state: { weightKg: 64.8, fatPct: 25 } }).filter(function (x) { return x.key === 'pace'; })[0];
+  assert.strictEqual(late.level, 'warn', '消費が基礎代謝に近く、範囲の下限が止まると期限に間に合わない');
+  var tight = R.planCheck({ date: '2026/11/19', energy: { kcal: 1700, basis: 'observed', bmr: 1600 }, state: {} }).filter(function (x) { return x.key === 'cut-deficit'; })[0];
+  assert.ok(tight && /基礎代謝に近く/.test(tight.body), '基礎代謝で下限が止まり、赤字が小さすぎる');
+  assert.ok(!R.planCheck({ date: '2026/11/19', energy: { kcal: 1800, basis: 'observed' }, state: {} }).some(function (x) { return x.key === 'cut-deficit'; }), '消費に連動するので、通常は赤字が確保される');
+  assert.ok(R.planCheck({ date: '2026/11/19', energy: { kcal: 2218, basis: 'observed' }, state: {} }).some(function (x) { return x.key === 'cut-range' && /1660〜2000kcal/.test(x.body); }), '第1期の範囲の根拠を点検に出す');
   assert.strictEqual(R.planCheck({ date: '2026/11/19', energy: null })[0].key, 'energy');
   var b = R.brief('2026/11/19', { weightKg: 64.8, fatPct: 25, leanKg: 48.6 }, null, { energy: { kcal: 2070, basis: 'estimated' } });
   assert.ok(b.planCheck && b.planCheck.length >= 2, '総合コーチにも点検結果を渡す');
