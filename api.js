@@ -441,6 +441,7 @@ var KT = (function () {
     v.logs.sort(function (a, b) { return a.date === b.date ? ((a.time || '') < (b.time || '') ? 1 : -1) : (a.date < b.date ? 1 : -1); });
     return v;
   }
+  function laterList() { var a = LS.get('kt_meal_later', []); return Array.isArray(a) ? a : []; }
   function mealEnqueue(op) {
     var q = queue(); q.push(op); setQueue(q); schedule(300);
     return Promise.resolve(mealLocal());
@@ -627,6 +628,23 @@ var KT = (function () {
       return mealEnqueue({ qid: uuid(), type: 'mealFoodDel', id: id });
     },
     mealSetGoals: function (goals) { return mealEnqueue({ qid: uuid(), type: 'mealGoal', goals: clone(goals) }); },
+
+    /* 食事の「名前だけ記録（AI分析待ち）」：端末に保存するだけ（サーバーには送らない）。オンラインの時にAIで見積もって、通常の食事として保存する。
+       分析待ちは栄養が未確定なので、サーバーの食事ログ・集計には入れない（0kcalの日として平均を下げないため） */
+    mealLaterGet: function () { return Promise.resolve(laterList()); },
+    mealLaterSave: function (it) {
+      it = clone(it); it.id = it.id || uuid();
+      var a = laterList(), done = false;
+      for (var i = 0; i < a.length; i++) if (a[i].id === it.id) { a[i] = it; done = true; }
+      if (!done) a.push(it);
+      if (!LS.set('kt_meal_later', a)) return Promise.reject(new Error('端末に保存できませんでした（空き容量を確認してください）'));
+      return Promise.resolve(a);
+    },
+    mealLaterDel: function (id) {
+      var a = laterList().filter(function (x) { return x.id !== id; });
+      LS.set('kt_meal_later', a);
+      return Promise.resolve(a);
+    },
 
     /* 減量計画：設定・AIの提案・採用はオンラインのみ。表示用の設定と履歴は端末にも控える（表示は体組成・食事の控えと合わせて計算） */
     planCached: function () { return Promise.resolve(LS.get('kt_plan', null)); },
