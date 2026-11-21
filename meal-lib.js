@@ -192,6 +192,23 @@ var MealLib = (function () {
   function focacciaPieces(carbsG) { return Math.max(0, Math.round(carbsG / FOCACCIA_C_PER_PIECE * 2) / 2); }
   function riceG(carbsG) { return Math.max(0, Math.round(carbsG / RICE_C_PER_G / 5) * 5); }
 
-  return { carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  /** 「名前だけ記録」した食事（later）に、AIの見積もり結果（r＝mealEstimate の戻り値）を合わせて、保存用の記録にする */
+  function fromEstimate(later, r) {
+    var t = (r && r.total) || {};
+    var items = ((r && r.items) || []).map(function (it) { return it.line || it.name; }).join('\n');
+    var note = '確からしさ：' + ((r && r.confidence) || '中') + ((r && r.note) ? '　' + r.note : '') + '（あとからAIが分析）';
+    return {
+      id: later.id, date: later.date, time: later.time || '', type: later.type || 'その他', text: String(later.text || '').trim(),
+      kcal: Math.round(Number(t.kcal) || 0), protein: r1(Number(t.protein) || 0), fat: r1(Number(t.fat) || 0), carbs: r1(Number(t.carbs) || 0),
+      items: items.slice(0, 1500), note: note.slice(0, 300)
+    };
+  }
+  /** 分析待ちのうち、同じIDの記録がもう保存済みのものは外す（保存のあと、待ちから消す前に閉じられた場合の重複防止） */
+  function dropSaved(laters, logs) {
+    var have = {}; (logs || []).forEach(function (l) { have[l.id] = 1; });
+    return (laters || []).filter(function (x) { return !have[x.id]; });
+  }
+
+  return { fromEstimate: fromEstimate, dropSaved: dropSaved, carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
