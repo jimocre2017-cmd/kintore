@@ -136,7 +136,7 @@ t('漸進：回数が上限なら重さ+1刻み／重さの上限なら回数を
 
 t('目標をすべて超えた週は維持メニュー（休養も検討の警告）', function () {
   var h = [];
-  [['E001', 12], ['E008', 10], ['E027', 14], ['E012', 10], ['E007', 8]].forEach(function (x) { h.push({ d: '2026/11/08', e: x[0], n: x[1] }); });
+  [['E001', 13], ['E008', 10], ['E027', 14], ['E012', 10], ['E007', 8]].forEach(function (x) { h.push({ d: '2026/11/08', e: x[0], n: x[1] }); });
   var p = Y.build(base({ hist: h }));
   assert.ok(p.warnings.some(function (w) { return /休養/.test(w); }));
   assert.ok(p.items.length > 0);
@@ -179,3 +179,13 @@ t('肩インナーは前回30回でも進歩させず、12〜15回の軽めに�
 });
 
 console.log('\n' + n + ' 件 すべて成功');
+t('やり過ぎの線は「今週のバランス」と同じ：上限×1.2（胸12・脚9.6）', function () {
+  var R = require('../roadmap-lib.js');
+  function over(chestSets) {
+    var d = Y.deficits(base({ hist: [{ d: '2026/11/08', e: 'E001', n: chestSets }] }));
+    return d.areas.filter(function (a) { return a.key === 'chest'; })[0].over;
+  }
+  assert.strictEqual(R.OVER_SETS, 1.2);
+  assert.strictEqual(over(12), false, '12セットはちょうど');
+  assert.strictEqual(over(13), true, '13セットはやり過ぎ');
+});

@@ -47,12 +47,8 @@ function render(){
 
 /* ---- マスタープラン（2段階リコンプ＆リーンバルク）：いまの期・目標との差・食事の平均・食事目標への反映 ---- */
 function rmState(){
-  var logs = (S.body && S.body.logs) || [], last = null, i;
-  for (i = 0; i < logs.length; i++) { if (logs[i].weight != null && (!last || logs[i].date > last.date)) last = logs[i]; }
-  if (!last) return {};
-  var st = { weightKg: last.weight, fatPct: last.fat != null ? last.fat : null, leanKg: null };
-  if (last.fat != null) st.leanKg = last.weight * (1 - last.fat / 100);
-  return st;
+  // 全画面共通の「今の体」：体重＝最新、体脂肪率＝直近7日平均（無ければ最新）。Apps Script（planBodyNow_・総合コーチ・食事の目標）と同じ RoadmapLib.bodyState
+  return RoadmapLib.bodyState((S.body && S.body.logs) || [], (S.body && S.body.today) || KT.today());
 }
 function rmMealAvg(today){
   if (!S.meal || !S.meal.logs) return null;

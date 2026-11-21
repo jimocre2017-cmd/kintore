@@ -200,7 +200,7 @@ function bodyTest() {
  * 除脂肪体重を維持して脂肪だけ落とす前提。脂肪1kg≒7200kcal。
  * 有酸素の消費は純消費の概算：ウォーキング 0.63kcal/kg/km、ランニング 1.0kcal/kg/km
  */
-function bodyPlan_(latest, today) {
+function bodyPlan_(latest, today, logs) {
   var goal = goalFat_();
   if (!goal || latest.weight === null || latest.fat === null) return null;
   var w = latest.weight, lean = w * (1 - latest.fat / 100), fatMass = w - lean;
@@ -212,7 +212,7 @@ function bodyPlan_(latest, today) {
   };
   // たんぱく質：食事の目標・減量計画と同じ（マスタープランの期の範囲。無い期は体組成から）
   var pr = null;
-  try { pr = RoadmapLib.adjustCfg(roadmapDecisionRead_(), PropertiesService.getScriptProperties().getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut', null, { weightKg: w, fatPct: latest.fat }).protein; } catch (e) {}
+  try { pr = RoadmapLib.adjustCfg(roadmapDecisionRead_(), PropertiesService.getScriptProperties().getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut', null, logs ? RoadmapLib.bodyState(logs, today) : { weightKg: w, fatPct: latest.fat }).protein; } catch (e) {} // 体脂肪率は全画面共通の直近7日平均
   out.proteinGramsPerDay = pr ? pr.min + '〜' + pr.max : Math.round(w * 1.6) + '〜' + Math.round(w * 1.8);
   out.maxSafeLossKgPerWeek = r1_(w * 0.01);
   out.latestRecordDate = latest.date;
@@ -318,7 +318,7 @@ function aiBody_(today) {
       changeSince4WeeksAgo: ref ? { from: ref.date, weight: diff('weight'), fat: diff('fat'), muscle: diff('muscle') } : null,
       last8Weeks: { weekStarts: weeks, weightAvg: avgBy('weight'), fatAvg: avgBy('fat'), muscleAvg: avgBy('muscle') },
       comparisons: bodyCompare_(logs, today),
-      plan: bodyPlan_(latest, today)
+      plan: bodyPlan_(latest, today, logs)
     };
   } catch (err) {
     return null;

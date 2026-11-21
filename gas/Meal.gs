@@ -148,13 +148,11 @@ function mealShiftKcalRange_(pr, oldKcal, newKcal) {
 
 /** 体組成の最新値から、目標の目安を出す（たんぱく質＝体重×1.8g、維持カロリー＝消費の見積もり planEnergy_ と同じ）。体組成が無ければ null */
 function mealSuggest_() {
+  // 以前の固定の目安（体重×1.8g・消費−500kcal）はやめ、自動の目標（マスタープランの計算）と同じ値を返す
   try {
-    var logs = bodyGet().logs, w = null, bmr = null;
-    logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; });
-    if (w === null) return null;
-    var out = { protein: Math.round(w * 1.8) };
-    if (bmr !== null) { var en = RoadmapLib.energy(planEnergy_(bmr)); out.maintenanceKcal = en.kcal; out.cutKcal = en.kcal - 500; out.basis = en.basis; out.activity = en.activity || null; }
-    return out;
+    var a = mealAutoGoals_(), g = a && a.goals;
+    if (!g) return null;
+    return { protein: g.protein || null, kcal: g.kcal || null, kcalMin: g.kcalMin || null, kcalMax: g.kcalMax || null, maintenanceKcal: a.energy ? a.energy.kcal : null, basis: a.energy ? a.energy.basis : null };
   } catch (e) { return null; }
 }
 
@@ -178,8 +176,9 @@ function mealAutoGoals_() {
 }
 function mealAutoGoalsCalc_() {
   try {
-    var logs = bodyGet().logs, w = null, bmr = null, bf = null, p = PropertiesService.getScriptProperties(), today = today_();
-    logs.forEach(function (l) { if (w === null && l.weight !== null) w = l.weight; if (bmr === null && l.bmr !== null) bmr = l.bmr; if (bf === null && l.fat !== null) bf = l.fat; });
+    var logs = bodyGet().logs, bmr = null, p = PropertiesService.getScriptProperties(), today = today_();
+    var st = RoadmapLib.bodyState(logs, today), w = st.weightKg != null ? st.weightKg : null, bf = st.fatPct != null ? st.fatPct : null; // 全画面共通の「今の体」
+    logs.forEach(function (l) { if (bmr === null && l.bmr !== null) bmr = l.bmr; });
     var en = planEnergy_(bmr), lt = null;
     try { lt = planLatestAdvice_(); } catch (e) {}
     return RoadmapLib.autoMealGoals({
@@ -410,6 +409,15 @@ function mealAskSchema_() {
   };
 }
 
+/** 相談AIに渡す「マスタープランの1日の範囲」。食事画面の自動の目標と同じ計算（RoadmapLib.autoMealGoals）。出せないときは空 */
+function mealAskPlanLine_() {
+  var a = mealAutoGoals_(), g = a && a.goals;
+  if (!g || !g.kcal) return '';
+  function r(k, u) { return g[k] ? g[k + 'Min'] + '〜' + g[k + 'Max'] + u + '（目安' + g[k] + u + '）' : ''; }
+  var parts = [['kcal', 'カロリー', 'kcal'], ['protein', 'たんぱく質', 'g'], ['fat', '脂質', 'g']].map(function (k) { var t = r(k[0], k[2]); return t ? k[1] + ' ' + t : ''; }).filter(function (x) { return x; });
+  return '\n\nマスタープランの1日の範囲（' + (a.phaseLabel || '') + '。決定済みの値なので、別の数値を提案しない）：' + parts.join('、');
+}
+
 function mealAsk(req) {
   req = req || {};
   var q = String(req.question || '').replace(/\r\n?/g, '\n').trim();
@@ -424,11 +432,11 @@ function mealAsk(req) {
     lines.push('- ' + k[1] + '：今日の目標 ' + (ref || '–') + k[2] + (lo ? '（下限' + lo + '）' : '') + (hi ? '（上限' + hi + '）' : '') + '、ここまで ' + n(tt[k[0]]) + k[2]);
   });
   var d = mealGet(), eaten = d.logs.filter(function (l) { return l.date === today; }).map(function (l) { return l.type + '：' + String(l.text || '').replace(/\n/g, ' ').slice(0, 60) + '（' + l.kcal + 'kcal P' + l.protein + ' F' + l.fat + '）'; });
-  var w = aiMeal_(today), sug = d.suggest;
+  var w = aiMeal_(today);
   var ctx = '今日（' + today + '）の目標と、ここまでの合計：\n' + (lines.join('\n') || '（目標未設定）')
     + '\n\n今日これまでに食べたもの：\n' + (eaten.join('\n') || '（まだ記録なし）')
     + (w ? '\n\n直近7日（記録した日だけ）：平均 ' + w.averagePerLoggedDay.kcal + 'kcal、たんぱく質' + w.averagePerLoggedDay.protein + 'g、脂質' + w.averagePerLoggedDay.fat + 'g、脂質エネルギー比' + w.fatEnergyPercent + '%' : '')
-    + (sug && sug.protein ? '\n\n体組成からの目安：たんぱく質 約' + sug.protein + 'g' + (sug.cutKcal ? '、減量なら約' + sug.cutKcal + 'kcal' : '') : '');
+    + mealAskPlanLine_();
   var askUser = ctx + '\n\n## 相談\n' + q;
   var res = aiCached_('mealAsk', { u: askUser }, !!req.force, function () { return gemini_(mealAskSystem_(), askUser, mealAskSchema_(), null, { fast: true }); });
   var secs = (res.sections || []).slice(0, 6).map(function (s) {

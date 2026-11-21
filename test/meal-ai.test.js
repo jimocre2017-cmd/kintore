@@ -9,7 +9,8 @@ var sb = {
     { id: 'a', date: '2026/11/14', time: '08:00', type: '朝食', text: '卵とご飯', kcal: 500, protein: 25, fat: 15, carbs: 70, items: '卵2個 P12 F10\nご飯 P4 F1' },
     { id: 'b', date: '2026/11/14', time: '12:30', type: '昼食', text: '唐揚げ定食', kcal: 1000, protein: 40, fat: 55, carbs: 90, items: '唐揚げ F30' },
     { id: 'c', date: '2026/11/13', time: '12:00', type: '昼食', text: '別の日', kcal: 700, protein: 30, fat: 20, carbs: 80, items: '' } ],
-    suggest: { protein: 120, cutKcal: 1900 } }; },
+    suggest: null }; },
+  mealAutoGoals_: function () { return { phaseLabel: '第1期：リコンプ期', goals: { kcal: 1830, kcalMin: 1660, kcalMax: 2000, protein: 126, proteinMin: 112, proteinMax: 151, fat: 51, fatMin: 41, fatMax: 61 } }; },
   aiMeal_: function () { return { averagePerLoggedDay: { kcal: 2000, protein: 100, fat: 60 }, fatEnergyPercent: 27 }; },
   aiCached_: function (kind, key, force, fn) { return fn(); }, // キャッシュなし（AiTrainer.gs の代わり）
   gemini_: function (sys, user) { calls.push({ sys: sys, user: user }); return sb.reply; }
@@ -24,6 +25,7 @@ var r = sb.mealAsk({ question: '今日は同窓会で中華料理のお店に行
 assert.strictEqual(r.sections.length, 1); assert.strictEqual(r.estimate, '1,200kcal前後');
 assert.ok(/カロリー：今日の目標 1900kcal（上限2100）、ここまで 1500kcal/.test(calls[0].user)); assert.ok(/唐揚げ定食/.test(calls[0].user)); assert.ok(!/別の日/.test(calls[0].user));
 assert.ok(/同窓会/.test(calls[0].user));
+assert.ok(/マスタープランの1日の範囲（第1期：リコンプ期。決定済み/.test(calls[0].user) && /たんぱく質 112〜151g/.test(calls[0].user), '相談AIには食事画面と同じ範囲を渡す'); assert.ok(!/体組成からの目安/.test(calls[0].user), '古い目安（体重×1.8・消費−500）は渡さない');
 assert.throws(function () { sb.mealAsk({ question: 'あ' }); }, /入力/);
 
 sb.reply = { summary: '脂質が多い', causes: ['唐揚げ'], actions: ['焼き鳥に'], nextMeal: '夜は魚' };
