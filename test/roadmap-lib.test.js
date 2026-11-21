@@ -37,7 +37,7 @@ t('食事の平均が範囲の下・中・上のどこか', function () {
 t('AIに渡す要約', function () {
   var b = R.brief('2026/11/20', { fatPct: 25, leanKg: 48.6 }, { kcal: 1700, protein: 110, fat: 45 }, { fat7: null, decision: '' });
   assert.strictEqual(b.nowPhaseKey, 'recomp');
-  assert.strictEqual(b.nextPhase.label, '第2期：リーンバルク仕上げ');
+  assert.strictEqual(b.nextPhase.label, '第2期 選択1：リーンバルク仕上げ');
   assert.strictEqual(b.rules.length, 3);
   assert.strictEqual(b.waitingForUserChoice, false);
 });

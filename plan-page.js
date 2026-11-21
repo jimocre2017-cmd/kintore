@@ -89,13 +89,13 @@ function renderRoadmap(){
   var first = RM.phases[0], f7 = ctx.fat7;
   h += '<div class="note" style="margin:0 0 4px">切り替えの条件：体脂肪率の直近7日平均が '+first.targets.fatPct+'% に届いたら、第2期へ進むか据え置くかを選びます（日付では自動で切り替わりません）。'+(f7 ? '　いまの直近7日平均：<b class="num">'+f1(f7.avg)+'%</b>（'+f7.days+'日分）' : '　直近7日の測定が3日未満のため、まだ判定できません。')+'</div>';
   var modeKey = R.decision === 'maintain' ? 'maintain' : R.decision === 'advance' ? 'advance' : (R.decision === 'shred' || R.decision === 'shred8') ? 'shred' : 'first', dis = S.rmBusy ? ' disabled' : '', rec = !!(window.KTAdvice && KTAdvice.isOff());
-  var modeName = { first: '第1期（減量）', advance: '第2期 バルク', maintain: '第3期 維持・回復', shred: R.decision === 'shred8' ? '第2期 絞り込み（8%）' : '第2期 絞り込み（12%）' }[modeKey];
+  var modeName = { first: '第1期（減量）', advance: '第2期 選択1：バルク', maintain: '第3期 維持・回復', shred: R.decision === 'shred8' ? '第2期 選択2：絞り込み（8%）' : '第2期 選択2：絞り込み（12%）' }[modeKey];
   h += '<div class="modesw"><div class="note" style="margin:8px 0 4px"><b>いまのモード</b>（押すとすぐ切り替わります。「記録だけ」は助言・判定を止めて記録に集中するモードで、直前の道は覚えています）</div><div class="seg">'
     + '<button type="button" class="'+(rec ? 'on' : '')+'" id="rmGoRec"'+dis+'>記録だけ<small>助言なし</small></button>'
     + '<button type="button" class="'+(!rec && modeKey === 'first' ? 'on' : '')+'" id="rmGo1"'+dis+'>第1期<small>減量</small></button>'
-    + '<button type="button" class="'+(!rec && modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期<small>バルク</small></button>'
-    + '<button type="button" class="'+(!rec && modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第3期<small>維持・回復</small></button>'
-    + '<button type="button" class="'+(!rec && modeKey === 'shred' ? 'on' : '')+'" id="rmGoShred"'+dis+'>第2期<small>絞り込み</small></button></div></div>';
+    + '<button type="button" class="'+(!rec && modeKey === 'advance' ? 'on' : '')+'" id="rmGoBulk"'+dis+'>第2期 選択1<small>バルク</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'shred' ? 'on' : '')+'" id="rmGoShred"'+dis+'>第2期 選択2<small>絞り込み</small></button>'
+    + '<button type="button" class="'+(!rec && modeKey === 'maintain' ? 'on' : '')+'" id="rmGoMaint"'+dis+'>第3期<small>維持・回復</small></button>'+'</div></div>';
   var apV = S.V, apN = apV && apV.now, apA = apV && apV.adjust;
   var AP = rec ? null : RoadmapLib.approach({ decision: R.decision, fat7: f7, weightKg: apN ? apN.weight : null, lossKgPerWeek: apA && apA.expectedLossKgPerWeek > 0 ? apA.expectedLossKgPerWeek : null });
   h += rmNoticesHtml(rec, AP, today, f7, R);
@@ -103,7 +103,7 @@ function renderRoadmap(){
     h += '<div class="banner" style="margin-top:10px">記録だけのモードです（助言のポップアップ・切り替えの案内・今週の判定は止めています）。直前の道は「'+modeName+'」。上のボタンで、いつでも戻せます。</div>';
   } else if (R.needChoice) {
     h += '<div class="banner info" style="margin-top:10px"><b>体脂肪率 '+first.targets.fatPct+'% に到達しました（直近7日平均 '+f1(f7.avg)+'%）。次を選んでください。</b>'
-      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期（リーンバルク）へ進む</button><button class="btn" id="rmGoShred2"'+(S.rmBusy ? ' disabled' : '')+'>第2期（絞り込み 12%）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>第3期（維持・回復）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
+      + '<div class="rowbtns"><button class="btn primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期 選択1：リーンバルクへ進む</button><button class="btn" id="rmGoShred2"'+(S.rmBusy ? ' disabled' : '')+'>第2期 選択2：絞り込み（12%）へ進む</button><button class="btn" id="rmMaintain"'+(S.rmBusy ? ' disabled' : '')+'>第3期（維持・回復）にする</button><button class="btn" id="rmHold"'+(S.rmBusy ? ' disabled' : '')+'>いまのプランを据え置く</button></div>'
       + '<div class="note">リーンバルク＝筋肉を増やすために少し多めに食べる道／絞り込み＝赤字を小さくして体脂肪率12%まで落としつつ筋肉を少し増やす道／第3期＝いまの体を保つ道（食事は維持カロリー）／据え置き＝第1期の食事（消費の75〜90%）のままなので減量の赤字が続きます。いつでも選び直せます。</div></div>';
   } else if (R.decision === 'hold') {
     h += '<div class="banner warn" style="margin-top:10px">いまのプラン（第1期）を据え置いています。<div class="rowbtns"><button class="btn small primary" id="rmAdvance"'+(S.rmBusy ? ' disabled' : '')+'>第2期へ進む</button></div></div>';
@@ -127,7 +127,7 @@ function renderRoadmap(){
   }
   var enNow = rmEnergy();
   var stNow = rmState();
-  RM.phases.concat(RM.maintainPhase ? [RM.maintainPhase] : []).concat(RM.shredPhase ? [RM.shredPhase] : []).concat(RM.shred8Phase ? [RM.shred8Phase] : []).map(function(p){ return RoadmapLib.effective(p, enNow, stNow); }).forEach(function(p, i){
+  RM.phases.concat(RM.shredPhase ? [RM.shredPhase] : []).concat(RM.shred8Phase ? [RM.shred8Phase] : []).concat(RM.maintainPhase ? [RM.maintainPhase] : []) /* 並び：第1期 → 第2期 選択1・選択2 → 第3期 */.map(function(p){ return RoadmapLib.effective(p, enNow, stNow); }).forEach(function(p, i){
     var now = R.phase.key === p.key;
     h += '<div class="ph'+(now ? ' now' : '')+'"><h4>'+esc(p.label)+'<button type="button" class="tlink" data-term="'+esc(p.key === 'shred8' ? 'shred' : p.key)+'" aria-label="'+esc(p.label)+'とは">ⓘ</button>'+(now ? '<span class="chip good">いま</span>' : '')+'<span class="mut" style="font-size:12px;font-weight:600">'+(p.key === 'maintain' ? '第1期・第2期のあと、選んだとき' : p.key === 'shred' || p.key === 'shred8' ? '第1期のあと、選んだとき（期限なし）' : i === 0 ? md(p.from)+'〜'+md(p.to) : '15%到達後（目安 '+md(p.from)+'〜'+md(p.to)+'頃）')+'</span></h4>';
     h += '<div class="kvs"><div>カロリー<b class="num">'+(p.kcal ? rmRange(p.kcal) : '維持カロリー')+'</b>'+(p.dynamic ? '<small class="mut" style="display:block;font-size:11px">消費 '+comma(p.dynamic.energyKcal)+'kcal（'+(p.dynamic.basis === 'observed' ? '実測' : '推定')+'）の'+esc(RoadmapLib.kcalRuleText(p).replace('消費の', ''))+(p.dynamic.floored ? '・下限は基礎代謝' : '')+'</small>' : (p.kcalFromEnergy ? '<small class="mut" style="display:block;font-size:11px">消費が分かるまでの控え</small>' : ''))+'</div>'
@@ -387,7 +387,7 @@ function renderAdjust(){
   var ai = S.ai, ad = ai ? ai.adjust : V.adjust, st = STATUS[ad.status] || ['', ''];
   var from = ai ? ai.effectiveFrom : PL.nextMonday(V.today);
   var bulkM = ad.mode === 'bulk', maintM = ad.mode === 'maintain', off = window.KTAdvice && KTAdvice.isOff();
-  var modeTx = bulkM ? '第2期バルク' : maintM ? '第3期 維持・回復' : ad.mode === 'shred' ? '第2期 絞り込み（'+(ad.floor && ad.floor.floorFat ? ad.floor.floorFat : (S.plan && S.plan.plan && S.plan.plan.roadmapDecision === 'shred8' ? 8 : 12))+'%）' : '第1期（減量）';
+  var modeTx = bulkM ? '第2期 選択1：バルク' : maintM ? '第3期 維持・回復' : ad.mode === 'shred' ? '第2期 選択2：絞り込み（'+(ad.floor && ad.floor.floorFat ? ad.floor.floorFat : (S.plan && S.plan.plan && S.plan.plan.roadmapDecision === 'shred8' ? 8 : 12))+'%）' : '第1期（減量）';
   var h = '<h3>次週のカロリー調整（'+mdw(from)+'から）</h3>';
   h += '<div class="note" style="margin:0 0 8px">モード：<b>'+modeTx+'</b>'+(ad.range ? '（目標の範囲 '+comma(ad.range.min)+'〜'+comma(ad.range.max)+'kcal）' : '')+(off ? ' ／ 記録だけのモード：自動では変えません' : ' ／ 毎週、先週の記録で自動採用されます')+'</div>';
   var al = S.plan && S.plan.autoLast;

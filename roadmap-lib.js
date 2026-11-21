@@ -32,7 +32,7 @@ var RoadmapLib = (function () {
         targets: { fatPct: 15, leanKg: 50.0, weightKg: null, ffmiAdj: null }
       },
       {
-        key: 'leanbulk', label: '第2期：リーンバルク仕上げ',
+        key: 'leanbulk', label: '第2期 選択1：リーンバルク仕上げ',
         from: '2027/05/01', to: '2027/06/30', approx: true, // 「2027年5月〜6月頃」
         // カロリーは消費の見込み（実測）に連動：消費×1.05〜1.10（+5〜10%の余剰）。2026-11-19に本人が承認（固定の1950〜2100kcalは実測の消費2,218kcalを下回り、増量にならないため）。
         // kcal は消費が分からないときだけ使う控え。炭水化物は 230g 以上・上限はカロリーの55%（effective で計算）
@@ -72,7 +72,7 @@ var RoadmapLib = (function () {
     //  筋トレは落とさず胸・脚のセットを増やし、重さ・レップを少しずつ伸ばす／有酸素は週2〜3回に絞る／ペースが遅いので期限は置かない（体脂肪率の到達で判断）
     //  カロリー・たんぱく質・脂質・炭水化物は RoadmapLib.effective で計算。下の kcal は消費が分からないときは持たない（維持期と同じ扱い）。根拠と注意点は docs/references.md
     shredPhase: {
-      key: 'shred', label: '第2期（選ぶ道）：絞り込み期（体脂肪率12%・微増筋）',
+      key: 'shred', label: '第2期 選択2：絞り込み期（体脂肪率12%・微増筋）',
       from: null, to: null, approx: true,
       kcalFromEnergy: { min: 0.90, max: 0.97 },
       proteinPerLean: { min: 2.5, target: 2.8, max: 3.3 },
@@ -93,7 +93,7 @@ var RoadmapLib = (function () {
     },
     // 絞り込み期の8%ステージ。男性でも8%は体への負担が大きい水準なので、赤字をさらに小さく（消費の92〜98%）、たんぱく質を最も高くし、休息日・ダイエットブレイク・睡眠を条件にする。到達したら必ず維持へ
     shred8Phase: {
-      key: 'shred8', label: '第2期（選ぶ道）：絞り込み期・仕上げ（体脂肪率8%・微増筋）',
+      key: 'shred8', label: '第2期 選択2：絞り込み期・仕上げ（体脂肪率8%・微増筋）',
       from: null, to: null, approx: true,
       kcalFromEnergy: { min: 0.92, max: 0.98 },
       proteinPerLean: { min: 2.6, target: 3.0, max: 3.3 },
@@ -493,7 +493,7 @@ var RoadmapLib = (function () {
     var maintMode = ctx.decision === 'maintain' || (ctx.planPhase === 'maintain' && !shredMode); // 絞り込みを選んでいれば、計画が維持期の設定でも絞り込み（phaseFor・adjustCfg と同じ優先順）
     var avg = f ? f.avg : null;
     if (r.needChoice && !maintMode) {
-      out.push({ key: 'choose', level: 'info', title: '第1期の目標に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + goal + '%）になりました。次の道を選んでください：第2期のバルク（増量）／第2期の絞り込み（体脂肪率12%・微増筋）／第3期（維持・回復）／据え置き。減量計画の「いまの道」で切り替えられます。' });
+      out.push({ key: 'choose', level: 'info', title: '第1期の目標に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + goal + '%）になりました。次の道を選んでください：第2期 選択1＝バルク（増量）／第2期 選択2＝絞り込み（体脂肪率12%・微増筋）／第3期（維持・回復）／据え置き。減量計画の「いまの道」で切り替えられます。' });
     }
     if (maintMode && avg != null) {
       var floor = Number(ctx.floorFat) > 0 ? Number(ctx.floorFat) : goal, upper = r1(floor + MAINT_BAND_PCT);
