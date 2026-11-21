@@ -52,7 +52,7 @@ function rmState(){
 }
 function rmMealAvg(today){
   if (!S.meal || !S.meal.logs) return null;
-  var from = PL.addDays(today, -6), days = PL.mealDays(S.meal.logs.filter(function(l){ return l.date >= from && l.date <= today; })), ks = Object.keys(days).filter(function(k){ return days[k].complete; });
+  var from = PL.addDays(today, -7), days = PL.mealDays(S.meal.logs.filter(function(l){ return l.date >= from && l.date < today; })), // 今日（途中）を除く直近7日。食事を記録した日はすべて数える（全画面・AI共通） ks = Object.keys(days).filter(function(k){ return days[k].complete; });
   if (!ks.length) return null;
   function avg(f){ return ks.reduce(function(a, k){ return a + days[k][f]; }, 0) / ks.length; }
   return { kcal: avg('kcal'), protein: avg('protein'), fat: avg('fat'), carbs: avg('carbs'), days: ks.length };

@@ -531,9 +531,10 @@ function mealEstimateTest() {
  */
 function aiMeal_(today) {
   try {
-    var d = mealGet(), from = addDays_(today, -6), days = {};
+    var d = mealGet(), from = addDays_(today, -7), days = {}, tday = null;
     d.logs.forEach(function (l) {
-      if (l.date < from || l.date > today) return;
+      if (l.date === today) { tday = tday || { kcal: 0, protein: 0, fat: 0, carbs: 0, meals: 0 }; tday.kcal += l.kcal; tday.protein += l.protein; tday.fat += l.fat; tday.carbs += l.carbs; tday.meals++; return; }
+      if (l.date < from || l.date >= today) return; // 平均は今日（途中）を除く直近7日。食事を記録した日はすべて数える（画面と同じ）
       var x = days[l.date] = days[l.date] || { kcal: 0, protein: 0, fat: 0, carbs: 0, meals: 0 };
       x.kcal += l.kcal; x.protein += l.protein; x.fat += l.fat; x.carbs += l.carbs; x.meals++;
     });
@@ -546,8 +547,8 @@ function aiMeal_(today) {
     var fatPct = avg.kcal ? Math.round(avg.fat * 9 / avg.kcal * 100) : null;
     return {
       daysLogged: keys.length, perDay: days, averagePerLoggedDay: avg, fatEnergyPercent: fatPct,
-      today: days[today] || null, goals: d.goals,
-      note: '記録した日だけの平均。食事の記録が抜けた日は、実際より少なく見える'
+      today: tday, goals: d.goals,
+      note: '今日を除く直近7日のうち、記録した日だけの平均（「これで全部」と確認した、食べていない日は0kcalとして入る）。記録が抜けた日は、画面で利用者に確認している'
     };
   } catch (e) {
     return null;

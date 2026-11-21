@@ -47,6 +47,13 @@ header .sp{margin-left:auto}
 .wrap{max-width:760px;margin:0 auto;padding:16px;padding-bottom:80px;display:flex;flex-direction:column;gap:14px}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:14px}
 .card h3{margin:0 0 10px;font-size:13px;color:var(--ink-3);font-weight:600;letter-spacing:.04em}
+.chk{border:1px solid var(--warn);border-radius:12px;padding:10px 12px;margin-bottom:10px;background:var(--surface)}
+.chk h4{margin:0 0 6px;font-size:14px;color:var(--warn)}
+.chk .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 0;border-top:1px dashed var(--line);font-size:13px}
+.chk .row:first-of-type{border-top:0}
+.chk .row b{flex:1 1 120px}
+.chk .row button{font-size:12px;padding:6px 10px}
+.mark{font-size:12px;color:var(--ink-3);display:flex;align-items:center;gap:8px;margin-top:6px}
 .banner{border-radius:12px;padding:10px 12px;font-size:14px;line-height:1.7;background:var(--danger-soft);color:var(--danger)}
 .banner.info{background:var(--accent-soft);color:var(--ink)}
 .loading,.empty{color:var(--ink-3);text-align:center;padding:18px 8px;font-size:14px}
@@ -390,7 +397,32 @@ function renderMsg(){
   if (S.loadErr) h += '<div class="banner">'+esc(S.loadErr)+'</div>';
   var fl = KT.failed().filter(function(o){ return /^meal/.test(o.type); });
   if (fl.length) h += '<div class="banner">送信できなかった記録があります（'+fl.length+'件）。右上の同期ボタンから確認できます。</div>';
+  h += checkHtml();
   $('msg').innerHTML = h;
+  $('msg').onclick = function(e){
+    var b = e.target.closest('[data-chk]'); if (!b) return;
+    var ds = b.getAttribute('data-d');
+    if (b.getAttribute('data-chk') === 'add') { S.date = ds; render(); openForm(null); }
+    else confirmDay(ds);
+  };
+}
+/* 記録忘れの可能性がある日（今日より前の7日）。食べていたら追加、食べていなければ「これで全部」で確定する */
+function checkHtml(){
+  var d = S.data, g = d.goals || {}, list = ML.suspects(d.logs, d.today, g.kcalMin || 0, 7).slice(0, 3);
+  if (!list.length) return '';
+  return '<div class="chk"><h4>⚠ 記録忘れはありませんか？</h4>'
+    + list.map(function(x){
+      var why = x.reason === 'none' ? '記録がありません' : x.meals+'食・'+x.kcal+'kcal（いつもより少なめ）';
+      return '<div class="row"><b>'+mdw(x.date)+'　<small style="font-weight:400;color:var(--ink-2)">'+why+'</small></b>'
+        + '<button class="btn small primary" data-chk="add" data-d="'+x.date+'">＋ 食べた物を追加</button>'
+        + '<button class="btn small" data-chk="ok" data-d="'+x.date+'">'+(x.reason === 'none' ? '食べていない' : 'これで全部')+'</button></div>';
+    }).join('')
+    + '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:4px">確定した日は、週の平均や実測の消費カロリーにそのまま入ります（食べていない日は0kcal）。</div></div>';
+}
+function confirmDay(ds){
+  var d = S.data, t = ML.dayTotal(d.logs, ds);
+  if (!t.meals && !confirm(mdw(ds)+' は「食べていない日（0kcal）」として記録します。よろしいですか？')) return;
+  KT.call('mealSave', ML.markEntry(uid(), ds)).then(function(r){ S.data = r; render(); toast(mdw(ds)+' を「これで全部」にしました'); }, function(er){ if (healStaleCache(er)) return; toast(er.message, true); });
 }
 var MACRO = [['kcal','カロリー','kcal',10,'limit'],['protein','たんぱく質','g',1,'reach'],['fat','脂質','g',1,'limit'],['carbs','炭水化物','g',1,'range']];
 function riceTxt(c){ var r = ML.riceG(c), p = ML.pastaG(c), f = ML.focacciaPieces(c); return r ? '白ご飯 約'+r+'g（茶碗'+(Math.round(r / ML.RICE_BOWL_G * 10) / 10)+'杯）／パスタ 乾麺で約'+p+'g／ジモカフェのフォカッチャ 約'+f+'個' : ''; }
@@ -432,7 +464,7 @@ function renderDay(){
   var d = S.data, t = ML.dayTotal(d.logs, S.date), g = ML.withCarbs(d.goals || {});
   var h = '<div class="daynav"><button class="iconbtn" id="dPrev" aria-label="前の日">‹</button><b>'+(S.date === d.today ? '今日 ' : '')+mdw(S.date)+'</b><button class="iconbtn" id="dNext" aria-label="次の日"'+(S.date >= d.today ? ' disabled style="opacity:.3"' : '')+'>›</button></div>';
   if (!t.meals) {
-    h += '<div class="empty">この日の記録はまだありません。</div>';
+    h += '<div class="empty">'+(t.confirmed ? 'この日は食べていない日として確定しています（0kcal）。' : 'この日の記録はまだありません。')+'</div>';
     if (g.kcal || g.protein || g.fat) {
       h += macroRows(d, g, t, S.date);
     }
@@ -453,14 +485,20 @@ function renderAdd(){
   $('addBtn').textContent = past ? '＋ '+mdw(S.date)+' の食事を後から追加' : '＋ 食事を記録（AIが栄養を見積もります）';
 }
 function renderList(){
-  var L = S.data.logs.filter(function(l){ return l.date === S.date; }).sort(function(a,b){ return (a.time||'99') < (b.time||'99') ? -1 : 1; });
-  if (!L.length) { $('listCard').innerHTML = ''; return; }
+  var all = S.data.logs.filter(function(l){ return l.date === S.date; }), mk = all.filter(ML.isMark)[0];
+  var L = all.filter(function(l){ return !ML.isMark(l); }).sort(function(a,b){ return (a.time||'99') < (b.time||'99') ? -1 : 1; });
+  if (!L.length && !mk) { $('listCard').innerHTML = ''; return; }
   var h = '<h3>この日の食事（タップで編集）</h3>';
+  if (!L.length) h += '<div class="empty">食べていない日として確定しています（0kcal）。</div>';
   L.forEach(function(l){
     h += '<button class="meal" data-id="'+esc(l.id)+'"><span class="ty">'+esc(l.type)+'</span><span class="m">'+esc(l.text || '（内容なし）')+'<small>'+(l.time?esc(l.time)+'　':'')+'P '+l.protein+'g・F '+l.fat+'g・C '+l.carbs+'g'+(l.pending?'<span class="tag pend">未送信</span>':'')+'</small></span><span class="r num">'+l.kcal+'<small>kcal</small></span></button>';
   });
+  if (mk) h += '<div class="mark">✓ この日は「これで全部」と確認済み'+(mk.pending?'<span class="tag pend">未送信</span>':'')+'<button class="btn small" id="unmark" type="button">取り消す</button></div>';
   $('listCard').innerHTML = h;
-  $('listCard').onclick = function(e){ var b = e.target.closest('.meal'); if (b) openForm(b.getAttribute('data-id')); };
+  $('listCard').onclick = function(e){
+    if (e.target.closest('#unmark')) { KT.call('mealDelete', mk.id).then(function(r){ S.data = r; render(); toast('確認を取り消しました'); }, function(er){ toast(er.message, true); }); return; }
+    var b = e.target.closest('.meal'); if (b) openForm(b.getAttribute('data-id'));
+  };
 }
 function dayTargets(d, g, date){
   var K = [['kcal',10],['protein',1],['fat',1],['carbs',1]], tg = {}, any = false;
@@ -531,20 +569,20 @@ function weekGridHtml(d, g, days){
   MACRO.forEach(function(c){
     var k = c[0];
     h += '<span class="rl">'+(k === 'protein' ? 'たんぱく' : c[1])+'</span>' + days.map(function(x){
-      var isT = x.date === d.today, st = x.meals ? ML.judge(x[k], g[k+'Min'], g[k+'Max'], g[k]) : null;
-      var cls = isT ? 'today' : !x.meals ? 'miss' : (st || 'none');
+      var isT = x.date === d.today, st = x.logged ? ML.judge(x[k], g[k+'Min'], g[k+'Max'], g[k]) : null;
+      var cls = isT ? 'today' : !x.logged ? 'miss' : (st || 'none');
       if (isT && st === 'over') cls += ' over';
-      return '<button class="gc '+cls+(x.date === S.date ? ' sel' : '')+'" data-d="'+x.date+'">'+(x.meals ? Math.round(x[k]) : (isT ? '–' : '未'))+'</button>';
+      return '<button class="gc '+cls+(x.date === S.date ? ' sel' : '')+'" data-d="'+x.date+'">'+(x.logged ? Math.round(x[k]) : (isT ? '–' : '未'))+'</button>';
     }).join('');
   });
   return h + '</div><div class="lg"><span><i class="ok"></i>目標内</span><span><i class="over"></i>多い</span><span><i class="under"></i>少ない</span><span><i class="dash"></i>今日（途中）</span></div>';
 }
 function renderWeek(){
-  var d = S.data, g = ML.withCarbs(d.goals || {}), days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days);
-  if (!av.days) { $('weekCard').innerHTML = '<h3>直近7日</h3><div class="empty">食事を記録すると、今週の収支と7日間の結果が表示されます。</div>'; return; }
+  var d = S.data, g = ML.withCarbs(d.goals || {}), days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days, d.today);
+  if (!av.days && !ML.dayTotal(d.logs, d.today).meals) { $('weekCard').innerHTML = '<h3>直近7日</h3><div class="empty">食事を記録すると、今週の収支と7日間の結果が表示されます。</div>'; return; }
   var h = weekBalanceHtml(d, g);
   h += '<h3 style="margin-top:16px">直近7日（マスの色＝目標に対する結果）</h3>' + weekGridHtml(d, g, days);
-  h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:8px">平均（記録した'+av.days+'日）：'+av.kcal+'kcal・たんぱく質'+av.protein+'g・脂質'+av.fat+'g。マスをタップすると、その日の記録を開きます。見積もりは概算なので、細かい差より傾向を見てください。</div>';
+  h += '<div class="hint" style="font-size:12px;color:var(--ink-3);margin-top:8px">'+(av.days ? '平均（今日を除く、記録した'+av.days+'日）：'+av.kcal+'kcal・たんぱく質'+av.protein+'g・脂質'+av.fat+'g。' : '平均は前の日の記録がたまると出ます。')+'マスをタップすると、その日の記録を開きます。見積もりは概算なので、細かい差より傾向を見てください。</div>';
   $('weekCard').innerHTML = h;
   $('weekCard').onclick = function(e){ var b = e.target.closest('.wg [data-d]'); if (b) { S.date = b.getAttribute('data-d'); renderDay(); renderAdd(); renderList(); renderWeek(); window.scrollTo({ top: 0, behavior: 'smooth' }); } };
 }
