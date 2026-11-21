@@ -649,7 +649,7 @@ function weekGridHtml(d, g, days){
   return h + '</div><div class="lg"><span><i class="ok"></i>目標内</span><span><i class="over"></i>多い</span><span><i class="under"></i>少ない</span><span><i class="dash"></i>今日（途中）</span></div>';
 }
 function renderWeek(){
-  var d = S.data, g = ML.withCarbs(d.goals || {}), days = ML.lastDays(d.logs, d.today, 7), av = ML.average(days, d.today);
+  var d = S.data, g = ML.withCarbs(d.goals || {}), days = ML.lastDays(d.logs, d.today, 7), av = ML.average(ML.lastDays(d.logs, ML.fromDays(ML.toDays(d.today) - 1), 7)); // 平均は今日を除く直近7日（計画画面・総合コーチと同じ範囲）
   if (!av.days && !ML.dayTotal(d.logs, d.today).meals) { $('weekCard').innerHTML = '<h3>直近7日</h3><div class="empty">食事を記録すると、今週の収支と7日間の結果が表示されます。</div>'; return; }
   var h = weekBalanceHtml(d, g);
   h += '<h3 style="margin-top:16px">直近7日（マスの色＝目標に対する結果）</h3>' + weekGridHtml(d, g, days);
