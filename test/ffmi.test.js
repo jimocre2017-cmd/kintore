@@ -8,9 +8,9 @@ t('FFMI：体重64.4・体脂肪25.2%・身長164cm', function () {
   assert.strictEqual(F.ffmi(0, 25, 164), null);
   assert.strictEqual(F.ffmi(64, 100, 164), null);
 });
-t('補正FFMI：身長180cmなら変わらない、164cmなら+1.0', function () {
+t('補正FFMI：身長180cmなら変わらない、164cmなら+0.98（Kouri係数6.1）', function () {
   assert.strictEqual(F.normalized(20, 180), 20);
-  assert.ok(Math.abs(F.normalized(20, 164) - 21.008) < 0.01);
+  assert.ok(Math.abs(F.normalized(20, 164) - 20.976) < 0.01);
 });
 t('パーセンタイル：平均＝50%、+1SD≒84%、−2SD≒2.3%', function () {
   assert.strictEqual(F.percentile(18.8, 18.8, 2.1), 50);

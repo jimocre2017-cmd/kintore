@@ -197,7 +197,7 @@ function planEnergy_(bmr) {
   var p = PropertiesService.getScriptProperties();
   try {
     var lt = planLatestAdvice_(), t = lt && lt.adjust && lt.adjust.tdee;
-    if (t && t.basis === 'observed' && Number(t.kcal) > 0) return { tdeeKcal: Number(t.kcal), tdeeBasis: 'observed' };
+    if (t && t.basis === 'observed' && Number(t.kcal) > 0) return { tdeeKcal: Number(t.kcal), tdeeBasis: 'observed', bmr: bmr }; // bmr は範囲の下限（基礎代謝を割らない）に使う
   } catch (e) {}
   var cal = Number(p.getProperty('PLAN_ACTIVITY_CAL')), act = cal >= 1.1 && cal <= 2 ? cal : (Number(p.getProperty('PLAN_ACTIVITY')) || PlanLib.DEFAULTS.activity);
   return { bmr: bmr, activity: act };

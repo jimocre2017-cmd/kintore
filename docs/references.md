@@ -13,8 +13,13 @@
   - 使い道：脂質をエネルギーの40%から20%に下げると、男性の総テストステロンが10〜15%低下した（6試験・206人、値は正常範囲内）。脂質の下限を20%付近に置く参考。「20%未満は危険」という閾値を示した研究ではなく、著者もさらなる試験が必要としている。
 - Thomas DT, Erdman KA, Burke LM. (2016). Position of the Academy of Nutrition and Dietetics, Dietitians of Canada, and the American College of Sports Medicine: Nutrition and Athletic Performance. J Acad Nutr Diet 116(3):501-528. [DOI](https://doi.org/10.1016/j.jand.2015.12.006)
   - 使い道：脂質の範囲（エネルギーの20〜35%）の参考にした立場表明。※この数値が本文にあることは、今回は本文では確認していない。
+- Helms ER, Aragon AA, Fitschen PJ. (2014). Evidence-based recommendations for natural bodybuilding contest preparation: nutrition and supplementation. J Int Soc Sports Nutr 11:20. [DOI](https://doi.org/10.1186/1550-2783-11-20)
+  - 使い道：減量中は体重が週0.5〜1%減るカロリーに設定し、その中でたんぱく質は除脂肪量×2.3〜3.1g/日、脂質はカロリーの15〜30%が多くの人に合う、という推奨。第1期のたんぱく質（除脂肪量×2.3〜3.1g、目安×2.6）の根拠。
 
 ## アプリ独自の設定値（研究で決まった値ではない・見直し可）
+
+- 第1期のカロリー＝消費の見込み×0.75〜0.90（1日の不足10〜25%）。下限は基礎代謝（最低1,200kcal）を割らない
+  - 使い道：固定の1,660〜1,800kcalでは幅が狭く日々の調整が難しかったため、2026-11-21に本人の選択で計算式に変更。0.75は消費2,218kcalで従来の下限1,660kcalと一致する値、0.90は赤字を残しつつ外食などを吸収できる幅としてアプリ側で決めた値（Helms 2014の週0.5〜1%減と同じくらいの赤字）。消費や体組成がまだ無いときは、以前の固定値（1,660〜1,800kcal・たんぱく質120〜130g・脂質40〜50g）を控えとして使う。
 
 - たんぱく質の上限＝体重×2.2g、体脂肪率20%以上は除脂肪量×2.0〜2.5g（目安×2.2）
   - 使い道：2.2と、20%で基準を切り替える点、除脂肪量の係数は、レビュー（Gemini）をもとにアプリ側で決めた値。
