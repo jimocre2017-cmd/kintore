@@ -271,6 +271,7 @@ header .sp{margin-left:auto}
 
 <div class="wrap" id="app">
   <div id="msg"></div>
+  <section class="card" id="morningCard" style="display:none"></section>
   <section class="card" id="dayCard"><div class="loading">読み込み中…</div></section>
   <section class="actions" style="display:flex;gap:8px"><button class="btn" id="camBtn" style="flex:0 0 auto" aria-label="写真ですぐ記録">📷</button><button class="btn" id="picBtn" style="flex:0 0 auto" aria-label="手持ちの写真を選んで記録">🖼</button><button class="btn primary wide" id="addBtn" style="flex:1">＋ 食事を記録（AIが栄養を見積もります）</button></section>
   <section class="card hist" id="laterCard" style="display:none"></section>
@@ -393,7 +394,17 @@ function renderAll(){
   var d = S.data, dt = d.today.split('/');
   $('dateLbl').textContent = (+dt[0])+'年'+(+dt[1])+'月'+(+dt[2])+'日（'+dowLbl(d.today)+'）';
   if (!S.date) S.date = d.today;
-  renderMsg(); renderDay(); renderAdd(); renderLater(); renderList(); renderWeek();
+  renderMsg(); renderMorning(); renderDay(); renderAdd(); renderLater(); renderList(); renderWeek();
+}
+function renderMorning(){
+  var el = $('morningCard'), d = S.data, b = d.morning && d.morning.date === d.today ? d.morning : null;
+  if (!b) { try { b = ML.morningBrief({ logs: d.logs, today: d.today, goals: d.goals || {}, phaseLabel: d.autoPreview && d.autoPreview.phaseLabel || '' }); } catch (e) { b = null; } }
+  if (!b || !b.headline) { el.style.display = 'none'; return; }
+  var h = '<h3>☀️ 今朝の提案'+(b.phase ? '<small style="font-weight:500;color:var(--ink-3);margin-left:6px">'+esc(b.phase)+'</small>' : '')+'</h3><p style="margin:0 0 6px;font-weight:700;line-height:1.6">'+esc(b.headline)+'</p>';
+  if (b.lines.length) h += '<ul style="margin:0 0 6px;padding-left:18px;font-size:13px;line-height:1.7">'+b.lines.map(function(x){ return '<li>'+esc(x)+'</li>'; }).join('')+'</ul>';
+  if (b.yesterday && b.yesterday.head) h += '<p style="margin:6px 0 0;font-size:13px;color:var(--ink-2)"><b>昨日：</b>'+esc(b.yesterday.head)+(b.yesterday.lines[0] ? '。'+esc(b.yesterday.lines[0]) : '')+'</p>';
+  h += '<small style="display:block;font-size:11px;color:var(--ink-3);margin-top:8px">記録と目標から式で出しています（AIは使いません）。今日の目安は、週の合計が目安に着くよう割り戻した値です。</small>';
+  el.innerHTML = h; el.style.display = '';
 }
 function renderMsg(){
   var h = '';

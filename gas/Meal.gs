@@ -194,8 +194,8 @@ function mealGet() {
   var from = addDays_(today_(), -120);
   var logs = rows_(MSH).filter(function (r) { return String(r[0]).trim() !== '' && ymd_(r[1]) >= from; }).map(mealObj_);
   logs.sort(function (a, b) { return a.date === b.date ? (a.time < b.time ? 1 : -1) : (a.date < b.date ? 1 : -1); });
-  var ap = mealAutoGoals_();
-  return { today: today_(), logs: logs, goals: mealGoals_(), suggest: mealSuggest_(), autoPreview: ap ? { goals: ap.goals, summary: ap.summary } : null, foods: mealFoods_() };
+  var ap = mealAutoGoals_(), gl = mealGoals_();
+  return { today: today_(), logs: logs, goals: gl, suggest: mealSuggest_(), autoPreview: ap ? { goals: ap.goals, summary: ap.summary, phaseLabel: ap.phaseLabel } : null, foods: mealFoods_(), morning: morningBrief_(logs, gl, ap) };
 }
 
 function mealSave(p) {
