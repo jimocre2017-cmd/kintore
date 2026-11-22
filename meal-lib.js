@@ -235,6 +235,48 @@ var MealLib = (function () {
     return (laters || []).filter(function (x) { return !have[x.id]; });
   }
 
-  return { isMark: isMark, markEntry: markEntry, suspects: suspects, DAY_MARK_NOTE: DAY_MARK_NOTE, fromEstimate: fromEstimate, dropSaved: dropSaved, carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, TYPES: TYPES, typeOrder: typeOrder };
+  /* 朝の提案：今日の目標と方針を、記録と目標だけから式で出す（AIは使わない。画面とApps Scriptで共通）。
+     o＝{logs, today, goals(目安・下限・上限), phaseLabel}
+     返り値 { date, phase, targets:{kcal,protein,fat:{ref,lo,hi,base,clamp}}, balance:{kcal,protein,fat:{used,pace,diff,week,miss}},
+              headline, lines:[…], yesterday:{date,meals,total,state,head,lines}|null }
+     ・今日の目標＝週の合計が目安×7に着くように割り戻した値（weekPlan）。月曜は目安どおり
+     ・記録忘れの知らせは、食事画面の「記録忘れの可能性」カード（suspects）が担当するので、ここでは出さない */
+  var BRIEF_KEYS = [['kcal', 'カロリー', 'kcal', 10], ['protein', 'たんぱく質', 'g', 1], ['fat', '脂質', 'g', 1]];
+  function morningBrief(o) {
+    o = o || {};
+    var logs = o.logs || [], today = o.today, g = o.goals || {}, yd = fromDays(toDays(today) - 1);
+    var out = { date: today, phase: o.phaseLabel || '', targets: {}, balance: {}, headline: '', lines: [], yesterday: null };
+    BRIEF_KEYS.forEach(function (c) {
+      var k = c[0], p = weekPlan(logs, today, g[k], g[k + 'Min'], g[k + 'Max'], k, c[3]), ref = p ? p.target : (g[k] || 0);
+      if (ref || g[k + 'Min'] || g[k + 'Max']) out.targets[k] = { ref: ref, lo: g[k + 'Min'] || 0, hi: g[k + 'Max'] || 0, base: g[k] || 0, clamp: p ? p.clamp : null };
+      var wb = weekBalance(logs, today, g[k], k);
+      if (wb) out.balance[k] = wb;
+    });
+    var kt = out.targets.kcal, kb = out.balance.kcal;
+    if (kt) {
+      var h = '今日の目安は ' + kt.ref + 'kcal';
+      if (kt.lo || kt.hi) h += '（範囲 ' + (kt.lo || '–') + '〜' + (kt.hi || '–') + '）';
+      if (kb) {
+        var tol = kb.week * 0.02;
+        if (kb.diff > tol) h += '。今週ここまで目安より ' + Math.round(kb.diff) + 'kcal 多めなので、' + (kt.clamp === 'lo' ? '下限まで下げても戻りきりません。無理に削らず、週の後半で整えます' : '今日は少し抑えて戻します');
+        else if (kb.diff < -tol) h += '。今週ここまで目安より ' + Math.round(-kb.diff) + 'kcal 少なめなので、' + (kt.clamp === 'hi' ? '上限まで増やしても戻りきりません。食べすぎず、無理のない範囲で' : '今日はしっかり食べて戻します');
+        else h += '。今週ここまでは予定どおりです';
+      } else h += '。週の収支は月曜のため、まだありません';
+      out.headline = h + '。';
+    }
+    var tp = out.targets.protein, tf = out.targets.fat;
+    if (tp) out.lines.push('たんぱく質 ' + tp.ref + 'g' + (tp.lo ? '（下限 ' + tp.lo + 'g 以上は確保）' : ''));
+    if (tf) out.lines.push('脂質 ' + tf.ref + 'g' + (tf.lo || tf.hi ? '（' + (tf.lo ? '下限 ' + tf.lo + 'g' : '') + (tf.lo && tf.hi ? '〜' : '') + (tf.hi ? '上限 ' + tf.hi + 'g' : '') + '。下限を割る日が続くとホルモンに響くので、削りすぎない）' : ''));
+    var ty = dayTotal(logs, yd);
+    if (ty.meals > 0) {
+      var tg = {};
+      BRIEF_KEYS.forEach(function (c) { var k = c[0], p = weekPlan(logs, yd, g[k], g[k + 'Min'], g[k + 'Max'], k, c[3]); tg[k] = { ref: p ? p.target : (g[k] || 0), lo: g[k + 'Min'] || 0, hi: g[k + 'Max'] || 0 }; });
+      var a = advise(ty, tg, false);
+      out.yesterday = { date: yd, meals: ty.meals, total: ty, state: a.state, head: a.head, lines: a.lines.slice(0, 2) };
+    }
+    return out;
+  }
+
+  return { isMark: isMark, markEntry: markEntry, suspects: suspects, DAY_MARK_NOTE: DAY_MARK_NOTE, fromEstimate: fromEstimate, dropSaved: dropSaved, carbGoals: carbGoals, withCarbs: withCarbs, riceG: riceG, pastaG: pastaG, focacciaPieces: focacciaPieces, FOCACCIA_C_PER_PIECE: FOCACCIA_C_PER_PIECE, RICE_BOWL_G: RICE_BOWL_G, r1: r1, marinade: marinade, toDays: toDays, fromDays: fromDays, dayTotal: dayTotal, lastDays: lastDays, average: average, energySplit: energySplit, pct: pct, status: status, weekStart: weekStart, weekPlan: weekPlan, advise: advise, judge: judge, weekBalance: weekBalance, morningBrief: morningBrief, TYPES: TYPES, typeOrder: typeOrder };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = MealLib;
