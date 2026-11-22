@@ -8,7 +8,7 @@
  */
 
 var BSH = '体組成ログ';
-var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング', '集計除外'];
+var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング', '集計除外', 'ウエストcm'];
 // 測定のタイミング・条件（複数選べる）。同じ条件どうしで比べると体重・体脂肪率のブレが小さくなる
 var BTAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
 var BODY_READY = false;
@@ -50,7 +50,7 @@ function bodyObj_(r) {
     id: String(r[10] || '') || ('L' + date), time: bTime_(r[11]), tags: bTags_(r[12]), date: date,
     weight: bNum_(r[1]), fat: bNum_(r[2]), muscle: bNum_(r[3]), bmi: bNum_(r[4]),
     bmr: bNum_(r[5]), visceral: bNum_(r[6]), height: bNum_(r[7]), memo: String(r[8] || ''),
-    exclude: bFlag_(r[13])
+    exclude: bFlag_(r[13]), waist: bNum_(r[14])
   };
 }
 
@@ -64,7 +64,7 @@ function bodySort_(entries) {
 
 /** 日ごとの平均（body-lib.js の BodyLib.daily と同じ計算）。新しい日が先頭 */
 function bodyDaily_(entries, tag) {
-  var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist'];
   bodySort_(entries.slice()).forEach(function (e) {
     if (e.exclude) return; // 集計から除外した測定は平均に入れない
     if (tag && e.tags.indexOf(tag) < 0) return;
@@ -134,9 +134,10 @@ function bodySave(p) {
   var bmr = bVal_(p.bmr, '基礎代謝', 500, 5000, 0);
   var visceral = bVal_(p.visceral, '内臓脂肪レベル', 1, 59, 1);
   var height = bVal_(p.height, '身長', 100, 230, 1);
+  var waist = bVal_(p.waist, 'ウエスト', 40, 200, 1);
   var bmi = bVal_(p.bmi, 'BMI', 8, 80, 1);
   if (bmi === null && weight !== null && height !== null) bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
-  if (weight === null && fat === null && muscle === null && bmr === null && visceral === null) throw new Error('数値を1つ以上入力してください');
+  if (weight === null && fat === null && muscle === null && bmr === null && visceral === null && waist === null) throw new Error('数値を1つ以上入力してください');
   var memo = String(p.memo == null ? '' : p.memo).replace(/\r\n?/g, '\n').trim().slice(0, 300);
 
   var lock = LockService.getScriptLock();
@@ -150,7 +151,7 @@ function bodySave(p) {
     }
     if (!created) created = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss');
     function c(v) { return v === null ? '' : v; }
-    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(','), exclude ? 1 : ''];
+    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(','), exclude ? 1 : '', c(waist)];
     if (rowIdx) sh.getRange(rowIdx, 1, 1, row.length).setValues([row]);
     else sh.getRange(Math.max(last, 1) + 1, 1, 1, row.length).setValues([row]);
     invalidate_(BSH);
