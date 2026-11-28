@@ -171,7 +171,7 @@ var KT = (function () {
       var ex = em[op.exerciseId]; if (!ex) return;
       var c = calcLocal(ex, op.load, op.reps, op.secs);
       var set = { id: op.clientId, at: op.at, setNo: 1, load: op.load, intensity: ex.loadType === '強度固定' ? (op.intensity || ex.intensity) : '', reps: op.reps, secs: op.secs,
-        aReps: c.aReps, aSecs: c.aSecs, vol: c.vol, memo: op.memo || '', pending: true };
+        aReps: c.aReps, aSecs: c.aSecs, vol: c.vol, memo: op.memo || '', rir: op.rir || '', pending: true };
       if (op.date === view.today) {
         var arr = view.todaySets[ex.id] = view.todaySets[ex.id] || [];
         if (arr.some(function (s) { return s.id === set.id; })) return;
@@ -687,7 +687,7 @@ var KT = (function () {
       if (ex.measure === '秒' && secs <= 0) return Promise.reject(new Error('秒数を1以上にしてください'));
       if (reps > 1000 || secs > 36000 || load > 1000) return Promise.reject(new Error('値が大きすぎます。入力を確認してください'));
       var op = { qid: uuid(), type: 'record', clientId: p.clientId || uuid(), exerciseId: ex.id, load: load, reps: reps, secs: secs,
-        memo: String(p.memo || '').slice(0, 500), date: view.today, at: nowStr(),
+        memo: String(p.memo || '').slice(0, 500), rir: String(p.rir || ''), date: view.today, at: nowStr(),
         intensity: ex.loadType === '強度固定' ? String(p.intensity || ex.intensity || '').slice(0, 40) : '' };
       var q = queue(); q.push(op); setQueue(q);
       applyOp(view, op);

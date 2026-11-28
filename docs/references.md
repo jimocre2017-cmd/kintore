@@ -27,6 +27,15 @@
 - Trexler ET, Smith-Ryan AE, Norton LE. (2014). Metabolic adaptation to weight loss: implications for the athlete. J Int Soc Sports Nutr 11:7. [DOI](https://doi.org/10.1186/1550-2783-11-7)
   - 使い道：長く絞り続けると、ホルモンや消費エネルギーが赤字を打ち消す方向に適応し、減量が進みにくく食欲も増えるという総説。8%ステージで、週1回の維持カロリー日・4〜6週ごとのダイエットブレイク・期間の限定を条件にする根拠（具体的な「週1回」「4〜6週ごと」の頻度は、アプリ側で決めた値）。
 
+## 筋トレのセット数・余力（RIR）・ウエスト÷身長 — 2026-11-28に追加。要旨は公開ページで確認（本文は未確認）
+
+- Pelland JC, Remmert JF, Robinson ZP, Hinson SR, Zourdos MC. (2024). The resistance training dose-response: meta-regressions exploring the effects of weekly volume and frequency on muscle hypertrophy and strength gain. SportRxiv（査読前の論文・第2版） [公開ページ](https://sportrxiv.org/index.php/server/preprint/view/460)
+  - 使い道：週のセット数が多いほど筋肥大・筋力は伸びるが、増え方は次第に小さくなる。付随する部位を0.5セットと数える方法の裏づけが最も強い（アプリの数え方と同じ）。筋肥大への頻度の効果ははっきりしない。
+- Robinson ZP, Pelland JC, Remmert JF, Refalo MC, Jukic I, Steele J, Zourdos MC. (2024). Exploring the dose-response relationship between estimated resistance training proximity to failure, strength gain, and muscle hypertrophy: a series of meta-regressions. Sports Med 54(9):2209-2231. [DOI](https://doi.org/10.1007/s40279-024-02069-2)
+  - 使い道：限界に近いセットほど筋肥大は大きい傾向（余力の記録の根拠）。余力は研究の記述からの推定で、探索的な分析。
+- NICE. Overweight and obesity management (NG246): identifying and assessing overweight, obesity and central adiposity. [公開ページ](https://www.nice.org.uk/guidance/NG246/chapter/Identifying-and-assessing-overweight-obesity-and-central-adiposity)
+  - 使い道：ウエスト÷身長の区分：0.4〜0.49は健康的、0.5〜0.59はリスク上昇、0.6以上は高い。診断ではない。
+
 ## アプリ独自の設定値（研究で決まった値ではない・見直し可）
 
 - 第1期のカロリー＝消費の見込み×0.75〜0.90（1日の不足10〜25%）。下限は基礎代謝（最低1,200kcal）を割らない

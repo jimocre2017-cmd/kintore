@@ -17,12 +17,14 @@ var HEAD = {
   SETTINGS: ['キー', '値', '説明'],
   PARTS: ['部位', '部位グループ', '表示順'],
   EX: ['種目ID', '種目名', '部位', '器具', '計測', '負荷タイプ', '負荷倍率', '回数倍率', '強度', '既定負荷', '負荷最小', '負荷最大', '負荷刻み', '表示順', '有効', '総負荷量に含める', '付随部位', '参考リンク', 'プログラム専用', 'タグ'],
-  LOG: ['記録ID', '日時', '日付', '種目ID', '種目名', '部位', '部位グループ', '器具', 'セット番号', '負荷kg', '強度', '回数', '秒', '集計レップ', '集計秒', '総負荷量', '状態', '取消日時', '備考'],
+  LOG: ['記録ID', '日時', '日付', '種目ID', '種目名', '部位', '部位グループ', '器具', 'セット番号', '負荷kg', '強度', '回数', '秒', '集計レップ', '集計秒', '総負荷量', '状態', '取消日時', '備考', '余力'],
   DAILY: ['日付', '部位グループ', '部位', 'セット数', '集計レップ', '集計秒', '総負荷量', '種目数']
 };
 
 // 記録データの列番号（0始まり）
-var L = { ID: 0, AT: 1, DATE: 2, EXID: 3, EXNAME: 4, PART: 5, GROUP: 6, EQUIP: 7, SETNO: 8, LOAD: 9, INTENSITY: 10, REPS: 11, SECS: 12, AREPS: 13, ASECS: 14, VOL: 15, STATUS: 16, CANCELED: 17, MEMO: 18 };
+var L = { ID: 0, AT: 1, DATE: 2, EXID: 3, EXNAME: 4, PART: 5, GROUP: 6, EQUIP: 7, SETNO: 8, LOAD: 9, INTENSITY: 10, REPS: 11, SECS: 12, AREPS: 13, ASECS: 14, VOL: 15, STATUS: 16, CANCELED: 17, MEMO: 18, RIR: 19 };
+// 余力（RIR：限界まであと何回できたか）。セットごとに任意。index.html の RIR_OPTS と同じ
+var RIR_OPTS = ['0', '1〜2', '3以上'];
 
 var EQUIPMENTS = ['ダンベル', 'チューブ', '自重', 'ハンドグリップ', 'パワーボール', 'その他'];
 var MEASURES = ['回数', '秒'];
@@ -442,8 +444,28 @@ function logObj_(r, rowIndex) {
     aSecs: num_(r[L.ASECS]),
     vol: num_(r[L.VOL]),
     status: String(r[L.STATUS]).trim(),
-    memo: String(r[L.MEMO] === undefined || r[L.MEMO] === null ? '' : r[L.MEMO])
+    memo: String(r[L.MEMO] === undefined || r[L.MEMO] === null ? '' : r[L.MEMO]),
+    rir: rir_(r[L.RIR])
   };
+}
+
+function rir_(v) {
+  var s = String(v === undefined || v === null ? '' : v).trim();
+  return RIR_OPTS.indexOf(s) >= 0 ? s : '';
+}
+
+/** 記録シートに「余力」の列が無ければ足す（以前からのシート向け。何度呼んでも安全） */
+var LOG_COLS_READY = false;
+function ensureLogCols_() {
+  if (LOG_COLS_READY) return;
+  var sh = sheet_(SH.LOG), col = L.RIR + 1;
+  if (sh.getMaxColumns() < col) sh.insertColumnsAfter(sh.getMaxColumns(), col - sh.getMaxColumns());
+  if (String(sh.getRange(1, col).getValue()) !== HEAD.LOG[L.RIR]) {
+    sh.getRange(1, col).setValue(HEAD.LOG[L.RIR]).setFontWeight('bold').setBackground('#1f2937').setFontColor('#ffffff');
+    sh.getRange(1, col, sh.getMaxRows(), 1).setNumberFormat('@'); // 「0」を文字のまま保存する
+    invalidate_(SH.LOG);
+  }
+  LOG_COLS_READY = true;
 }
 
 /** 確定済みの記録を返す（from/to は 'yyyy/MM/dd'、省略可） */
@@ -537,12 +559,14 @@ function getInitData() {
     programs: getPrograms_(),
     ykHist: typeof ykHistFrom_ === 'function' ? ykHistFrom_(logs, today) : undefined, // Yk.gs 未導入でも他の機能を止めない
     kcalWeight: kcalWeight_(),
+    // YKトレーニングの胸・脚の目標をマスタープランの期に合わせるため（Plan.gs 未導入でも他の機能を止めない）
+    roadmap: typeof roadmapDecisionRead_ === 'function' ? { decision: roadmapDecisionRead_(), planPhase: PropertiesService.getScriptProperties().getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut' } : undefined,
     todaySummary: summarizeDay_(logs.filter(function (l) { return l.date === today; }), today)
   };
 }
 
 function setView_(l) {
-  return { id: l.id, at: l.at, setNo: l.setNo, load: l.load, intensity: l.intensity, reps: l.reps, secs: l.secs, aReps: l.aReps, aSecs: l.aSecs, vol: l.vol, memo: l.memo };
+  return { id: l.id, at: l.at, setNo: l.setNo, load: l.load, intensity: l.intensity, reps: l.reps, secs: l.secs, aReps: l.aReps, aSecs: l.aSecs, vol: l.vol, memo: l.memo, rir: l.rir };
 }
 
 /** 備考の整形（500文字まで。先頭が = + - @ の場合は数式として解釈されないよう ' を付ける） */
@@ -596,6 +620,7 @@ function recordSet(p) {
     if (ex.measure === '秒' && secs <= 0) throw new Error('秒数を1以上にしてください');
     if (reps > 1000 || secs > 36000 || load > 1000) throw new Error('値が大きすぎます。入力を確認してください');
 
+    ensureLogCols_();
     var sh = sheet_(SH.LOG);
     var id = String(p.clientId || uuid_());
     var all = rows_(SH.LOG);
@@ -625,7 +650,7 @@ function recordSet(p) {
       ex.loadType === '強度固定' ? (String(p.intensity || '').trim().slice(0, 40) || ex.intensity) : '', // チューブはシングル／ダブルを記録ごとに選択
       ex.measure === '回数' ? reps : '',
       ex.measure === '秒' ? secs : '',
-      c.aReps, c.aSecs, c.vol, '確定', '', memo_(p.memo)];
+      c.aReps, c.aSecs, c.vol, '確定', '', memo_(p.memo), rir_(p.rir)];
     var at = sh.getLastRow() + 1;
     sh.getRange(at, L.DATE + 1).setNumberFormat('@'); // 日付は文字列で保持（自動で日付型にならないように先に書式を設定）
     sh.getRange(at, 1, 1, row.length).setValues([row]);
@@ -1335,6 +1360,8 @@ function getAnalytics(type, anchor) {
   var ce = groupBy_(curLogs, exKey);
   var pe = groupBy_(prvLogs, exKey);
   var exMeta = {}; getExercises_(true).forEach(function (e, i) { exMeta[e.id] = { e: e, i: i }; });
+  // 同じ重さでの回数の推移は、期間をまたいで見る（表示している期間の終わりまでの全記録）
+  var hist = groupBy_(getLogs_(null, cur.end), exKey);
   var byExercise = Object.keys(ce).map(function (k) {
     var ls = ce[k];
     var maxLoad = 0, best = null;
@@ -1350,6 +1377,7 @@ function getAnalytics(type, anchor) {
       loadType: meta ? meta.e.loadType : '',
       intensity: ls[ls.length - 1].intensity,
       cur: agg_(ls), prev: agg_(pe[k] || []), maxLoad: maxLoad, best: best,
+      trend: typeof YkLib !== 'undefined' ? YkLib.repTrend(hist[k] || ls, meta ? meta.e.measure : (ls[0].secs ? '秒' : '回数'), 5) : null,
       order: meta ? meta.i : 999
     };
   }).sort(function (a, b) {
@@ -1381,7 +1409,7 @@ function getAnalytics(type, anchor) {
 
   // 日単位のときはセット明細も返す
   var sets = cur.type === 'day' ? curLogs.map(function (l) {
-    return { at: l.at.slice(11, 16), exName: l.exName, part: l.part, setNo: l.setNo, load: l.load, intensity: l.intensity, reps: l.reps, secs: l.secs, aReps: l.aReps, aSecs: l.aSecs, vol: l.vol, memo: l.memo };
+    return { at: l.at.slice(11, 16), exName: l.exName, part: l.part, setNo: l.setNo, load: l.load, intensity: l.intensity, reps: l.reps, secs: l.secs, aReps: l.aReps, aSecs: l.aSecs, vol: l.vol, memo: l.memo, rir: l.rir };
   }) : [];
 
   // 期間内の備考一覧（新しい順）
@@ -1490,7 +1518,7 @@ function setupSpreadsheet() {
     ex.getRange(2, 15, exN, 2).insertCheckboxes();
   }
 
-  var lg = ensure(SH.LOG, HEAD.LOG, [280, 150, 90, 60, 150, 100, 80, 100, 70, 60, 130, 50, 50, 80, 70, 80, 50, 150, 300]);
+  var lg = ensure(SH.LOG, HEAD.LOG, [280, 150, 90, 60, 150, 100, 80, 100, 70, 60, 130, 50, 50, 80, 70, 80, 50, 150, 300, 60]);
   lg.getRange('C:C').setNumberFormat('@');
   lg.getRange('B:B').setNumberFormat('yyyy/MM/dd HH:mm:ss');
   lg.getRange('R:R').setNumberFormat('yyyy/MM/dd HH:mm:ss');

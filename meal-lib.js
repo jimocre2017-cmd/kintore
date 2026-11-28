@@ -201,7 +201,8 @@ var MealLib = (function () {
     return { carbs: ref, carbsMin: lo, carbsMax: hi };
   }
   function withCarbs(g) {
-    var c = carbGoals(g), o = {};
+    // マスタープランに炭水化物の範囲がある期は、自動の目標がその範囲を持っている（RoadmapLib.autoMealGoals）。そのときは計算し直さない
+    var own = g && +g.carbs > 0 && +g.carbsMin > 0 && +g.carbsMax > 0, c = own ? null : carbGoals(g), o = {};
     Object.keys(g || {}).forEach(function (k) { o[k] = g[k]; });
     if (c) { o.carbs = c.carbs; o.carbsMin = c.carbsMin; o.carbsMax = c.carbsMax; }
     return o;

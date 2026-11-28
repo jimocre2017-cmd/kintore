@@ -382,10 +382,10 @@ function render(){
   }
 
   
-  h += '<div class="card"><h2>種目別</h2><div class="desc">最大負荷は入力した重さ（片手）。ベストは総負荷量（秒種目は秒数）が最大のセット</div>';
+  h += '<div class="card"><h2>種目別</h2><div class="desc">最大負荷は入力した重さ（片手）。ベストは総負荷量（秒種目は秒数）が最大のセット。同じ重さの推移は、直近に使った重さでの日ごとの最高回数（古い順に5回分。期間より前の記録も含む）</div>';
   if (!d.byExercise.length) h += '<div class="empty">この期間の記録はありません</div>';
   else {
-    h += '<div class="scroll"><table><thead><tr><th>種目</th><th>部位</th><th>セット</th><th>レップ / 秒</th><th>総負荷量</th><th>最大負荷</th><th>ベストセット</th><th>前期比(量)</th></tr></thead><tbody>';
+    h += '<div class="scroll"><table><thead><tr><th>種目</th><th>部位</th><th>セット</th><th>レップ / 秒</th><th>総負荷量</th><th>最大負荷</th><th>ベストセット</th><th>同じ重さの推移</th><th>前期比(量)</th></tr></thead><tbody>';
     d.byExercise.forEach(function(e){
       var isSec = e.measure==='秒';
       var main = isSec ? fmtSecs(e.cur.secs) : fmt(e.cur.reps)+'回';
@@ -397,11 +397,13 @@ function render(){
         else best = e.best.reps+'回';
       }
       var key = isSec ? 'secs' : (e.cur.vol || e.prev.vol ? 'vol' : 'reps');
+      var tr = '<span class="muted">—</span>';
+      if (e.trend) tr = (e.trend.load ? fmtKg(e.trend.load)+'kg：' : '') + e.trend.points.map(function(p){ var md = p.date.split('/'); return '<span title="'+(+md[1])+'/'+(+md[2])+'">'+p.v+'</span>'; }).join('→') + e.trend.unit;
       h += '<tr><td class="l"><b>'+esc(e.name)+'</b>'+(e.intensity?'<span class="grp">'+esc(e.intensity)+'</span>':'')+'</td><td class="l">'+esc(e.part)+'</td>'
         + '<td class="num">'+e.cur.sets+'</td><td class="num">'+main+'</td>'
         + '<td class="num">'+(e.cur.vol?fmt(e.cur.vol)+'kg':'<span class="muted">—</span>')+'</td>'
         + '<td class="num">'+(e.maxLoad?fmtKg(e.maxLoad)+'kg':'<span class="muted">—</span>')+'</td>'
-        + '<td class="num">'+best+'</td><td>'+delta(mval(e.cur,key), mval(e.prev,key))+'</td></tr>';
+        + '<td class="num">'+best+'</td><td class="num">'+tr+'</td><td>'+delta(mval(e.cur,key), mval(e.prev,key))+'</td></tr>';
     });
     h += '</tbody></table></div>';
   }
@@ -417,6 +419,7 @@ function render(){
       d.sets.forEach(function(s){
         var content = s.secs ? s.secs+'秒' : (s.load ? fmtKg(s.load)+'kg × ' : '')+s.reps+'回';
         if (s.intensity) content += '（'+esc(s.intensity)+'）';
+        if (s.rir) content += '・余力'+esc(s.rir);
         h += '<tr><td class="num l">'+esc(s.at)+'</td><td class="l">'+esc(s.exName)+'</td><td class="l">'+esc(s.part)+'</td><td class="num">'+s.setNo+'</td>'
           + '<td class="num">'+content+'</td><td class="num">'+(s.aSecs?fmtSecs(s.aSecs):fmt(s.aReps)+'回')+'</td><td class="num">'+(s.vol?fmt(s.vol)+'kg':'<span class="muted">—</span>')+'</td><td class="memo">'+(s.memo?esc(s.memo):'<span class="muted">—</span>')+'</td></tr>';
       });

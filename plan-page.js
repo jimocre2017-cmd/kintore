@@ -73,7 +73,7 @@ function rmFfmiRow(goal, st){
 function rmNoticesHtml(rec, AP, today, f7, R){
   var pl = (S.plan && S.plan.plan) || {};
   if (rec) return '<div class="note" style="margin:10px 0 0"><b>お知らせ</b>：記録だけのモードのため止めています。</div>';
-  var list = RoadmapLib.advice({ date: today, fat7: f7, decision: pl.roadmapDecision || '', planPhase: pl.phase, floorFat: pl.floorFat }).filter(function(x){ return x.key.indexOf('approach-') !== 0; });
+  var list = RoadmapLib.advice({ date: today, fat7: f7, decision: pl.roadmapDecision || '', planPhase: pl.phase, floorFat: pl.floorFat, sleep7: RoadmapLib.sleep7((S.body && S.body.logs) || [], today) }).filter(function(x){ return x.key.indexOf('approach-') !== 0; });
   if (AP && !AP.reached) list.unshift({ key: 'approach', level: AP.near ? 'good' : 'info', title: AP.near ? '🎯 もうすぐ、次のステップを選ぶ段階です' : '次のステップまで', body: AP.text });
   var h = '<div style="margin-top:10px"><div class="note" style="margin:0 0 4px"><b>お知らせ</b>（'+list.length+'件）</div>';
   if (!list.length) return h + '<div class="note" style="margin:0">いまのところ、お知らせはありません。</div></div>';

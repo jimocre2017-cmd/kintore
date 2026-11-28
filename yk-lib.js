@@ -46,11 +46,16 @@ var YkLib = (function () {
   function inList(a, v) { return a.indexOf(v) >= 0; }
 
   /* 設定シート（設定タブ）の値から設定を組み立てる。キーが無ければ既定値 */
-  function configFrom(settings) {
+  /* planSets＝マスタープランのいまの期の週セット数 {chest:{min,max}, legs:{min,max}}（RoadmapLib.phaseSets）。
+     絞り期（YK_フェーズ＝0）で、設定シートの目標が既定値のまま（または空欄）の部位は、期の範囲の中央を目標、上端を上限にする。
+     設定シートで既定値と違う数を入れた部位と、YKの増量期を選んでいるときは、設定シートの値を使う */
+  function configFrom(settings, planSets) {
     var s = settings || {}, cfg = JSON.parse(JSON.stringify(DEFAULT_CFG));
+    var bulk = Number(s['YK_フェーズ']) === 1;
     cfg.areas = AREAS.map(function (a) {
-      var o = JSON.parse(JSON.stringify(a)), v = Number(s['YK_目標_' + a.label]);
+      var o = JSON.parse(JSON.stringify(a)), v = Number(s['YK_目標_' + a.label]), r = planSets && planSets[a.key];
       if (v > 0) o.target = v;
+      if (!bulk && r && r.max > 0 && !(v > 0 && v !== a.target)) { o.target = Math.round((r.min + r.max) / 2); o.max = r.max; o.fromPlan = { min: r.min, max: r.max }; }
       return o;
     });
     var b = Number(s['YK_ブランク日数']); if (b >= 1) cfg.blankDays = b;
@@ -84,7 +89,7 @@ var YkLib = (function () {
   }
 
   function prepare(input) {
-    var cfg = input.cfg || configFrom(input.settings);
+    var cfg = input.cfg || configFrom(input.settings, input.planSets);
     var exMap = {}, groupOf = {};
     (input.exercises || []).forEach(function (e) { exMap[e.id] = e; });
     (input.parts || []).forEach(function (p) { groupOf[p.part] = p.group; });
@@ -126,7 +131,7 @@ var YkLib = (function () {
       var since = pr.last[a.key] === undefined ? null : now - pr.last[a.key];
       return {
         key: a.key, label: a.label, target: target, done: done, ratio: ratio, score: r1(a.weight * ratio * 100) / 100,
-        daysSince: since, over: done > Math.max(target, (a.max || 0) * mul) * OVER, tooSoon: since !== null && since < a.minGap
+        daysSince: since, fromPlan: a.fromPlan || null, over: done > Math.max(target, (a.max || 0) * mul) * OVER, tooSoon: since !== null && since < a.minGap
       };
     });
     return { areas: list, lastAny: pr.lastAny, gap: pr.lastAny === null ? null : now - pr.lastAny, ctx: ctx };
@@ -326,7 +331,28 @@ var YkLib = (function () {
     };
   }
 
+  /* 同じ重さ（秒の種目は秒）での推移。logs＝1種目（強度固定は同じ強度）の全セット [{date, load, reps, secs}]。
+     直近に使った重さ（同じ日に複数あれば重い方）を基準に、その重さの日ごとの最高回数を古い順に最大 n 件 */
+  function repTrend(logs, measure, n) {
+    var list = logs || [], key = measure === '秒' ? 'secs' : 'reps', last = '', load = 0;
+    list.forEach(function (l) {
+      var w = Number(l.load) || 0;
+      if (l.date > last) { last = l.date; load = w; }
+      else if (l.date === last && w > load) load = w;
+    });
+    if (!last) return null;
+    var best = {};
+    list.forEach(function (l) {
+      if ((Number(l.load) || 0) !== load) return;
+      var v = Number(l[key]) || 0;
+      if (v > (best[l.date] || 0)) best[l.date] = v;
+    });
+    var points = Object.keys(best).sort().slice(-(n || 5)).map(function (d) { return { date: d, v: best[d] }; });
+    return points.length ? { load: load, unit: key === 'secs' ? '秒' : '回', points: points } : null;
+  }
+
   return {
+    repTrend: repTrend,
     TAG: TAG, TAG_TODAY: TAG_TODAY, AREAS: AREAS, ROLES: ROLES, REHAB: REHAB,
     configFrom: configFrom, deficits: deficits, readiness: readiness, build: build, recommend: recommend, toProgram: toProgram,
     addDays: addDays, toDays: toDays

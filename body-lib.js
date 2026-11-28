@@ -51,7 +51,7 @@ var BodyLib = (function () {
   }
 
   // 最新の値と、n日前（その日以前で最も新しい記録）の値の比較。項目ごとに最新の記録を使う
-  var FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  var FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist', 'sleep'];
   function compare(logs, today, periods) {
     return periods.map(function (n) {
       var row = { days: n, fields: {} };
@@ -70,7 +70,7 @@ var BodyLib = (function () {
   // ---- 1日に複数回の測定 → 日ごとの平均 ----
   // 測定のタイミング・条件（サーバーの BTAGS と同じ）
   var TAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
-  var AVG_FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral'];
+  var AVG_FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist', 'sleep'];
   // 測定を新しい順（日付→時刻→ID）に並べる。時刻なしはその日の最初扱い
   function sortEntries(entries) {
     return entries.slice().sort(function (a, b) {
@@ -117,6 +117,72 @@ var BodyLib = (function () {
     return { first: vals[0][field], last: vals[vals.length - 1][field], diff: r1(vals[vals.length - 1][field] - vals[0][field]) };
   }
 
-  return { TAGS: TAGS, daily: daily, sortEntries: sortEntries, intraday: intraday, compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
+  // ---- ウエスト÷身長（NICE NG246 の区分：0.4〜0.49 健康的／0.5〜0.59 リスク上昇／0.6以上 高い）----
+  function waistHeight(waist, height) {
+    var w = Number(waist), h = Number(height);
+    if (!(w > 0 && h > 0)) return null;
+    var ratio = Math.floor(w / h * 100 + 1e-9) / 100; // 区分は小数第2位で判定（切り捨て）
+    var level = ratio >= 0.6 ? 'high' : ratio >= 0.5 ? 'raised' : ratio >= 0.4 ? 'ok' : 'below';
+    var label = { high: '健康リスクが高い区分', raised: '健康リスクが上がる区分', ok: '健康的な区分', below: '区分の範囲より下' }[level];
+    return { ratio: ratio, level: level, label: label, targetCm: Math.floor(h * 0.5 * 10 - 1e-9) / 10 };
+  }
+
+  // ---- 3指標トレンド：週平均の体重・体脂肪率、ウエストの移動平均 ----
+  // logs＝日ごとの平均（daily の戻り値）。週は月曜始まり。直近 weeks 週（今週を含む）を古い順で返す。
+  // waistMA＝その週を含む直近 maWeeks 週のうち、ウエストの記録がある週の平均（記録のある週が2週未満なら null）
+  function weekStart(days) { return days - ((days + 3) % 7); }
+  function mean(a) { return a.reduce(function (x, y) { return x + y; }, 0) / a.length; }
+  function weeklyTrend(logs, today, weeks, maWeeks) {
+    weeks = weeks || 12; maWeeks = maWeeks || 4;
+    var cur = weekStart(toDays(today)), out = [], i;
+    for (i = weeks - 1; i >= 0; i--) {
+      var ws = cur - i * 7, we = ws + 6, row = { start: fromDays(ws), weight: null, fat: null, waist: null, waistMA: null, n: { weight: 0, fat: 0, waist: 0 } };
+      ['weight', 'fat', 'waist'].forEach(function (f) {
+        var vals = logs.filter(function (l) { var d = toDays(l.date); return d >= ws && d <= we && l[f] != null; }).map(function (l) { return l[f]; });
+        row.n[f] = vals.length;
+        row[f] = vals.length ? (f === 'weight' ? Math.round(mean(vals) * 100) / 100 : r1(mean(vals))) : null;
+      });
+      out.push(row);
+    }
+    out.forEach(function (row, idx) {
+      var win = out.slice(Math.max(0, idx - maWeeks + 1), idx + 1).filter(function (x) { return x.waist != null; }).map(function (x) { return x.waist; });
+      row.waistMA = win.length >= 2 ? r1(mean(win)) : null;
+    });
+    return out;
+  }
+  // 3指標の向きから読み取れること。直近の週と、約 gap 週前を比べる（体重±0.3kg・体脂肪率±0.3%・ウエスト±0.5cm 未満は「動いていない」）
+  function trendVerdict(trend, gap) {
+    gap = gap || 3;
+    function pick(f) {
+      var rows = trend.filter(function (r) { return r[f] != null; });
+      if (rows.length < 2) return null;
+      var last = rows[rows.length - 1], idxLast = trend.indexOf(last), ref = null;
+      for (var i = rows.length - 2; i >= 0; i--) { if (trend.indexOf(rows[i]) <= idxLast - gap) { ref = rows[i]; break; } }
+      if (!ref) ref = rows[0];
+      return { diff: r1(last[f] - ref[f]), from: ref.start };
+    }
+    var w = pick('weight'), f = pick('fat'), c = pick('waist');
+    var th = { weight: 0.3, fat: 0.3, waist: 0.5 };
+    function dir(x, k) { return x == null ? null : (x.diff <= -th[k] ? 'down' : (x.diff >= th[k] ? 'up' : 'flat')); }
+    var dw = dir(w, 'weight'), df = dir(f, 'fat'), dc = dir(c, 'waist'), code, text;
+    if (dc == null) {
+      // ウエストが無いときは、体重と体組成計の体脂肪率だけで判定する（体脂肪率は目安なので「可能性」止まり）
+      var tip = 'ウエストを週1回測ると、より確かに判断できます。';
+      if (dw == null && df == null) { code = 'noData'; text = '体重の記録が2週分以上たまると、傾向を判定できます。' + tip; }
+      else if (dw === 'down' && df === 'down') { code = 'fatLossNoWaist'; text = '体重と体脂肪率がそろって下がっています。脂肪が減っている可能性が高い動きです。' + tip; }
+      else if (dw === 'down' && df !== 'down') { code = 'waterOrLeanNoWaist'; text = '体重は下がっていますが、体脂肪率が下がっていません。水分や筋肉の減少の可能性があるので、2〜4週間見て判断します。' + tip; }
+      else if (dw !== 'down' && df === 'down') { code = 'recompNoWaist'; text = '体重は横ばいでも体脂肪率が下がっています。体脂肪率は目安なので、ウエストでも確かめてください。' + tip; }
+      else if (dw === 'up' && df === 'up') { code = 'gainNoWaist'; text = '体重と体脂肪率がともに増えています。食事量と測定条件を確認してください。' + tip; }
+      else { code = 'flatNoWaist'; text = 'まだ大きな変化はありません。2〜4週間の平均で判断します。' + tip; }
+    }
+    else if (dw === 'down' && dc === 'down' && df !== 'up') { code = 'fatLoss'; text = '体重とウエストがそろって下がっています。脂肪が減っている可能性が高い動きです。'; }
+    else if (dw === 'down' && dc !== 'down') { code = 'waterOrLean'; text = '体重は下がっていますが、ウエストが動いていません。水分や筋肉の減少の可能性があるので、2〜4週間見て判断します。'; }
+    else if (dw !== 'down' && dc === 'down') { code = 'recomp'; text = '体重は横ばいでもウエストが減っています。脂肪が減り筋肉が増えている（リコンプ）可能性があります。'; }
+    else if (dc === 'up') { code = 'waistUp'; text = 'ウエストが増えています。食事量と、測定条件（時刻・食後など）がそろっているかを確認してください。'; }
+    else { code = 'flat'; text = 'まだ大きな変化はありません。2〜4週間の平均で判断します。'; }
+    return { code: code, text: text, weight: w, fat: f, waist: c };
+  }
+
+  return { waistHeight: waistHeight, weeklyTrend: weeklyTrend, trendVerdict: trendVerdict, TAGS: TAGS, daily: daily, sortEntries: sortEntries, intraday: intraday, compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = BodyLib;
