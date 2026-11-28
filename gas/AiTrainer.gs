@@ -208,6 +208,7 @@ function aiContext_() {
     exercises: exercises,
     data: {
       today: today,
+      planSets: aiPlanSets_(), // マスタープランのいまの期の胸・脚の週セット数（無い期は null）
       thisMonth: { from: monthStart, trainingDays: Object.keys(monthDays).length, byGroup: month },
       last8Weeks: { weekStarts: weeks, trainingDays: Object.keys(trainDays).length, weeklySetsByGroup: weekly },
       exercises: exList,
@@ -235,9 +236,13 @@ function aiEnergy_(today) {
   } catch (e) { return null; }
 }
 
+function aiPlanSets_() {
+  try { return RoadmapLib.phaseSets(roadmapDecisionRead_(), PropertiesService.getScriptProperties().getProperty('PLAN_PHASE') === 'maintain' ? 'maintain' : 'cut'); } catch (e) { return null; }
+}
+
 function aiSetText_(l) {
   var load = l.load ? l.load + 'kg×' : (l.intensity ? l.intensity.replace(/（.*?）/, '') + '×' : '');
-  return l.secs ? load + l.secs + '秒' : load + l.reps;
+  return (l.secs ? load + l.secs + '秒' : load + l.reps) + (l.rir ? '(余力' + l.rir + ')' : '');
 }
 
 /* ============================================================
@@ -252,6 +257,8 @@ function aiSystemPrompt_() {
     '- プログラムに入れる種目は、記録データ exercises にある種目 id だけを使う。無い種目を勧めたい場合は advice に「種目マスタに追加すると良い」として書く。',
     '- 重さは各種目の loadRange の範囲と刻みに合わせる。ダンベルは片手の重さで書く。チューブはシングル／ダブルで指定する。自重は「自重」または加重kg。秒で計る種目は秒数で書く。',
     '- 筋肥大の目安：1部位あたり週10〜20セット（記録が少ない部位や再開直後は10前後から）。各部位を週2回以上刺激する。限界の1〜3回手前まで行う。',
+    '- planSets がある場合、胸と脚の週セット数はその範囲（本人が決めたマスタープランの値）を上の一般的な目安より優先し、上限の1.2倍を超えて増やさない。',
+    '- lastSets の (余力0／1〜2／3以上) は、本人が記録した「限界まであと何回できたか」。余力3以上が続く種目は重さか回数を上げ、余力0が続く種目はセットを増やさず回復を優先する。余力の記録が無いセットは推測しない。',
     '- レップの目安：多関節種目は6〜12回、単関節・補助種目は10〜20回。休憩は多関節90〜180秒、単関節60〜90秒。',
     '- 漸進性過負荷：前回の記録（lastSets）を基準に、重さ→回数→セット数の順で少しずつ上げる。ダンベル片手20kgの上限に届いた種目は、回数を増やす（〜20回以上）、下ろす動作を3秒かける、片側ずつ行う、休憩を短くする等で負荷を上げる。',
     '- 1回あたりの時間に収まるように組む（1セット約1分＋休憩で概算し、ウォームアップも含める）。',

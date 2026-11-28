@@ -141,7 +141,7 @@ function coachData_() {
   var roadmap = null;
   try {
     var lt = body && body.latest ? body.latest : null;
-    roadmap = RoadmapLib.brief(today, lt && lt.weight != null ? RoadmapLib.bodyState(bodyGet().logs, today) : {}, meal ? meal.averagePerLoggedDay : null, { fat7: RoadmapLib.fat7(bodyGet().logs, today), decision: pl.roadmapDecision, planPhase: pl.phase, cardioLogs: cardioGet().logs, sets7: roadmapSets7_(today), energy: RoadmapLib.energy(planEnergy_(coachBmr_())) });
+    roadmap = RoadmapLib.brief(today, lt ? RoadmapLib.bodyState(bodyGet().logs, today) : {}, meal ? meal.averagePerLoggedDay : null, { fat7: RoadmapLib.fat7(bodyGet().logs, today), decision: pl.roadmapDecision, planPhase: pl.phase, cardioLogs: cardioGet().logs, sets7: roadmapSets7_(today), sleep7: RoadmapLib.sleep7(bodyGet().logs, today), energy: RoadmapLib.energy(planEnergy_(coachBmr_())) });
   } catch (e) { roadmap = null; }
   return {
     today: today, nowTime: now,

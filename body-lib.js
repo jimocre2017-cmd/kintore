@@ -51,7 +51,7 @@ var BodyLib = (function () {
   }
 
   // 最新の値と、n日前（その日以前で最も新しい記録）の値の比較。項目ごとに最新の記録を使う
-  var FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist'];
+  var FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist', 'sleep'];
   function compare(logs, today, periods) {
     return periods.map(function (n) {
       var row = { days: n, fields: {} };
@@ -70,7 +70,7 @@ var BodyLib = (function () {
   // ---- 1日に複数回の測定 → 日ごとの平均 ----
   // 測定のタイミング・条件（サーバーの BTAGS と同じ）
   var TAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
-  var AVG_FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist'];
+  var AVG_FIELDS = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist', 'sleep'];
   // 測定を新しい順（日付→時刻→ID）に並べる。時刻なしはその日の最初扱い
   function sortEntries(entries) {
     return entries.slice().sort(function (a, b) {
@@ -115,6 +115,16 @@ var BodyLib = (function () {
     var vals = entries.filter(function (e) { return e.date === date && !e.exclude && e[field] != null; }).sort(function (a, b) { return (a.time || '') < (b.time || '') ? -1 : ((a.time || '') > (b.time || '') ? 1 : 0); });
     if (vals.length < 2) return null;
     return { first: vals[0][field], last: vals[vals.length - 1][field], diff: r1(vals[vals.length - 1][field] - vals[0][field]) };
+  }
+
+  // ---- ウエスト÷身長（NICE NG246 の区分：0.4〜0.49 健康的／0.5〜0.59 リスク上昇／0.6以上 高い）----
+  function waistHeight(waist, height) {
+    var w = Number(waist), h = Number(height);
+    if (!(w > 0 && h > 0)) return null;
+    var ratio = Math.floor(w / h * 100 + 1e-9) / 100; // 区分は小数第2位で判定（切り捨て）
+    var level = ratio >= 0.6 ? 'high' : ratio >= 0.5 ? 'raised' : ratio >= 0.4 ? 'ok' : 'below';
+    var label = { high: '健康リスクが高い区分', raised: '健康リスクが上がる区分', ok: '健康的な区分', below: '区分の範囲より下' }[level];
+    return { ratio: ratio, level: level, label: label, targetCm: Math.floor(h * 0.5 * 10 - 1e-9) / 10 };
   }
 
   // ---- 3指標トレンド：週平均の体重・体脂肪率、ウエストの移動平均 ----
@@ -173,6 +183,6 @@ var BodyLib = (function () {
     return { code: code, text: text, weight: w, fat: f, waist: c };
   }
 
-  return { weeklyTrend: weeklyTrend, trendVerdict: trendVerdict, TAGS: TAGS, daily: daily, sortEntries: sortEntries, intraday: intraday, compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
+  return { waistHeight: waistHeight, weeklyTrend: weeklyTrend, trendVerdict: trendVerdict, TAGS: TAGS, daily: daily, sortEntries: sortEntries, intraday: intraday, compare: compare, r1: r1, toDays: toDays, fromDays: fromDays, bmi: bmi, composition: composition, goalPlan: goalPlan, series: series, change: change, streak: streak };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = BodyLib;

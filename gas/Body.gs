@@ -8,7 +8,7 @@
  */
 
 var BSH = '体組成ログ';
-var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング', '集計除外', 'ウエストcm'];
+var BHEAD = ['日付', '体重kg', '体脂肪率%', '骨格筋率%', 'BMI', '基礎代謝kcal', '内臓脂肪レベル', '身長cm', '備考', '登録日時', 'ID', '時刻', 'タイミング', '集計除外', 'ウエストcm', '睡眠時間h'];
 // 測定のタイミング・条件（複数選べる）。同じ条件どうしで比べると体重・体脂肪率のブレが小さくなる
 var BTAGS = ['起床後', '午前中', '日中', '午後', '夜', '就寝前', '食事前', '食事後', '排便前', '排便後', '運動前', '運動後', '入浴前', '入浴後', '水分補給前', '水分補給後'];
 var BODY_READY = false;
@@ -50,7 +50,7 @@ function bodyObj_(r) {
     id: String(r[10] || '') || ('L' + date), time: bTime_(r[11]), tags: bTags_(r[12]), date: date,
     weight: bNum_(r[1]), fat: bNum_(r[2]), muscle: bNum_(r[3]), bmi: bNum_(r[4]),
     bmr: bNum_(r[5]), visceral: bNum_(r[6]), height: bNum_(r[7]), memo: String(r[8] || ''),
-    exclude: bFlag_(r[13]), waist: bNum_(r[14])
+    exclude: bFlag_(r[13]), waist: bNum_(r[14]), sleep: bNum_(r[15])
   };
 }
 
@@ -64,7 +64,7 @@ function bodySort_(entries) {
 
 /** 日ごとの平均（body-lib.js の BodyLib.daily と同じ計算）。新しい日が先頭 */
 function bodyDaily_(entries, tag) {
-  var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist'];
+  var byDate = {}, order = [], F = ['weight', 'fat', 'muscle', 'bmi', 'bmr', 'visceral', 'waist', 'sleep'];
   bodySort_(entries.slice()).forEach(function (e) {
     if (e.exclude) return; // 集計から除外した測定は平均に入れない
     if (tag && e.tags.indexOf(tag) < 0) return;
@@ -135,9 +135,10 @@ function bodySave(p) {
   var visceral = bVal_(p.visceral, '内臓脂肪レベル', 1, 59, 1);
   var height = bVal_(p.height, '身長', 100, 230, 1);
   var waist = bVal_(p.waist, 'ウエスト', 40, 200, 1);
+  var sleep = bVal_(p.sleep, '睡眠時間', 1, 16, 1);
   var bmi = bVal_(p.bmi, 'BMI', 8, 80, 1);
   if (bmi === null && weight !== null && height !== null) bmi = Math.round(weight / Math.pow(height / 100, 2) * 10) / 10;
-  if (weight === null && fat === null && muscle === null && bmr === null && visceral === null && waist === null) throw new Error('数値を1つ以上入力してください');
+  if (weight === null && fat === null && muscle === null && bmr === null && visceral === null && waist === null && sleep === null) throw new Error('数値を1つ以上入力してください');
   var memo = String(p.memo == null ? '' : p.memo).replace(/\r\n?/g, '\n').trim().slice(0, 300);
 
   var lock = LockService.getScriptLock();
@@ -151,7 +152,7 @@ function bodySave(p) {
     }
     if (!created) created = Utilities.formatDate(new Date(), TZ, 'yyyy/MM/dd HH:mm:ss');
     function c(v) { return v === null ? '' : v; }
-    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(','), exclude ? 1 : '', c(waist)];
+    var row = [date, c(weight), c(fat), c(muscle), c(bmi), c(bmr), c(visceral), c(height), memo, created, id, time, tags.join(','), exclude ? 1 : '', c(waist), c(sleep)];
     if (rowIdx) sh.getRange(rowIdx, 1, 1, row.length).setValues([row]);
     else sh.getRange(Math.max(last, 1) + 1, 1, 1, row.length).setValues([row]);
     invalidate_(BSH);
@@ -287,6 +288,17 @@ function bodyConditions_(entries, today) {
   return out;
 }
 
+/** 試算に使う「いまの値」。いちばん新しい日が睡眠やウエストだけの記録でも、体重・体脂肪率・身長は記録がある最新の値を使う（logs は新しい順） */
+function bodyFilled_(logs) {
+  var out = { date: logs[0].date, weight: null, fat: null, height: null };
+  var found = '';
+  logs.forEach(function (l) {
+    ['weight', 'fat', 'height'].forEach(function (f) { if (out[f] === null && l[f] !== null) { out[f] = l[f]; if (f === 'weight') found = l.date; } });
+  });
+  if (found) out.date = found;
+  return out;
+}
+
 /**
  * AIトレーナー（AiTrainer.gs）に渡す体組成の要約。記録が無い・読めない場合は null
  * 最新値、約4週前との差、直近8週の週ごとの平均、目標体脂肪率に向けた試算（plan）
@@ -319,7 +331,7 @@ function aiBody_(today) {
       changeSince4WeeksAgo: ref ? { from: ref.date, weight: diff('weight'), fat: diff('fat'), muscle: diff('muscle') } : null,
       last8Weeks: { weekStarts: weeks, weightAvg: avgBy('weight'), fatAvg: avgBy('fat'), muscleAvg: avgBy('muscle') },
       comparisons: bodyCompare_(logs, today),
-      plan: bodyPlan_(latest, today, logs)
+      plan: bodyPlan_(bodyFilled_(logs), today, logs)
     };
   } catch (err) {
     return null;

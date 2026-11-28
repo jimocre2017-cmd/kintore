@@ -23,7 +23,14 @@
   function compute() {
     if (typeof RoadmapLib === 'undefined') return [];
     var pl = ((LS.get('kt_plan', null) || {}).plan) || {}, today = todayStr();
-    return RoadmapLib.advice({ date: today, fat7: RoadmapLib.fat7(dailyFat(), today), decision: pl.roadmapDecision || '', planPhase: pl.phase, floorFat: pl.floorFat });
+    return RoadmapLib.advice({ date: today, fat7: RoadmapLib.fat7(dailyFat(), today), decision: pl.roadmapDecision || '', planPhase: pl.phase, floorFat: pl.floorFat, sleep7: RoadmapLib.sleep7(sleepLogs(), today) });
+  }
+
+  // 端末の体組成（未送信分を含む）の睡眠時間
+  function sleepLogs() {
+    var b = LS.get('kt_body', null) || {}, list = (b.entries || b.logs || []).slice(), q = LS.get('kt_queue', []) || [];
+    q.forEach(function (op) { if (op && op.type === 'bodySave' && op.entry) list.push(op.entry); });
+    return list;
   }
 
   var box = null;

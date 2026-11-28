@@ -119,6 +119,10 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 .setrow .cancel{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:8px 12px;font-size:13px;color:var(--ink-2);min-width:64px}
 .setrow .cancel.arm{background:var(--danger);border-color:var(--danger);color:#fff}
 .empty{color:var(--ink-3);font-size:14px;padding:8px 2px}
+.rirrow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;font-size:12px;color:var(--ink-3)}
+.rirrow span{flex:1 1 100%}
+.rirrow button{flex:1;min-height:40px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:14px}
+.rirrow button.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink,#fff);font-weight:700}
 .memoin{width:100%;height:48px;margin-top:12px;border-radius:10px;border:1px solid var(--line);background:var(--surface);padding:0 12px;font-size:16px}
 .setrow{flex-wrap:wrap}
 .setrow .memo{flex-basis:100%;font-size:13px;color:var(--ink-2);padding-left:94px;white-space:pre-wrap;word-break:break-word}
@@ -487,7 +491,8 @@ main{display:grid;grid-template-columns:minmax(260px,340px) 1fr;gap:16px;padding
 <script src="counsel-lib.js"></script>
 <script src="ex-search-lib.js"></script>
 <script>
-var APP = { q:'', navOpen:false, data:null, sel:null, vals:{}, memo:{}, busy:false, armed:null, tags:[] };
+var RIR_OPTS = ['0','1〜2','3以上']; // 余力（RIR）。Apps Script の RIR_OPTS と同じ
+var APP = { q:'', navOpen:false, data:null, sel:null, vals:{}, memo:{}, rir:{}, busy:false, armed:null, tags:[] };
 try { APP.tags = JSON.parse(localStorage.getItem('kt_tags') || '[]') || []; } catch(e){ APP.tags = []; }
 try { APP.grp = localStorage.getItem('kt_grp') || ''; } catch(e){ APP.grp = ''; }
 /* タグ：種目ごとのタグで絞り込み（複数選択＝すべて含む種目だけ）。
@@ -895,7 +900,7 @@ function renderPanel(){
   h += '<div class="card prev"><span class="lbl">前回</span>';
   if (prev){
     var pd = prev.date.split('/');
-    h += '<span>'+(+pd[1])+'/'+(+pd[2])+'</span>' + prev.sets.map(function(s){ return '<span class="chip num">'+esc(setLabel(ex,s))+'</span>'; }).join('')
+    h += '<span>'+(+pd[1])+'/'+(+pd[2])+'</span>' + prev.sets.map(function(s){ return '<span class="chip num">'+esc(setLabel(ex,s))+(s.rir?'<small>　余力'+esc(s.rir)+'</small>':'')+'</span>'; }).join('')
       + '<span>（'+prev.sets.length+'セット）</span>';
     prev.sets.forEach(function(s, i){ if (s.memo) h += '<div class="prevmemo">'+(i+1)+'セット目の備考：'+esc(s.memo)+'</div>'; });
   } else h += '<span>記録なし</span>';
@@ -913,7 +918,8 @@ function renderPanel(){
   }
   if (ex.measure==='秒') h += stepperHtml('secs', ex.rMult>1?'片側の秒数':'秒数', v.secs, '秒', 5, 1, 0, 'numeric');
   else h += stepperHtml('reps', ex.rMult>1?'片側の回数':'回数', v.reps, '回', 1, 1, 0, 'numeric');
-  h += '</div><input class="memoin" id="memoIn" maxlength="500" placeholder="備考（任意）例：フォームを意識／右肩に違和感" value="'+esc(APP.memo[ex.id]||'')+'"></div>';
+  h += '</div><input class="memoin" id="memoIn" maxlength="500" placeholder="備考（任意）例：フォームを意識／右肩に違和感" value="'+esc(APP.memo[ex.id]||'')+'">'
+    + '<div class="rirrow"><span>余力（あと何回できた？）</span>'+RIR_OPTS.map(function(o){ return '<button type="button" data-rir="'+o+'" class="'+(APP.rir[ex.id]===o?'on':'')+'">'+(o==='0'?'0（限界）':o)+'</button>'; }).join('')+'</div></div>';
 
   h += '<button class="plus" id="plusBtn">'+plusLabel(ex)+'</button>';
   if (ex.measure==='秒') h += '<div class="swrow"><button class="linkbtn" id="swCancel" style="display:none">計測をやめる</button><button class="linkbtn" id="manualRec">入力した秒数で記録</button></div>';
@@ -925,6 +931,7 @@ function renderPanel(){
   sets.forEach(function(s, i){
     var extra = [];
     if (s.vol) extra.push('負荷量 '+fmt(s.vol)+'kg');
+    if (s.rir) extra.push('余力 '+esc(s.rir));
     if (ex.rMult>1) extra.push('集計 '+(ex.measure==='秒'? fmt(s.aSecs)+'秒' : fmt(s.aReps)+'回'));
     h += '<div class="setrow'+(s.pending?' pend':'')+'"><span class="no">'+(i+1)+'セット目'+(s.pending?'<span class="pendtag">未送信</span>':'')+'</span><span><div class="val num">'+esc(setLabel(ex,s))+'</div>'
       + (extra.length?'<div class="vol num">'+extra.join('・')+'</div>':'')+'</span>'
@@ -956,6 +963,12 @@ function renderPanel(){
     b.addEventListener('click', function(){ editMemo(b); });
   });
   $('memoIn').addEventListener('input', function(){ APP.memo[ex.id] = this.value; });
+  Array.prototype.forEach.call(p.querySelectorAll('[data-rir]'), function(b){
+    b.addEventListener('click', function(){
+      var o = b.getAttribute('data-rir'); APP.rir[ex.id] = APP.rir[ex.id]===o ? '' : o; // もう一度押すと解除
+      Array.prototype.forEach.call(p.querySelectorAll('[data-rir]'), function(x){ x.classList.toggle('on', x.getAttribute('data-rir')===APP.rir[ex.id]); });
+    });
+  });
   updatePreview();
   if (SW.state!=='idle' && SW.exId===ex.id) renderSw();
 }
@@ -1027,10 +1040,11 @@ function plus(){
   APP.busy = true;
   var btn = $('plusBtn'); btn.disabled = true; btn.innerHTML = '記録中…';
   Timer.start();
-  var payload = { clientId: uuid(), exerciseId: ex.id, load: hasLoad(ex)? v.load : 0, reps: v.reps, secs: v.secs, intensity: isTube(ex) ? (v.intensity || TUBE_OPTS[0]) : '', memo: APP.memo[ex.id] || '' };
+  var payload = { clientId: uuid(), exerciseId: ex.id, load: hasLoad(ex)? v.load : 0, reps: v.reps, secs: v.secs, intensity: isTube(ex) ? (v.intensity || TUBE_OPTS[0]) : '', memo: APP.memo[ex.id] || '', rir: APP.rir[ex.id] || '' };
   var sentMemo = payload.memo;
   call('recordSet', payload).then(function(r){
     if ((APP.memo[ex.id]||'') === sentMemo) APP.memo[ex.id] = '';
+    if ((APP.rir[ex.id]||'') === payload.rir) APP.rir[ex.id] = '';
     applyResult(r);
     Timer.chime();
     toast(ex.name+' '+(r.sets.length)+'セット目を記録');
@@ -1630,9 +1644,16 @@ function ykLS(k, d){ try { var v = localStorage.getItem(k); return v===null ? d 
 function ykPut(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch(e){} }
 function ykShoulder(){ var s = ykLS('kt_yk_shoulder', null); return s && APP.data && s.d===APP.data.today ? s.s : 'ok'; }
 function ykSession(){ var s = ykLS('kt_yk_session', null); return s && APP.data && s.date===APP.data.today ? s : null; }
+/* マスタープランのいまの期の胸・脚の週セット数（無い期は null）。「今週のバランス」と同じ数値 */
+function ykPlanSets(){
+  if (!window.RoadmapLib || !RoadmapLib.phaseSets) return null;
+  var r = (APP.data && APP.data.roadmap) || null;
+  if (!r){ var p = (ykLS('kt_plan', null) || {}).plan; r = p ? { decision:p.roadmapDecision, planPhase:p.phase } : null; }
+  return r ? RoadmapLib.phaseSets(r.decision, r.planPhase) : null;
+}
 function ykInput(){
   var d = APP.data;
-  return { today:d.today, exercises:d.exercises, parts:d.parts, hist:d.ykHist||[], todaySets:d.todaySets, prev:d.prev, settings:d.settings, shoulder:ykShoulder(), state:ykLS('kt_yk_state', {}) };
+  return { today:d.today, exercises:d.exercises, parts:d.parts, hist:d.ykHist||[], todaySets:d.todaySets, prev:d.prev, settings:d.settings, planSets:ykPlanSets(), shoulder:ykShoulder(), state:ykLS('kt_yk_state', {}) };
 }
 function ykCompute(){
   if (!APP.data || !window.YkLib) return null;
@@ -1677,6 +1698,8 @@ function ykCardHtml(){
     return '<div class="ykg'+(a.done>=a.target?' full':(a.ratio>0.7?' low':''))+'"><span class="lb">'+esc(a.label)+'</span>'
       + '<span class="bar"><i style="width:'+pct+'%"></i></span><span class="nm num">'+fmt(a.done)+' / '+fmt(a.target)+'</span></div>';
   }).join('')+'</div>';
+  var linked = D.areas.filter(function(a){ return a.fromPlan; });
+  if (linked.length) h += '<div style="font-size:11px;color:var(--ink-3);margin:0 0 6px">'+linked.map(function(a){ return esc(a.label)+' '+a.fromPlan.min+'〜'+a.fromPlan.max; }).join('・')+'セット／週（マスタープランの期の範囲。目標は中央）</div>';
   h += '<div class="ykshoulder"><span>右肩</span>'
     + [['ok','問題なし',''],['uneasy','違和感','warn'],['pain','痛い','bad']].map(function(x){ return '<button data-ykshoulder="'+x[0]+'" class="'+(sh===x[0]?'on '+x[2]:'')+'">'+x[1]+'</button>'; }).join('')+'</div>';
   var started = !!YK.session, undone = plan.items.filter(function(it){ return !(APP.data.todaySets[it.exId]||[]).length; }).length;

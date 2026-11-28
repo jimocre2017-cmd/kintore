@@ -223,6 +223,28 @@ var RoadmapLib = (function () {
     return { phase: maint && rm.maintainPhase ? rm.maintainPhase : r.phase, maintain: maint, resolved: r };
   }
 
+  /* いまの期の胸・脚の週セット数の範囲 {chest:{min,max}, legs:{min,max}}。範囲が無い期（バルク・維持）は null。YKトレーニングの目標と「今週のバランス」が同じ数値を使う */
+  function phaseSets(decision, planPhase, rm) {
+    var s = phaseFor({ decision: decision || '', planPhase: planPhase }, rm || ROADMAP).phase.sets;
+    return s || null;
+  }
+
+  /* 直近7日（今日を含む）の睡眠時間の平均。logs＝体組成の日ごと or 測定ごと（{date, sleep}）。記録が無ければ null */
+  var SLEEP_MIN_H = 7, SLEEP_MIN_DAYS = 3;
+  function sleep7(logs, today) {
+    var by = {}, end = toDays(today);
+    (logs || []).forEach(function (l) {
+      if (!l || !l.date || l.exclude || l.sleep == null || l.sleep === '' || isNaN(Number(l.sleep))) return;
+      var d = toDays(l.date);
+      if (d > end || d < end - 6) return;
+      (by[l.date] = by[l.date] || []).push(Number(l.sleep));
+    });
+    var days = Object.keys(by);
+    if (!days.length) return null;
+    var sum = days.reduce(function (a, k) { return a + by[k].reduce(function (x, y) { return x + y; }, 0) / by[k].length; }, 0);
+    return { avg: r1(sum / days.length), days: days.length };
+  }
+
   /* 体組成とマスタープランから、1日の目標（目安・下限・上限）を自動で出す。画面とApps Scriptで共通。
      o＝{date, decision, planPhase:'cut'|'maintain', fat7, fatPct, weightKg, bmr, activity, tdeeKcal, tdeeBasis, adoptedKcal, adoptedMode}
      ・期とモード：未選択／据え置き＝第1期、バルク＝第2期、維持（選択、または減量計画が維持期）＝維持期
@@ -255,12 +277,18 @@ var RoadmapLib = (function () {
       else t = Math.round(g.kcal * 0.25 / 9);
       setRange('fat', floor, Math.min(Math.max(t, floor), ceil), ceil, back ? 'back' : 'body');
     }
+    // 炭水化物：期に範囲がある場合はその範囲（計画画面・今週のバランスと同じ）。目安はカロリーからたんぱく質と脂質を引いた残りを範囲に収めた値。範囲が無い期は食事画面が残りカロリーから出す
+    if (phase.carbs && g.kcal && g.protein && g.fat) {
+      var rest = Math.round((g.kcal - g.protein * 4 - g.fat * 9) / 4);
+      setRange('carbs', phase.carbs.min, Math.min(phase.carbs.max, Math.max(phase.carbs.min, rest)), phase.carbs.max, 'plan');
+    }
     var parts = [];
     if (src.kcal) parts.push('カロリー＝' + (src.kcal === 'plan' ? (phase.dynamic ? '消費の見込み' + phase.dynamic.energyKcal + 'kcal（' + basisText(en) + '）の' + kcalRuleText(phase).replace('消費の', '') + '＝' + g.kcalMin + '〜' + g.kcalMax + 'kcal' + (phase.dynamic.floored ? '（下限は基礎代謝' + phase.dynamic.floorKcal + 'kcalで止めています）' : '') : (phase.kcalFromEnergy ? '消費の見込みがまだ無いため控えの範囲' : 'マスタープランの範囲') + g.kcalMin + '〜' + g.kcalMax + 'kcal') + (adopted > 0 ? '（目安は減量計画の今週の採用値）' : '')
       : src.kcal === 'adopted' ? '減量計画が維持期として採用した' + g.kcal + 'kcal±150'
       : '消費カロリーの見込み' + g.kcal + 'kcal（' + (en && en.basis === 'estimated' ? '基礎代謝×' + en.activity : '記録からの実測') + '）±150'));
     if (src.protein) parts.push('たんぱく質＝' + (src.protein === 'planLean' ? '除脂肪量' + phase.dynamicProtein.leanKg + 'kg×' + phase.proteinPerLean.min + '〜' + phase.proteinPerLean.max + 'g（目安×' + phase.proteinPerLean.target + '）' : src.protein === 'plan' ? (phase.proteinPerLean ? '体組成がまだ無いため控えの範囲' : 'マスタープランの範囲') : src.protein === 'lean' ? '体脂肪率が高めなので除脂肪量×2.0〜2.5g（目安×2.2）' : '体重×1.6〜2.2g（目安×1.8）'));
     if (src.fat) parts.push('脂質＝' + (src.fat === 'plan' ? 'マスタープランの範囲' : src.fat === 'back' ? 'カロリーから、たんぱく質とマスタープランの炭水化物を引いた残り（下限＝20%か40g、上限＝30%）' : 'カロリーの20〜30%（目安25%）'));
+    if (src.carbs) parts.push('炭水化物＝マスタープランの範囲' + g.carbsMin + '〜' + g.carbsMax + 'g');
     return { phaseKey: phase.key, phaseLabel: phase.label, goals: g, source: src, energy: en, summary: phase.label + ' に合わせて自動計算：' + parts.join('、') + '。' };
   }
 
@@ -486,6 +514,10 @@ var RoadmapLib = (function () {
      ctx＝{fat7:{avg,days}|null, decision, planPhase:'cut'|'maintain', floorFat, date}
      戻り値 [{key, level:'warn'|'info', title, body, action:'plan'}]。しきい値：維持期の許容帯＝最低＋1.5%（減量計画の MAINT_BAND と同じ）、バルク時の上限＝第1期の目標＋3%（アプリの既定値） */
   var MAINT_BAND_PCT = 1.5, BULK_OVER_PCT = 3;
+  function sleepNote(sl) {
+    if (!sl) return '睡眠時間は体組成の画面で記録できます（直近の記録はありません）。';
+    return '睡眠の直近7日平均は ' + sl.avg + '時間（記録 ' + sl.days + '日分、条件は' + SLEEP_MIN_H + '時間以上）。';
+  }
   function advice(ctx, rm) {
     rm = rm || ROADMAP; ctx = ctx || {};
     var out = [], first = rm.phases[0], goal = first.targets.fatPct, f = ctx.fat7, r = resolve(ctx.date || '2026/11/18', ctx, rm);
@@ -506,7 +538,7 @@ var RoadmapLib = (function () {
     var ap = approach(ctx, rm);
     if (ap && ap.near && !ap.reached && !(maintMode)) out.push({ key: 'approach-' + ap.kind, level: 'info', title: 'もうすぐ、次のステップを選ぶ段階です', body: ap.text });
     if (ctx.decision === 'shred' && avg != null && avg <= rm.shredPhase.targets.fatPct) {
-      out.push({ key: 'shred-reached', level: 'info', title: '絞り込み（12%）に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + rm.shredPhase.targets.fatPct + '%）になりました。次を選んでください：さらに8%を目指す（「絞り込み 8%」）／第3期（維持・回復）。維持にするときは、減量計画の最低体脂肪率を ' + rm.shredPhase.targets.fatPct + '% にしてください。8%を目指す場合は、睡眠・疲労・コンディションが良好なことが条件です。' });
+      out.push({ key: 'shred-reached', level: 'info', title: '絞り込み（12%）に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + rm.shredPhase.targets.fatPct + '%）になりました。次を選んでください：さらに8%を目指す（「絞り込み 8%」）／第3期（維持・回復）。維持にするときは、減量計画の最低体脂肪率を ' + rm.shredPhase.targets.fatPct + '% にしてください。8%を目指す場合は、睡眠・疲労・コンディションが良好なことが条件です。' + sleepNote(ctx.sleep7) });
     }
     if (ctx.decision === 'shred8' && avg != null && avg <= rm.shred8Phase.targets.fatPct) {
       out.push({ key: 'shred8-reached', level: 'warn', title: '絞り込み（8%）に届きました', body: '体脂肪率が直近7日平均で ' + avg + '%（目標 ' + rm.shred8Phase.targets.fatPct + '%）。ここから減らさず、第3期（維持・回復）に切り替えてください。減量計画の最低体脂肪率は ' + rm.shred8Phase.targets.fatPct + '〜' + (rm.shred8Phase.targets.fatPct + 2) + '% を目安に。8%は長く保つ水準ではないので、慣れたら少し戻して構いません。' });
@@ -514,6 +546,10 @@ var RoadmapLib = (function () {
     if ((ctx.decision === 'shred' || ctx.decision === 'shred8') && avg != null) {
       var sg = (ctx.decision === 'shred8' ? rm.shred8Phase : rm.shredPhase).targets.fatPct;
       if (avg < sg - 1) out.push({ key: 'shred-below', level: 'warn', title: '目標より下がりすぎています', body: '体脂肪率が直近7日平均で ' + avg + '%。目標 ' + sg + '% を1%以上下回っています。食事を維持カロリー付近まで戻し、第3期（維持・回復）に切り替える目安です。' });
+    }
+    var sl = ctx.sleep7;
+    if (ctx.decision === 'shred8' && sl && sl.days >= SLEEP_MIN_DAYS && sl.avg < SLEEP_MIN_H) {
+      out.push({ key: 'shred8-sleep', level: 'warn', title: '8%を続ける条件（睡眠）を下回っています', body: '睡眠が直近7日の平均で ' + sl.avg + '時間（記録 ' + sl.days + '日分）です。絞り込み（8%）は睡眠' + SLEEP_MIN_H + '時間以上が条件です。まず睡眠を戻し、難しい週は維持カロリーで過ごしてください。' });
     }
     if (r.overdue) out.push({ key: 'overdue', level: 'info', title: '第1期の期限を過ぎました', body: '期限（' + first.to + '）を過ぎましたが、体脂肪率 ' + goal + '% にはまだ届いていません。期限の見直しは総合コーチに相談できます。' });
     return out;
@@ -580,11 +616,12 @@ var RoadmapLib = (function () {
       targets: p.targets, progress: progress(p, state), mealCheck: mealCheck(p, avg),
       weeklyBalance: balance(p, { meal: avg, sets: ctx && ctx.sets7 ? ctx.sets7 : null, cardio: ctx && ctx.cardioLogs ? cardioCheck(p, ctx.cardioLogs, date) : null }),
       setsLast7Days: ctx && ctx.sets7 ? ctx.sets7 : null,
+      sleepLast7Days: ctx && ctx.sleep7 ? ctx.sleep7 : null,
       planCheck: ctx && ctx.energy ? planCheck({ date: date, decision: ctx.decision, planPhase: ctx.planPhase, energy: ctx.energy, state: state }, rm) : null,
       rules: rm.rules
     };
   }
 
-  return { bodyState: bodyState, ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, approach: approach, APPROACH_PCT: APPROACH_PCT, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
+  return { phaseSets: phaseSets, sleep7: sleep7, SLEEP_MIN_H: SLEEP_MIN_H, bodyState: bodyState, ROADMAP: ROADMAP, OVER_SETS: OVER_SETS, ADVICE: ADVICE, balance: balance, current: current, cardioCheck: cardioCheck, fat7: fat7, resolve: resolve, advice: advice, approach: approach, APPROACH_PCT: APPROACH_PCT, adjustCfg: adjustCfg, MAINT_BAND_PCT: MAINT_BAND_PCT, BULK_OVER_PCT: BULK_OVER_PCT, mealGoals: mealGoals, autoMealGoals: autoMealGoals, ACTIVITY: ACTIVITY, energy: energy, proteinFor: proteinFor, planCheck: planCheck, effective: effective, kcalRuleText: kcalRuleText, basisText: basisText, progress: progress, mealCheck: mealCheck, brief: brief };
 })();
 if (typeof module !== 'undefined' && module.exports) module.exports = RoadmapLib;
